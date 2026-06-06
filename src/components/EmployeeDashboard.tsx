@@ -475,9 +475,10 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                   <div className="flex items-center gap-2 border-b border-gray-100 pb-2.5">
                     <button
                       onClick={() => setActiveTab('quiz')}
-                      className="p-1 px-3 bg-gray-100 hover:bg-gray-200 text-gray-700 text-[11px] font-bold rounded-lg flex items-center gap-1 cursor-pointer transition-colors"
+                      className="p-1.5 px-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg flex items-center justify-center cursor-pointer transition-colors"
+                      title="Trang chủ"
                     >
-                      &larr; Trang Chủ
+                      <Home className="h-4 w-4" />
                     </button>
                     <span className="text-xs font-bold text-gray-450 uppercase tracking-wider">Tài liệu ôn tập</span>
                   </div>
@@ -572,9 +573,10 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
               <div className="flex items-center gap-2 border-b border-gray-100 pb-2.5">
                 <button
                   onClick={() => setActiveTab('quiz')}
-                  className="p-1 px-3 bg-gray-100 hover:bg-gray-200 text-gray-700 text-[11px] font-bold rounded-lg flex items-center gap-1 cursor-pointer transition-colors"
+                  className="p-1.5 px-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg flex items-center justify-center cursor-pointer transition-colors"
+                  title="Trang chủ"
                 >
-                  &larr; Trang Chủ
+                  <Home className="h-4 w-4" />
                 </button>
                 <span className="text-xs font-bold text-gray-450 uppercase tracking-wider">Phân tích tiến độ</span>
               </div>
@@ -879,8 +881,14 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                   {/* Centered Top & Mid content wrapper to keep them tight together */}
                   <div className="flex flex-col items-center justify-center text-center space-y-4.5 sm:space-y-5 flex-1 w-full shrink-0">
                     {/* 3T Logo replacing Trophy Icon */}
-                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-[#0B3A60] border border-blue-900 shadow-md select-none shrink-0">
-                    <span translate="no" className="notranslate text-white text-2xl font-black tracking-tight font-sans">3T</span>
+                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-tr from-[#07243c] via-[#0B3A60] to-[#1d5985] border-2 border-blue-400/20 shadow-md ring-4 ring-blue-950/10 select-none shrink-0 relative overflow-hidden">
+                    {/* Glossy light effect */}
+                    <div className="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/10 to-transparent pointer-events-none transform -skew-y-12" />
+                    <div className="absolute -bottom-4 -right-4 w-10 h-10 bg-[#E8590C]/20 rounded-full blur-md pointer-events-none" />
+                    <span translate="no" className="notranslate text-3xl font-black tracking-tighter font-sans relative z-10 flex items-center justify-center">
+                      <span className="text-[#E8590C] drop-shadow-[0_1px_1px_rgba(0,0,0,0.25)]">3</span>
+                      <span className="text-white -ml-0.5 drop-shadow-[0_1.5px_1.5px_rgba(0,0,0,0.35)]">T</span>
+                    </span>
                   </div>
 
                   {/* VĂN HÓA 3T styled logo block */}
@@ -937,7 +945,7 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                         <span translate="no" className="notranslate">Đọc kỹ giải thích chi tiết đáp án để khắc cốt ghi tâm.</span>
                       </li>
                       <li>
-                        <span translate="no" className="notranslate">Chủ động rèn luyện tình huống thực tế an toàn lao động.</span>
+                        <span translate="no" className="notranslate">Chủ động rèn luyện, ứng dụng 3T hàng ngày.</span>
                       </li>
                     </ul>
                   </div>
@@ -1079,8 +1087,8 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                           {/* Stat Grid (4 blocks matching exactly) */}
                           <div className="grid grid-cols-2 gap-3 w-full shrink-0">
                             {/* Câu đúng */}
-                            <div className="bg-white rounded-xl p-2.5 sm:p-3 flex items-center gap-2.5 border border-gray-100 shadow-3xs text-left">
-                              <div className="w-9 h-9 rounded-full bg-green-50 border border-green-100 flex items-center justify-center text-green-600 shrink-0">
+                            <div className="bg-white rounded-xl p-2.5 sm:p-3 flex items-center gap-2.5 border border-gray-200 shadow-3xs text-left">
+                              <div className="w-9 h-9 rounded-full bg-green-50 border border-green-155 flex items-center justify-center text-green-600 shrink-0">
                                 <CheckCircle2 className="h-4.5 w-4.5 stroke-[2.5]" />
                               </div>
                               <div>
@@ -1092,8 +1100,8 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                             </div>
 
                             {/* Câu sai */}
-                            <div className="bg-white rounded-xl p-2.5 sm:p-3 flex items-center gap-2.5 border border-gray-100 shadow-3xs text-left">
-                              <div className="w-9 h-9 rounded-full bg-red-50 border border-red-100 flex items-center justify-center text-red-600 shrink-0">
+                            <div className="bg-white rounded-xl p-2.5 sm:p-3 flex items-center gap-2.5 border border-gray-200 shadow-3xs text-left">
+                              <div className="w-9 h-9 rounded-full bg-red-50 border border-red-155 flex items-center justify-center text-red-600 shrink-0">
                                 <XCircle className="h-4.5 w-4.5 stroke-[2.5]" />
                               </div>
                               <div>
@@ -1105,8 +1113,8 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                             </div>
 
                             {/* Bỏ qua */}
-                            <div className="bg-white rounded-xl p-2.5 sm:p-3 flex items-center gap-2.5 border border-gray-100 shadow-3xs text-left">
-                              <div className="w-9 h-9 rounded-full bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-500 shrink-0">
+                            <div className="bg-white rounded-xl p-2.5 sm:p-3 flex items-center gap-2.5 border border-gray-200 shadow-3xs text-left">
+                              <div className="w-9 h-9 rounded-full bg-amber-50 border border-amber-155 flex items-center justify-center text-amber-500 shrink-0">
                                 <div className="font-bold text-base select-none leading-none">-</div>
                               </div>
                               <div>
@@ -1116,8 +1124,8 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                             </div>
 
                             {/* Thời gian */}
-                            <div className="bg-white rounded-xl p-2.5 sm:p-3 flex items-center gap-2.5 border border-gray-100 shadow-3xs text-left">
-                              <div className="w-9 h-9 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-500 shrink-0">
+                            <div className="bg-white rounded-xl p-2.5 sm:p-3 flex items-center gap-2.5 border border-gray-200 shadow-3xs text-left">
+                              <div className="w-9 h-9 rounded-full bg-blue-50 border border-blue-155 flex items-center justify-center text-blue-500 shrink-0">
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4.5 w-4.5 text-blue-500 stroke-[2.5]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
@@ -1132,7 +1140,7 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                           </div>
 
                           {/* Accuracy block */}
-                          <div className="bg-white rounded-xl p-3 border border-gray-100 shadow-3xs w-full space-y-2.5 text-left shrink-0">
+                          <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-3xs w-full space-y-2.5 text-left shrink-0">
                             <div className="flex justify-between items-center text-[10px] font-bold text-gray-450 uppercase tracking-wider">
                               <span>Độ chính xác</span>
                               <span className="font-bold text-gray-900 font-mono text-xs">{Math.round((lastQuizResult.score / 30) * 100)}%</span>
@@ -1420,7 +1428,7 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
 
                         {/* Standard elegant notice for BACK advice - addressing screenshot red arrow comment! */}
                         <div className="bg-blue-50/50 border border-blue-100 py-1.5 px-3 rounded-xl text-left shrink-0 shadow-3xs">
-                          <p className="text-[10px] sm:text-[11px] text-blue-800 leading-relaxed font-sans line-clamp-2">
+                          <p className="text-[10px] sm:text-[11px] text-blue-800 leading-relaxed font-sans">
                             💡 <b>Mẹo sửa sai:</b> Nếu câu 1, câu 2 lỡ chọn nhầm, làm sai, ấn nút <b>(&lt;)</b> ở góc trên cùng để đổi đề và làm lại từ đầu (duy nhất 1 lần).
                           </p>
                         </div>
