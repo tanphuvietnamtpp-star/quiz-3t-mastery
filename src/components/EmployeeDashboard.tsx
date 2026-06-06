@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { databaseService } from '../firebase';
 import { User, Question, QuizResult } from '../types';
 import { formatDate, formatTimeInSeconds } from '../utils/format';
-import { BookOpen, Trophy, Award, BarChart3, ChevronRight, CheckCircle2, XCircle, ArrowRight, RotateCcw, HelpCircle, GraduationCap, AlertCircle, Users, TrendingUp, Building2, LogOut, Home } from 'lucide-react';
+import { BookOpen, Trophy, Award, BarChart3, ChevronRight, CheckCircle2, XCircle, ArrowRight, RotateCcw, HelpCircle, GraduationCap, AlertCircle, Users, TrendingUp, Building2, LogOut, Home, Maximize2, Minimize2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts';
 
@@ -15,6 +15,87 @@ interface EmployeeDashboardProps {
 }
 
 export default function EmployeeDashboard({ user, onLogout, isAdminReview = false, onBackToAdmin, slogan = '3T Hội Tụ - Tân Phú Vươn Xa' }: EmployeeDashboardProps) {
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    document.addEventListener('mozfullscreenchange', handleFullscreenChange);
+    document.addEventListener('MSFullscreenChange', handleFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('mozfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('MSFullscreenChange', handleFullscreenChange);
+    };
+  }, []);
+
+  // Tự động kiểm tra và ẩn thanh địa chỉ trình duyệt trên điện thoại khi có tương tác chạm đầu tiên
+  useEffect(() => {
+    const autoFullscreenOnInteraction = () => {
+      const isMobile = window.innerWidth < 640 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      if (isMobile && !document.fullscreenElement) {
+        const docEl = document.documentElement as any;
+        try {
+          if (docEl.requestFullscreen) {
+            docEl.requestFullscreen().catch(() => {});
+          } else if (docEl.webkitRequestFullscreen) {
+            docEl.webkitRequestFullscreen();
+          } else if (docEl.mozRequestFullScreen) {
+            docEl.mozRequestFullScreen();
+          } else if (docEl.msRequestFullscreen) {
+            docEl.msRequestFullscreen();
+          }
+        } catch (err) {
+          console.warn("Auto-fullscreen failed:", err);
+        }
+      }
+      // Dọn dẹp listener sau lần tương tác đầu tiên
+      window.removeEventListener('click', autoFullscreenOnInteraction);
+      window.removeEventListener('touchstart', autoFullscreenOnInteraction);
+    };
+
+    window.addEventListener('click', autoFullscreenOnInteraction);
+    window.addEventListener('touchstart', autoFullscreenOnInteraction);
+    return () => {
+      window.removeEventListener('click', autoFullscreenOnInteraction);
+      window.removeEventListener('touchstart', autoFullscreenOnInteraction);
+    };
+  }, []);
+
+  const toggleFullscreen = () => {
+    try {
+      if (!document.fullscreenElement) {
+        const docEl = document.documentElement as any;
+        if (docEl.requestFullscreen) {
+          docEl.requestFullscreen().catch(() => {});
+        } else if (docEl.webkitRequestFullscreen) {
+          docEl.webkitRequestFullscreen();
+        } else if (docEl.mozRequestFullScreen) {
+          docEl.mozRequestFullScreen();
+        } else if (docEl.msRequestFullscreen) {
+          docEl.msRequestFullscreen();
+        }
+      } else {
+        const doc = document as any;
+        if (doc.exitFullscreen) {
+          doc.exitFullscreen().catch(() => {});
+        } else if (doc.webkitExitFullscreen) {
+          doc.webkitExitFullscreen();
+        } else if (doc.mozCancelFullScreen) {
+          doc.mozCancelFullScreen();
+        } else if (doc.msExitFullscreen) {
+          doc.msExitFullscreen();
+        }
+      }
+    } catch (err) {
+      console.warn("Fullscreen toggle error:", err);
+    }
+  };
+
   const [activeTab, setActiveTab] = useState<'practice' | 'quiz' | 'history'>('quiz');
   const [questions, setQuestions] = useState<Question[]>([]);
   const [results, setResults] = useState<QuizResult[]>([]);
@@ -26,6 +107,7 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, number>>({});
   const [quizTimer, setQuizTimer] = useState(0);
+  const [questionTimer, setQuestionTimer] = useState(90);
   const [timerInterval, setTimerInterval] = useState<any>(null);
   
   const [backChanceUsed, setBackChanceUsed] = useState(false);
@@ -62,11 +144,112 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
     loadData();
   }, [user.id]);
 
+  // Refs to avoid state closures inside setInterval
+  const currentQuestionIndexRef = useRef(currentQuestionIndex);
+  const quizStartedRef = useRef(quizStarted);
+  const showResultsReviewRef = useRef(showResultsReview);
+  const selectedAnswersRef = useRef(selectedAnswers);
+  const currentQuizQuestionsRef = useRef(currentQuizQuestions);
+  const quizTimerRef = useRef(quizTimer);
+
+  useEffect(() => {
+    currentQuestionIndexRef.current = currentQuestionIndex;
+  }, [currentQuestionIndex]);
+
+  useEffect(() => {
+    quizStartedRef.current = quizStarted;
+  }, [quizStarted]);
+
+  useEffect(() => {
+    showResultsReviewRef.current = showResultsReview;
+  }, [showResultsReview]);
+
+  useEffect(() => {
+    selectedAnswersRef.current = selectedAnswers;
+  }, [selectedAnswers]);
+
+  useEffect(() => {
+    currentQuizQuestionsRef.current = currentQuizQuestions;
+  }, [currentQuizQuestions]);
+
+  useEffect(() => {
+    quizTimerRef.current = quizTimer;
+  }, [quizTimer]);
+
+  // Reset countdown to 90 seconds each time the question changes
+  useEffect(() => {
+    if (quizStarted) {
+      setQuestionTimer(90);
+    }
+  }, [currentQuestionIndex, quizStarted]);
+
+  const autoSubmitQuiz = async () => {
+    setErrorState(null);
+    let correctCount = 0;
+    const answerLog = currentQuizQuestionsRef.current.map(q => {
+      const selectedIndex = selectedAnswersRef.current[q.id] !== undefined ? selectedAnswersRef.current[q.id] : -1;
+      const isCorrect = selectedIndex === q.correctAnswerIndex;
+      if (isCorrect) correctCount++;
+      return {
+        questionId: q.id,
+        selectedIndex: selectedIndex,
+        correct: isCorrect
+      };
+    });
+
+    const finalScore = correctCount * 10;
+
+    const newResult: QuizResult = {
+      id: 'res_' + Math.random().toString(36).substring(2, 9),
+      userId: user.id,
+      userName: user.name,
+      department: user.department,
+      branch: user.branch,
+      score: finalScore,
+      totalQuestions: 3,
+      date: formatDate(new Date()),
+      timestamp: Date.now(),
+      answers: answerLog,
+      duration: quizTimerRef.current
+    };
+
+    try {
+      await databaseService.saveQuizResult(newResult);
+      setLastQuizResult(newResult);
+      setResults(prev => [newResult, ...prev]);
+      setAllResults(prev => [newResult, ...prev]);
+      setShowResultsReview(true);
+      setReviewMode(false);
+      setReviewQuestionIndex(0);
+    } catch (err) {
+      console.error("Lỗi khi nộp bài thi tự động:", err);
+    }
+  };
+
+  const handleQuestionTimeout = () => {
+    const currentIndex = currentQuestionIndexRef.current;
+    if (currentIndex < 2) {
+      setCurrentQuestionIndex(currentIndex + 1);
+      setQuestionTimer(90);
+    } else {
+      autoSubmitQuiz();
+    }
+  };
+
   // Handle Timer
   useEffect(() => {
     if (quizStarted && !showResultsReview) {
       const interval = setInterval(() => {
         setQuizTimer(prev => prev + 1);
+        setQuestionTimer(prev => {
+          if (prev <= 1) {
+            setTimeout(() => {
+              handleQuestionTimeout();
+            }, 0);
+            return 90;
+          }
+          return prev - 1;
+        });
       }, 1000);
       setTimerInterval(interval);
       return () => clearInterval(interval);
@@ -87,6 +270,7 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
     setSelectedAnswers({});
     setCurrentQuestionIndex(0);
     setQuizTimer(0);
+    setQuestionTimer(90);
     setBackChanceUsed(false);
     setBackClicksCount(0);
     setQuizInfoMessage(null);
@@ -110,21 +294,15 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
 
   // Submit Quiz Action
   const submitQuiz = async () => {
-    // Check if answered all questions
-    const answeredCount = Object.keys(selectedAnswers).length;
-    if (answeredCount < 3) {
-      setErrorState("Vui lòng trả lời đầy đủ cả 3 câu hỏi trước khi nộp bài.");
-      return;
-    }
-
     setErrorState(null);
     let correctCount = 0;
     const answerLog = currentQuizQuestions.map(q => {
-      const isCorrect = selectedAnswers[q.id] === q.correctAnswerIndex;
+      const selectedIndex = selectedAnswers[q.id] !== undefined ? selectedAnswers[q.id] : -1;
+      const isCorrect = selectedIndex === q.correctAnswerIndex;
       if (isCorrect) correctCount++;
       return {
         questionId: q.id,
-        selectedIndex: selectedAnswers[q.id],
+        selectedIndex: selectedIndex,
         correct: isCorrect
       };
     });
@@ -225,18 +403,24 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
     return { name: dept, count, avg, rate };
   }).sort((a, b) => b.count - a.count || b.avg - a.avg);
 
+  const formatCountdown = (secs: number) => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  };
+
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="h-[100dvh] min-h-[100dvh] max-h-[100dvh] overflow-hidden bg-gray-50 flex flex-col">
       {/* Simulation preview banner */}
       {isAdminReview && (
-        <div className="bg-amber-500 text-white px-6 py-2.5 flex flex-col sm:flex-row justify-between items-center text-xs md:text-sm font-bold shadow-md z-50 gap-2">
+        <div className="bg-amber-500 text-white px-6 py-2 flex flex-col sm:flex-row justify-between items-center text-xs md:text-sm font-bold shadow-md z-50 gap-1.5 shrink-0">
           <div className="flex items-center gap-2">
-            <span translate="no" className="notranslate bg-amber-700 px-2.5 py-1 rounded text-[10px] text-white tracking-widest shrink-0 uppercase">Chế độ xem thử</span>
+            <span translate="no" className="notranslate bg-amber-700 px-2 py-0.5 rounded text-[10px] text-white tracking-widest shrink-0 uppercase">Chế độ xem thử</span>
             <span translate="no" className="notranslate">Anh/Chị đang trải nghiệm giao diện CBNV để trực tiếp kiểm duyệt Thi thử, Học từ sai và Phân tích 3T!</span>
           </div>
           <button 
             onClick={onBackToAdmin}
-            className="bg-white text-gray-900 hover:bg-gray-100 transition-all font-bold px-4 py-1.5 rounded-lg shadow-sm font-sans shrink-0"
+            className="bg-white text-gray-900 hover:bg-gray-100 transition-all font-bold px-3 py-1 rounded shadow-sm font-sans shrink-0 text-xs"
           >
             <span translate="no" className="notranslate">Quay lại trang Quản trị</span>
           </button>
@@ -244,18 +428,37 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
       )}
 
       {/* Main Area containing Structured Smartphone Mockup with Auto-Detection */}
-      <main className="flex-1 flex items-center justify-center p-2 sm:p-6 bg-gradient-to-b from-gray-50 to-gray-100 max-h-screen overflow-hidden">
+      <main className="flex-1 flex items-center justify-center p-1.5 sm:p-6 bg-gradient-to-b from-gray-50 to-gray-100 min-h-0 h-0 overflow-hidden relative w-full">
         
-        {/* Smartphone Frame Outer Shell with 50% thinner borders, scaled corner radius for phone frame */}
-        <div className="w-full sm:max-w-[415px] h-[95vh] sm:h-[810px] max-h-[920px] bg-[#0F1C2E] sm:rounded-[32px] p-0.5 shadow-2xl relative sm:border-[3px] sm:border-slate-800 ring-2 ring-slate-900/5 transition-all text-gray-800 flex flex-col my-1 shrink-0">
+        {/* Smartphone Frame Outer Shell with mathematically concentric corner radius */}
+        <div className="w-full sm:max-w-[415px] h-full sm:h-[810px] max-h-full sm:max-h-[810px] bg-[#0F1C2E] rounded-[32px] p-1 shadow-2xl relative border-4 border-slate-800 ring-2 ring-slate-900/5 transition-all text-gray-800 flex flex-col my-0.5 sm:my-1 shrink-0 overflow-hidden">
           
+          {/* Floating Fullscreen / Hide Address Bar Action Button */}
+          <button
+            onClick={toggleFullscreen}
+            className="absolute top-1.5 right-1.5 z-40 py-1.5 px-2 bg-[#1971C2] hover:bg-[#155FA0] active:scale-95 text-white text-[8.5px] font-extrabold tracking-tight rounded-full shadow-lg border border-blue-400 select-none cursor-pointer flex items-center gap-1 leading-none hover:shadow-xl transition-all"
+            title={isFullscreen ? "Màn hình thường" : "Ẩn thanh địa chỉ trình duyệt"}
+          >
+            {isFullscreen ? (
+              <>
+                <Minimize2 className="h-3 w-3 shrink-0" />
+                <span>MÀN HÌNH THƯỜNG</span>
+              </>
+            ) : (
+              <>
+                <Maximize2 className="h-3 w-3 shrink-0 animate-pulse text-blue-100" />
+                <span>ẨN ĐỊA CHỈ <span className="hidden min-[360px]:inline">📲</span></span>
+              </>
+            )}
+          </button>
+
           {/* Physical Phone Top Notch / Speaker Deco element simulating phone layout */}
           <div className="hidden sm:flex absolute -top-0.5 left-1/2 -translate-x-1/2 w-24 h-3.5 bg-slate-800 rounded-b-md z-20 items-center justify-center">
             <div className="w-8 h-0.5 bg-slate-900 rounded-full"></div>
           </div>
           
           {/* Screen Inner Viewport (Auto-co giãn, scrollable elegantly like a native application) */}
-          <div className="bg-white w-full h-full rounded-[14px] sm:rounded-[26px] overflow-hidden flex flex-col shadow-inner relative border border-gray-150 p-3 sm:p-4 overflow-y-auto style-scrollbar flex-1">
+          <div className="bg-white w-full h-full rounded-[24px] overflow-hidden flex flex-col shadow-inner relative border border-gray-150 p-3 sm:p-4 overflow-y-auto style-scrollbar flex-1">
             
             {/* Dynamic Inner Panel Viewports */}
             <AnimatePresence mode="wait">
@@ -761,24 +964,24 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                   </div>
 
                   {/* Bottom Navigation Row: Ôn Tập (left), Đăng Xuất (middle) and Phân Tích (right) */}
-                  <div className="w-full flex items-center justify-between pt-2.5 sm:pt-3 border-t border-gray-100 gap-2 shrink-0 mt-auto">
+                  <div className="w-full flex items-center justify-between pt-2 sm:pt-3 border-t border-gray-100 gap-1 shrink-0 mt-auto">
                     <button
                       onClick={() => {
                         setActiveTab('practice');
                         setExpandedPracticeId(null);
                       }}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 rounded-xl transition-all hover:scale-105 active:scale-95 cursor-pointer text-xs font-bold"
+                      className="flex-1 flex items-center justify-center gap-0.5 sm:gap-1 py-1.5 sm:py-2 px-0.5 sm:px-2 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 rounded-lg sm:rounded-xl transition-all hover:scale-[1.01] active:scale-[0.99] cursor-pointer text-[7.5px] min-[320px]:text-[8px] min-[360px]:text-[9px] min-[400px]:text-[10px] sm:text-xs font-extrabold tracking-tight whitespace-nowrap overflow-hidden select-none"
                     >
-                      <BookOpen className="h-4 w-4 text-amber-600 shrink-0" />
-                      <span>ÔN TẬP</span>
+                      <BookOpen className="h-3 w-3 sm:h-4 sm:w-4 text-amber-600 shrink-0" />
+                      <span className="whitespace-nowrap">ÔN TẬP</span>
                     </button>
 
                     <button
                       onClick={onLogout}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 bg-red-50 hover:bg-red-100 border border-red-200 text-red-800 rounded-xl transition-all hover:scale-105 active:scale-95 cursor-pointer text-xs font-bold font-sans"
+                      className="flex-1 flex items-center justify-center gap-0.5 sm:gap-1 py-1.5 sm:py-2 px-0.5 sm:px-2 bg-red-50 hover:bg-red-100 border border-red-200 text-red-800 rounded-lg sm:rounded-xl transition-all hover:scale-[1.01] active:scale-[0.99] cursor-pointer text-[7.5px] min-[320px]:text-[8px] min-[360px]:text-[9px] min-[400px]:text-[10px] sm:text-xs font-extrabold tracking-tight whitespace-nowrap overflow-hidden select-none font-sans"
                     >
-                      <LogOut className="h-4 w-4 text-red-600 shrink-0" />
-                      <span>ĐĂNG XUẤT</span>
+                      <LogOut className="h-3 w-3 sm:h-4 sm:w-4 text-red-600 shrink-0" />
+                      <span className="whitespace-nowrap">ĐĂNG XUẤT</span>
                     </button>
 
                     <button
@@ -786,10 +989,10 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                         setActiveTab('history');
                         setAnalysisScope('personal');
                       }}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-800 rounded-xl transition-all hover:scale-105 active:scale-95 cursor-pointer text-xs font-bold"
+                      className="flex-1 flex items-center justify-center gap-0.5 sm:gap-1 py-1.5 sm:py-2 px-0.5 sm:px-2 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-800 rounded-lg sm:rounded-xl transition-all hover:scale-[1.01] active:scale-[0.99] cursor-pointer text-[7.5px] min-[320px]:text-[8px] min-[360px]:text-[9px] min-[400px]:text-[10px] sm:text-xs font-extrabold tracking-tight whitespace-nowrap overflow-hidden select-none"
                     >
-                      <BarChart3 className="h-4 w-4 text-indigo-600 shrink-0" />
-                      <span>PHÂN TÍCH</span>
+                      <BarChart3 className="h-3 w-3 sm:h-4 sm:w-4 text-indigo-600 shrink-0" />
+                      <span className="whitespace-nowrap">PHÂN TÍCH</span>
                     </button>
                   </div>
                 </div>
@@ -807,29 +1010,29 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                           </h2>
 
                           {/* Circular Score percentage ring drawing */}
-                          <div className="relative h-36 w-36 flex items-center justify-center shrink-0">
+                          <div className="relative h-52 w-52 sm:h-56 sm:w-56 flex items-center justify-center shrink-0 my-3">
                             <svg className="absolute transform -rotate-90 w-full h-full" viewBox="0 0 100 100">
-                              {/* Track */}
+                               {/* Track */}
                               <circle 
-                                cx="50" cy="50" r="40" 
+                                cx="50" cy="50" r="44" 
                                 stroke="#f1f5f9" strokeWidth="6" fill="transparent" 
                               />
-                              {/* Score fill */}
+                               {/* Score fill */}
                               <circle 
-                                cx="50" cy="50" r="40" 
+                                cx="50" cy="50" r="44" 
                                 stroke="#1971C2" 
-                                strokeWidth="6" fill="transparent" 
-                                strokeDasharray={`${2 * Math.PI * 40}`}
-                                strokeDashoffset={`${2 * Math.PI * 40 * (1 - lastQuizResult.score / 30)}`}
+                                strokeWidth="7" fill="transparent" 
+                                strokeDasharray={`${2 * Math.PI * 44}`}
+                                strokeDashoffset={`${2 * Math.PI * 44 * (1 - lastQuizResult.score / 30)}`}
                                 strokeLinecap="round"
                                 className="transition-all duration-1000 ease-out"
                               />
                             </svg>
                             <div className="text-center z-10 flex flex-col items-center">
-                              <span translate="no" className="notranslate text-3xl font-extrabold text-gray-950 block font-sans tracking-tight leading-none">
+                              <span translate="no" className="notranslate text-4xl sm:text-5xl font-extrabold text-gray-950 block font-sans tracking-tight leading-none">
                                 {lastQuizResult.score}/30
                               </span>
-                              <span translate="no" className="notranslate text-[10px] text-gray-400 font-bold block mt-1 tracking-wider uppercase leading-none">
+                              <span translate="no" className="notranslate text-xs sm:text-sm text-gray-400 font-bold block mt-2 tracking-wider uppercase leading-none">
                                 Điểm số
                               </span>
                             </div>
@@ -955,23 +1158,22 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                           </div>
 
                           {/* Control action buttons */}
-                          <div className="flex gap-2 w-full pt-1 shrink-0">
+                          <div className="flex gap-1.5 w-full pt-1 shrink-0">
                             <button
                               onClick={() => { setQuizStarted(false); setShowResultsReview(false); setReviewMode(false); }}
-                              className="flex-1 py-2 sm:py-2.5 px-1.5 sm:px-2 bg-white border border-[#1971C2] text-[#1971C2] hover:bg-blue-50 font-bold rounded-lg text-[10px] sm:text-xs shadow-3xs transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-1 shrink-0"
+                              className="flex-1 py-2 sm:py-2.5 px-0.5 sm:px-2 bg-white border border-[#1971C2] text-[#1971C2] hover:bg-blue-50 font-bold rounded-lg text-[8px] min-[355px]:text-[10px] sm:text-xs shadow-3xs transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center whitespace-nowrap"
                             >
-                              <Home className="h-3.5 w-3.5 shrink-0" />
                               <span>Về trang chủ</span>
                             </button>
                             <button
                               onClick={() => { setReviewMode(true); setReviewQuestionIndex(0); }}
-                              className="flex-1 py-2 sm:py-2.5 px-1 bg-[#1971C2] hover:bg-opacity-95 text-white font-bold rounded-lg text-[10px] sm:text-xs shadow-3xs transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center text-center shrink-0"
+                              className="flex-1 py-2 sm:py-2.5 px-0.5 bg-[#1971C2] hover:bg-opacity-95 text-white font-bold rounded-lg text-[8px] min-[355px]:text-[10px] sm:text-xs shadow-3xs transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center text-center whitespace-nowrap"
                             >
                               Xem câu trả lời
                             </button>
                             <button
                               onClick={startQuiz}
-                              className="flex-[0.9] py-2 sm:py-2.5 px-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-[10px] sm:text-xs shadow-3xs transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center text-center shrink-0"
+                              className="flex-[0.9] py-2 sm:py-2.5 px-0.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-[8px] min-[355px]:text-[10px] sm:text-xs shadow-3xs transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center text-center whitespace-nowrap"
                             >
                               Làm tiếp
                             </button>
@@ -1142,6 +1344,7 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                               setCurrentQuizQuestions(selected);
                             }
                             setSelectedAnswers({}); // Xóa sạch các câu đã chọn để làm lại mới hoàn toàn
+                            setQuestionTimer(90); // Reset countdown timer for the new set
                             setCurrentQuestionIndex(0); // Quay lại làm lại từ đầu từ câu 1
                             setBackChanceUsed(true);
                             setErrorState(null);
@@ -1188,11 +1391,21 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                             <div>
                                <span translate="no" className="notranslate">{currentQuestionIndex + 1}/3 câu hỏi</span>
                             </div>
-                            <div className="bg-green-50 border border-green-100 text-green-700 px-2.5 py-1 rounded-md font-mono font-bold flex items-center gap-1.5 text-xs sm:text-sm shadow-3xs">
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-green-600 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <div className={`px-2.5 py-1 rounded-md font-mono font-bold flex items-center gap-1.5 text-xs sm:text-sm shadow-3xs border transition-all duration-300 ${
+                              questionTimer <= 15 
+                                ? "bg-red-50 border-red-200 text-red-650 animate-pulse font-extrabold" 
+                                : "bg-green-50 border-green-150 text-green-700"
+                            }`}>
+                              <svg 
+                                xmlns="http://www.w3.org/2000/svg" 
+                                className={`h-4 w-4 ${questionTimer <= 15 ? "text-red-500 animate-pulse" : "text-green-600"}`} 
+                                fill="none" 
+                                viewBox="0 0 24 24" 
+                                stroke="currentColor"
+                              >
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                               </svg>
-                              <span translate="no" className="notranslate">{formatTimeInSeconds(quizTimer)}</span>
+                              <span translate="no" className="notranslate">{formatCountdown(questionTimer)}</span>
                             </div>
                           </div>
                           
@@ -1206,9 +1419,9 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                         </div>
 
                         {/* Standard elegant notice for BACK advice - addressing screenshot red arrow comment! */}
-                        <div className="bg-blue-50/50 border border-blue-100 p-3 rounded-xl text-left shrink-0 shadow-3xs">
-                          <p className="text-xs text-blue-800 leading-relaxed font-sans">
-                            💡 <b>Mẹo sửa sai:</b> Nếu chọn nhầm, ấn nút <b>BACK (&larr;)</b> ở góc trên cùng để đổi đề và làm lại từ câu 1 (duy nhất 1 lần).
+                        <div className="bg-blue-50/50 border border-blue-100 py-1.5 px-3 rounded-xl text-left shrink-0 shadow-3xs">
+                          <p className="text-[10px] sm:text-[11px] text-blue-800 leading-relaxed font-sans line-clamp-2">
+                            💡 <b>Mẹo sửa sai:</b> Nếu câu 1, câu 2 lỡ chọn nhầm, làm sai, ấn nút <b>(&lt;)</b> ở góc trên cùng để đổi đề và làm lại từ đầu (duy nhất 1 lần).
                           </p>
                         </div>
 
