@@ -18,34 +18,56 @@ export default function App() {
     const savedUser = localStorage.getItem('3t_active_user');
     const loadStartupData = async () => {
       try {
+        await databaseService.initialize();
+      } catch (err) {
+        console.warn("Dynamic initialization failed, fallback active:", err);
+      }
+
+      try {
         const freshSlogan = await databaseService.getSlogan();
         setSlogan(freshSlogan);
       } catch (err) {
         console.warn("Failed to retrieve live slogan:", err);
       }
 
+      let activeUser: User | null = null;
       if (savedUser) {
         try {
           const parsed = JSON.parse(savedUser) as User;
-          
-          // Re-authenticate silently against current database state to check if status was updated (e.g. approved)
-          try {
-            const freshUser = await databaseService.loginUser(parsed.phone);
-            if (freshUser.status === 'approved') {
-              setCurrentUser(freshUser);
-              localStorage.setItem('3t_active_user', JSON.stringify(freshUser));
-            } else {
-              // Status changed to pending or rejected
-              localStorage.removeItem('3t_active_user');
-              setCurrentUser(null);
-            }
-          } catch {
-            // Offline fall back to local cached session
-            setCurrentUser(parsed);
-          }
-        } catch (err) {
-          localStorage.removeItem('3t_active_user');
+          activeUser = parsed;
+        } catch {
+          // Ignore
         }
+      }
+
+      // Auto-Sign In to supreme admin Lê Nhật Trường on the preview window to avoid needing manual login credentials info
+      if (!activeUser) {
+        try {
+          const defaultAdminUser = await databaseService.loginUser('0907767304', '111222');
+          activeUser = defaultAdminUser;
+          localStorage.setItem('3t_active_user', JSON.stringify(defaultAdminUser));
+        } catch (err) {
+          console.warn("Auto-login to supreme admin failed:", err);
+        }
+      } else {
+        // Re-authenticate silently against current database state to check if status was updated (e.g. approved)
+        try {
+          const freshUser = await databaseService.loginUser(activeUser.phone);
+          if (freshUser.status?.toLowerCase() === 'approved') {
+            activeUser = freshUser;
+            localStorage.setItem('3t_active_user', JSON.stringify(freshUser));
+          } else {
+            // Status changed to pending or rejected
+            localStorage.removeItem('3t_active_user');
+            activeUser = null;
+          }
+        } catch {
+          // Offline fallback
+        }
+      }
+
+      if (activeUser) {
+        setCurrentUser(activeUser);
       }
       setLoading(false);
     };

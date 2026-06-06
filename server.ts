@@ -118,6 +118,63 @@ async function startServer() {
     }
   });
 
+  // Helper to parse JS-like or malformed object string safely
+  function robustParseFirebaseConfig(str: string): any {
+    if (!str || typeof str !== "string") return {};
+    const trimmed = str.trim();
+    if (!trimmed) return {};
+
+    // First attempt: Standard strict JSON parse
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      // Second attempt: Clean single quotes, unquoted keys, trailing commas gracefully
+      try {
+        const normalized = trimmed
+          .replace(/'/g, '"') // Map single quotes to double quotes
+          .replace(/([{,]\s*)([a-zA-Z0-9_]+)\s*:/g, '$1"$2":') // Wrap unquoted key names with double quotes
+          .replace(/,\s*([\]}])/g, '$1'); // Delete any trialing commas
+        return JSON.parse(normalized);
+      } catch {
+        // Third and final level fallback: Function constructor
+        try {
+          const fn = new Function(`return (${trimmed});`);
+          const result = fn();
+          if (result && typeof result === "object") {
+            return result;
+          }
+        } catch {
+          // Fall back gracefully to empty config instead of printing parsing stacktraces
+          return {};
+        }
+      }
+    }
+    return {};
+  }
+
+  // API to retrieve database configs dynamically at runtime (highly robust for user-defined config)
+  app.get("/api/firebase-config", (req, res) => {
+    let config: any = {};
+    const envConfigStr = process.env.VITE_FIREBASE_CONFIG;
+    if (envConfigStr) {
+      config = { ...config, ...robustParseFirebaseConfig(envConfigStr) };
+    }
+
+    const keys = [
+      "apiKey", "authDomain", "projectId", "storageBucket", 
+      "messagingSenderId", "appId", "measurementId", "firestoreDatabaseId"
+    ];
+    keys.forEach(key => {
+      const snakeKey = key.replace(/([A-Z])/g, "_$1").toUpperCase();
+      const envKey = `VITE_FIREBASE_${snakeKey}`;
+      if (process.env[envKey]) {
+        config[key] = process.env[envKey];
+      }
+    });
+
+    return res.json(config);
+  });
+
   // Setup Vite Dev server middleware or serve built resources in production
   if (process.env.NODE_ENV !== "production") {
     console.log("Starting server in development mode with Vite middleware...");

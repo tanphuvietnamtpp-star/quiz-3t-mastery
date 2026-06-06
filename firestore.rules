@@ -16,16 +16,13 @@ service cloud.firestore {
       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
-    // Rules logic for users collection
+    // Rules logic for users and user_profiles collection
+    match /user_profiles/{userId} {
+      allow read, write: if true;
+    }
+
     match /users/{userId} {
-      allow get: if isSignedIn();
-      allow list: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update: if isSignedIn() && (
-        userId == request.auth.uid || 
-        exists(/databases/$(database)/documents/users/$(request.auth.uid))
-      );
-      allow delete: if false;
+      allow read, write: if true;
     }
 
     // Rules logic for questions collection

@@ -69,6 +69,12 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
 
   useEffect(() => {
     loadData();
+
+    // Real-time onSnapshot listener so that new registrations immediately pop up for Admin
+    const unsubscribe = databaseService.subscribeUsers((allUsers) => {
+      setUsers(allUsers);
+    });
+    return () => unsubscribe();
   }, []);
 
   // Seed question action
@@ -398,7 +404,7 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
               className="text-xs font-bold text-white bg-green-600 hover:bg-green-700 hover:shadow shadow-sm rounded-md py-2 px-3.5 transition-all flex items-center gap-1.5 border border-green-500 font-sans"
             >
               <Sparkles className="h-4 w-4 text-white" />
-              <span>Trải nghiệm Học & Thi Thử (CBNV)</span>
+              <span translate="no" className="notranslate">Trải nghiệm Học & Thi Thử (CBNV)</span>
             </button>
             <button
               onClick={onLogout}
@@ -449,7 +455,7 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
               }}
               className="px-3.5 py-1.5 bg-[#1971C2] hover:bg-opacity-95 text-white text-xs font-bold rounded-md transition-all whitespace-nowrap shadow-sm font-sans"
             >
-              Cập nhật
+              <span translate="no" className="notranslate">Cập nhật</span>
             </button>
           </div>
         </div>
@@ -460,7 +466,7 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
             notice.type === 'success' ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-700'
           }`}>
             <span translate="no" className="notranslate">{notice.msg}</span>
-            <button onClick={() => setNotice(null)} className="text-xs font-bold uppercase shrink-0">Đóng</button>
+            <button onClick={() => setNotice(null)} className="text-xs font-bold uppercase shrink-0"><span translate="no" className="notranslate">Đóng</span></button>
           </div>
         )}
 
@@ -519,8 +525,8 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
               <div className="bg-white border border-gray-150 rounded-md shadow-sm overflow-hidden">
                 <div className="p-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
                   <div>
-                    <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest">Danh sách CBNV đăng ký hệ thống</h3>
-                    <p className="text-xs text-gray-400 mt-0.5">Với tư cách Admin tối cao, bạn có thể phê duyệt quyền vào sảnh học tập cho CBNV quốc gia.</p>
+                    <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest"><span translate="no" className="notranslate">Danh sách CBNV đăng ký hệ thống</span></h3>
+                    <p className="text-xs text-gray-400 mt-0.5"><span translate="no" className="notranslate">Với tư cách Admin tối cao, bạn có thể phê duyệt quyền vào sảnh học tập cho CBNV quốc gia.</span></p>
                   </div>
                   <button 
                     onClick={loadData}
@@ -534,107 +540,147 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
                   <table className="w-full text-left text-sm border-collapse">
                     <thead>
                       <tr className="bg-gray-50/50 text-gray-500 text-xs uppercase border-b border-gray-150">
-                        <th className="py-2.5 px-4 font-bold">Họ và Tên / SĐT</th>
-                        <th className="py-2.5 px-4 font-bold">Thuộc Bộ Phận / Chi nhánh</th>
-                        <th className="py-2.5 px-4 font-bold">Vai trò phân cấp</th>
-                        <th className="py-2.5 px-4 font-bold">Phê duyệt trạng thái</th>
-                        <th className="py-2.5 px-4 font-bold text-right text-xs">Phân bổ thao tác</th>
+                        <th className="py-2.5 px-4 font-bold"><span translate="no" className="notranslate">Họ và Tên / SĐT</span></th>
+                        <th className="py-2.5 px-4 font-bold"><span translate="no" className="notranslate">Thuộc Bộ Phận / Chi nhánh</span></th>
+                        <th className="py-2.5 px-4 font-bold"><span translate="no" className="notranslate">Vai trò phân cấp</span></th>
+                        <th className="py-2.5 px-4 font-bold"><span translate="no" className="notranslate">Phê duyệt trạng thái</span></th>
+                        <th className="py-2.5 px-4 font-bold text-right text-xs"><span translate="no" className="notranslate">Phân bổ thao tác</span></th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 text-xs">
-                      {users.length === 0 ? (
-                        <tr>
-                          <td colSpan={5} className="py-8 text-center text-gray-300 italic">Chưa có dữ liệu CBNV đăng ký.</td>
-                        </tr>
-                      ) : (
-                        users.map((item) => (
-                          <tr key={item.id} className="hover:bg-gray-50/50">
-                            <td className="py-3 px-4 text-gray-800">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span translate="no" className="notranslate font-bold">{item.name}</span>
-                                {item.employeeId && (
-                                  <span translate="no" className="notranslate text-[10px] uppercase font-bold px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded border border-blue-100 font-mono">
-                                    MS: {item.employeeId}
+                      {(() => {
+                        const seenKeys = new Set<string>();
+                        // 1. Deduplicate users by Name & Phone to ensure exact unique entries, and automatically clean trash / empty IDs / blank fields
+                        const deduped = users.filter((item) => {
+                          if (!item || !item.id || !item.name || !item.phone) return false;
+                          const nameTrim = item.name.trim();
+                          const phoneTrim = item.phone.trim();
+                          if (!nameTrim || !phoneTrim) return false;
+
+                          const uniqueKey = `${nameTrim}_${phoneTrim}`;
+                          if (seenKeys.has(uniqueKey)) return false;
+                          seenKeys.add(uniqueKey);
+                          return true;
+                        });
+                        // 2. Sort PENDING (or pending) status first to the top
+                        const sorted = [...deduped].sort((a, b) => {
+                          const aPending = a.status?.toLowerCase() === 'pending';
+                          const bPending = b.status?.toLowerCase() === 'pending';
+                          if (aPending && !bPending) return -1;
+                          if (!aPending && bPending) return 1;
+                          return 0;
+                        });
+
+                        if (sorted.length === 0) {
+                          return (
+                            <tr>
+                              <td colSpan={5} className="py-8 text-center text-gray-300 italic">
+                                <span translate="no" className="notranslate">Chưa có dữ liệu CBNV đăng ký.</span>
+                              </td>
+                            </tr>
+                          );
+                        }
+
+                        return sorted.map((item) => {
+                          const isPendingState = item.status?.toLowerCase() === 'pending';
+                          const rowBgClass = isPendingState 
+                            ? 'bg-yellow-50/90 hover:bg-yellow-100/90 transition-all font-medium border-l-4 border-yellow-400' 
+                            : 'hover:bg-gray-50/50 transition-colors';
+                          // Standardized unique key (Name + Phone) as requested by user
+                          const itemKey = `${item.name.trim()}_${item.phone.trim()}`;
+
+                          return (
+                            <tr key={itemKey} className={rowBgClass}>
+                              <td className="py-3 px-4 text-gray-800">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span translate="no" className="notranslate font-bold">{item.name}</span>
+                                  {item.employeeId && (
+                                    <span translate="no" className="notranslate text-[10px] uppercase font-bold px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded border border-blue-100 font-mono">
+                                      MS: {item.employeeId}
+                                    </span>
+                                  )}
+                                </div>
+                                <span translate="no" className="notranslate block font-sans text-gray-400 font-normal mt-0.5">{item.phone}</span>
+                              </td>
+                              <td className="py-3 px-4">
+                                <span translate="no" className="notranslate">{item.department}</span>
+                                <span translate="no" className="notranslate block font-sans text-gray-450 mt-0.5">{item.branch}</span>
+                              </td>
+                              <td className="py-3 px-4">
+                                <span className={`px-2 py-0.5 rounded-full font-bold ${
+                                  item.role === 'admin' ? 'bg-purple-50 text-purple-700 border border-purple-100' :
+                                  item.role === 'approver' ? 'bg-yellow-50 text-yellow-700 border border-yellow-105' :
+                                  'bg-gray-100 text-gray-700'
+                                }`}>
+                                  <span translate="no" className="notranslate">{item.role === 'admin' ? 'Chủ Admin' : item.role === 'approver' ? 'Duyệt viên (Trưởng BP)' : 'CBNV'}</span>
+                                </span>
+                              </td>
+                              <td className="py-3 px-4">
+                                <span className={`px-2 py-0.5 rounded-full font-bold ${
+                                  item.status?.toLowerCase() === 'approved' ? 'bg-green-50 text-green-700 border border-green-100' :
+                                  isPendingState ? 'bg-amber-100 text-amber-800 border border-amber-200 animate-pulse' :
+                                  'bg-red-50 text-red-700 border border-red-100'
+                                }`}>
+                                  <span translate="no" className="notranslate">
+                                    {item.status?.toLowerCase() === 'approved' ? 'Đã hoạt động' : 
+                                     isPendingState ? 'Chờ duyệt (PENDING)' : 'Tạm khóa'}
                                   </span>
-                                )}
-                              </div>
-                              <span className="block font-sans text-gray-400 font-normal mt-0.5">{item.phone}</span>
-                            </td>
-                            <td className="py-3 px-4">
-                              <span translate="no" className="notranslate">{item.department}</span>
-                              <span className="block font-sans text-gray-450 mt-0.5">{item.branch}</span>
-                            </td>
-                            <td className="py-3 px-4">
-                              <span className={`px-2 py-0.5 rounded-full font-bold ${
-                                item.role === 'admin' ? 'bg-purple-50 text-purple-700 border border-purple-100' :
-                                item.role === 'approver' ? 'bg-yellow-50 text-yellow-700 border border-yellow-105' :
-                                'bg-gray-100 text-gray-700'
-                              }`}>
-                                <span translate="no" className="notranslate">{item.role === 'admin' ? 'Chủ Admin' : item.role === 'approver' ? 'Duyệt viên (Trưởng BP)' : 'CBNV'}</span>
-                              </span>
-                            </td>
-                            <td className="py-3 px-4">
-                              <span className={`px-2 py-0.5 rounded-full font-bold ${
-                                item.status === 'approved' ? 'bg-green-50 text-green-700 border border-green-100' :
-                                item.status === 'pending' ? 'bg-amber-50 text-amber-700 border border-amber-100' :
-                                'bg-red-50 text-red-700 border border-red-100'
-                              }`}>
-                                <span translate="no" className="notranslate">{item.status === 'approved' ? 'Đã hoạt động' : item.status === 'pending' ? 'Chờ kích hoạt' : 'Tạm khóa'}</span>
-                              </span>
-                            </td>
-                            <td className="py-3 px-4 text-right whitespace-nowrap">
-                              <div className="flex items-center justify-end gap-1.5 font-sans">
-                                {item.id !== 'admin_lenhattruong' && item.name !== 'Lê Nhật Trường' && (
-                                  <>
-                                    {/* Edit button */}
-                                    <button
-                                      onClick={() => handleOpenEdit(item)}
-                                      className="px-2 py-0.5 text-xs text-[#1971C2] bg-blue-50 hover:bg-blue-100 border border-blue-100 rounded-md font-bold transition-all"
-                                      title="Sửa thông tin tài khoản"
-                                    >
-                                      Sửa
-                                    </button>
-
-                                    {/* Toggle role operator */}
-                                    <button
-                                      onClick={() => handleToggleRole(item.id, item.role)}
-                                      className="px-2 py-0.5 text-xs text-gray-650 hover:text-blue-600 bg-white border border-gray-250 rounded-md font-bold transition-all"
-                                    >
-                                      <span translate="no" className="notranslate">{item.role === 'employee' ? 'Đặt Trưởng BP' : 'Hạ CBNV'}</span>
-                                    </button>
-
-                                    {/* Approve / Reject Actions */}
-                                    {item.status !== 'approved' ? (
+                                </span>
+                              </td>
+                              <td className="py-3 px-4 text-right whitespace-nowrap">
+                                <div className="flex items-center justify-end gap-1.5 font-sans">
+                                  {item.id !== 'admin_lenhattruong' && item.name !== 'Lê Nhật Trường' && (
+                                    <>
+                                      {/* Edit button */}
                                       <button
-                                        onClick={() => handleApproveUser(item.id)}
-                                        className="px-2 py-0.5 text-xs text-white bg-green-650 hover:bg-green-700 rounded-md font-bold transition-all"
+                                        onClick={() => handleOpenEdit(item)}
+                                        className="px-2 py-0.5 text-xs text-[#1971C2] bg-blue-50 hover:bg-blue-100 border border-blue-100 rounded-md font-bold transition-all cursor-pointer"
+                                        title="Sửa thông tin tài khoản"
                                       >
-                                        Duyệt
+                                        <span translate="no" className="notranslate">Sửa</span>
                                       </button>
-                                    ) : (
-                                      <button
-                                        onClick={() => handleRejectUser(item.id)}
-                                        className="px-2 py-0.5 text-xs text-white bg-amber-600 hover:bg-amber-700 rounded-md font-bold transition-all"
-                                      >
-                                        Khóa
-                                      </button>
-                                    )}
 
-                                    {/* Delete button */}
-                                    <button
-                                      onClick={() => setUserToDelete(item)}
-                                      className="px-2 py-0.5 text-xs text-white bg-red-650 hover:bg-red-700 rounded-md font-bold transition-all"
-                                      title="Xóa vĩnh viễn"
-                                    >
-                                      Xóa
-                                    </button>
-                                  </>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        ))
-                      )}
+                                      {/* Toggle role operator */}
+                                      <button
+                                        onClick={() => handleToggleRole(item.id, item.role)}
+                                        className="px-2 py-0.5 text-xs text-gray-650 hover:text-blue-600 bg-white border border-gray-250 rounded-md font-bold transition-all cursor-pointer"
+                                      >
+                                        <span translate="no" className="notranslate">{item.role === 'employee' ? 'Đặt Trưởng BP' : 'Hạ CBNV'}</span>
+                                      </button>
+
+                                      {/* Approve / Reject Actions */}
+                                      {item.status?.toLowerCase() !== 'approved' ? (
+                                        <button
+                                          onClick={() => handleApproveUser(item.id)}
+                                          className="px-2 py-0.5 text-xs text-white bg-green-650 hover:bg-green-700 rounded-md font-bold transition-all cursor-pointer"
+                                        >
+                                          <span translate="no" className="notranslate">Duyệt</span>
+                                        </button>
+                                      ) : (
+                                        <button
+                                          onClick={() => handleRejectUser(item.id)}
+                                          className="px-2 py-0.5 text-xs text-white bg-amber-600 hover:bg-amber-700 rounded-md font-bold transition-all cursor-pointer"
+                                        >
+                                          <span translate="no" className="notranslate">Khóa</span>
+                                        </button>
+                                      )}
+
+                                      {/* Delete button */}
+                                      <button
+                                        onClick={() => setUserToDelete(item)}
+                                        className="px-2 py-0.5 text-xs text-white bg-red-650 hover:bg-red-700 rounded-md font-bold transition-all cursor-pointer"
+                                        title="Xóa vĩnh viễn"
+                                      >
+                                        <span translate="no" className="notranslate">Xóa</span>
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        });
+                      })()}
                     </tbody>
                   </table>
                 </div>
@@ -655,8 +701,8 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
               {questions.length === 0 && (
                 <div className="bg-blue-50 border border-blue-100 p-6 rounded-md flex justify-between items-center gap-4">
                   <div>
-                    <h3 className="font-bold text-blue-800 text-sm">Khởi tạo dữ liệu mẫu 3T ban đầu?</h3>
-                    <p className="text-xs text-blue-700 mt-1">Hệ thống đang trống. Nhấp vào đây để thêm nhanh 07 câu hỏi huấn luyện 3T chuẩn ban đầu cho anh em CBNV ôn luyện.</p>
+                    <h3 className="font-bold text-blue-800 text-sm"><span translate="no" className="notranslate">Khởi tạo dữ liệu mẫu 3T ban đầu?</span></h3>
+                    <p className="text-xs text-blue-700 mt-1"><span translate="no" className="notranslate">Hệ thống đang trống. Nhấp vào đây để thêm nhanh 07 câu hỏi huấn luyện 3T chuẩn ban đầu cho anh em CBNV ôn luyện.</span></p>
                   </div>
                   <button 
                     onClick={handleSeedQuestions}
@@ -674,7 +720,7 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
                 </h3>
                 <form onSubmit={handleAddManualQuestion} className="space-y-4">
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Nội dung câu hỏi 3T</label>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1"><span translate="no" className="notranslate">Nội dung câu hỏi 3T</span></label>
                     <input 
                       type="text" 
                       value={manualText}
@@ -688,7 +734,7 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {manualOptions.map((opt, oIdx) => (
                       <div key={oIdx}>
-                        <label className="block text-xs font-semibold text-gray-500 mb-1">Lựa chọn {String.fromCharCode(65 + oIdx)}</label>
+                        <label className="block text-xs font-semibold text-gray-500 mb-1"><span translate="no" className="notranslate">Lựa chọn {String.fromCharCode(65 + oIdx)}</span></label>
                         <input 
                           type="text" 
                           value={opt}
@@ -707,21 +753,21 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-semibold text-gray-500 mb-1">Đáp án đúng chính xác</label>
+                      <label className="block text-xs font-semibold text-gray-500 mb-1"><span translate="no" className="notranslate">Đáp án đúng chính xác</span></label>
                       <select
                         value={manualCorrect}
                         onChange={(e) => setManualCorrect(Number(e.target.value))}
                         className="w-full text-xs rounded-md border border-gray-250 py-2 px-3 bg-white outline-none focus:border-blue-500"
                       >
-                        <option value={0}>Lựa chọn A</option>
-                        <option value={1}>Lựa chọn B</option>
-                        <option value={2}>Lựa chọn C</option>
-                        <option value={3}>Lựa chọn D</option>
+                        <option value={0} translate="no" className="notranslate">Lựa chọn A</option>
+                        <option value={1} translate="no" className="notranslate">Lựa chọn B</option>
+                        <option value={2} translate="no" className="notranslate">Lựa chọn C</option>
+                        <option value={3} translate="no" className="notranslate">Lựa chọn D</option>
                       </select>
                     </div>
 
                     <div>
-                      <label className="block text-xs font-semibold text-gray-500 mb-1">Lời giải của sếp / cảnh báo ghi nhớ</label>
+                      <label className="block text-xs font-semibold text-gray-500 mb-1"><span translate="no" className="notranslate">Lời giải của sếp / cảnh báo ghi nhớ</span></label>
                       <input 
                         type="text" 
                         value={manualExp}
@@ -738,7 +784,7 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
                     className="flex items-center gap-1.5 bg-[#1971C2] hover:bg-opacity-95 text-white font-bold text-xs py-2 px-4 rounded-md shadow-sm"
                   >
                     <Plus className="h-4 w-4" />
-                    Thêm câu hỏi mới
+                    <span translate="no" className="notranslate">Thêm câu hỏi mới</span>
                   </button>
                 </form>
               </div>
@@ -746,7 +792,7 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
               {/* Active list table */}
               <div className="bg-white border border-gray-150 rounded-md shadow-sm overflow-hidden">
                 <div className="p-4 border-b border-gray-105 bg-gray-50">
-                  <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest">Ngân hàng đề hiện có ({questions.length} câu)</h3>
+                  <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest"><span translate="no" className="notranslate">Ngân hàng đề hiện có ({questions.length} câu)</span></h3>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm text-left border-collapse">
@@ -774,7 +820,7 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
                               ))}
                             </div>
                             <div className="bg-blue-50/30 p-2.5 rounded-md text-blue-700 text-[11px] leading-relaxed">
-                              <strong>Dặn dò:</strong> {q.explanation}
+                              <span translate="no" className="notranslate"><strong>Dặn dò:</strong> {q.explanation}</span>
                             </div>
                           </td>
                         </tr>
@@ -801,8 +847,8 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
                   <ImagePlus className="h-6 w-6 text-[#1971C2]" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-sm text-gray-800">Tải lên loạt hình ảnh chụp đề thi 3T</h3>
-                  <p className="text-xs text-gray-500 mt-1">Cơ chế nén tự động tối ưu hóa dung lượng & API Quota sẽ chạy tại chỗ trước khi phân tích qua Gemini AI.</p>
+                  <h3 className="font-bold text-sm text-gray-800"><span translate="no" className="notranslate">Tải lên loạt hình ảnh chụp đề thi 3T</span></h3>
+                  <p className="text-xs text-gray-500 mt-1"><span translate="no" className="notranslate">Cơ chế nén tự động tối ưu hóa dung lượng & API Quota sẽ chạy tại chỗ trước khi phân tích qua Gemini AI.</span></p>
                 </div>
                 
                 <div className="relative inline-block">
@@ -815,13 +861,13 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
                     disabled={extracting || loading}
                   />
                   <button className="bg-[#1971C2] text-white font-bold text-xs py-2 px-5 rounded-md shadow-sm">
-                    {loading ? 'Đang nén ảnh...' : 'Chọn từ máy tính / chụp ảnh'}
+                    <span translate="no" className="notranslate">{loading ? 'Đang nén ảnh...' : 'Chọn từ máy tính / chụp ảnh'}</span>
                   </button>
                 </div>
 
                 {selectedImages.length > 0 && (
                   <div className="pt-4 max-w-sm mx-auto">
-                    <div className="text-xs text-gray-450 uppercase mb-2">Hình ảnh đã chọn rèn luyện ({selectedImages.length})</div>
+                    <div className="text-xs text-gray-450 uppercase mb-2"><span translate="no" className="notranslate">Hình ảnh đã chọn rèn luyện ({selectedImages.length})</span></div>
                     <div className="flex gap-2 justify-center flex-wrap">
                       {selectedImages.map((img, iIdx) => (
                         <div key={iIdx} className="relative h-14 w-14 rounded-md overflow-hidden bg-gray-100 border border-gray-250">
@@ -847,7 +893,7 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
                         disabled={extracting || selectedImages.length === 0}
                         className="w-full bg-[#1971C2] hover:bg-opacity-95 text-white font-bold text-xs py-2 px-4 rounded-md shadow-sm"
                       >
-                        {extracting ? 'Trí tuệ Nhân tạo Gemini đang bóc tách...' : 'Phân Tích Bóc Tách Đề Bằng AI'}
+                        <span translate="no" className="notranslate">{extracting ? 'Trí tuệ Nhân tạo Gemini đang bóc tách...' : 'Phân Tích Bóc Tách Đề Bằng AI'}</span>
                       </button>
                     </div>
                   </div>
@@ -859,14 +905,14 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
                 <div className="bg-white border border-gray-150 rounded-md shadow-sm overflow-hidden space-y-4 p-4">
                   <div className="border-b border-gray-100 pb-3 flex justify-between items-center">
                     <div>
-                      <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest">Nội dung câu hỏi AI bóc tách</h3>
-                      <p className="text-xs text-red-500 mt-0.5 italic">Hệ thống đã tự động rà quét kiểm tra trùng lặp câu hỏi.</p>
+                      <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest"><span translate="no" className="notranslate">Nội dung câu hỏi AI bóc tách</span></h3>
+                      <p className="text-xs text-red-500 mt-0.5 italic"><span translate="no" className="notranslate">Hệ thống đã tự động rà quét kiểm tra trùng lặp câu hỏi.</span></p>
                     </div>
                     <button
                       onClick={handleSaveExtractedQuestions}
                       className="bg-green-600 hover:bg-green-700 text-white font-bold text-xs py-2 px-4 rounded-md"
                     >
-                      Lưu đề không trùng lặp
+                      <span translate="no" className="notranslate">Lưu đề không trùng lặp</span>
                     </button>
                   </div>
 
@@ -879,13 +925,13 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
                         }`}
                       >
                         <div className="flex justify-between items-start gap-4">
-                          <span className="text-[10px] bg-white border border-gray-200 px-2 py-0.5 rounded font-bold">CÂU TRÍ TUỆ {qIdx + 1}</span>
+                          <span translate="no" className="notranslate text-[10px] bg-white border border-gray-200 px-2 py-0.5 rounded font-bold">CÂU TRÍ TUỆ {qIdx + 1}</span>
                           {eq.isDuplicate ? (
-                            <span className="flex items-center gap-1 font-bold text-orange-700 text-xs px-2 py-0.5 bg-orange-100 border border-orange-200 rounded-full">
+                            <span translate="no" className="notranslate flex items-center gap-1 font-bold text-orange-700 text-xs px-2 py-0.5 bg-orange-100 border border-orange-200 rounded-full">
                               <AlertTriangle className="h-3 w-3" /> TRÙNG LẶP SỐ LIỆU ĐỀ CŨ
                             </span>
                           ) : (
-                            <span className="text-green-700 text-xs font-bold px-2 py-0.5 bg-green-50 border border-green-200 rounded-full">HỢP LỆ</span>
+                            <span translate="no" className="notranslate text-green-700 text-xs font-bold px-2 py-0.5 bg-green-50 border border-green-200 rounded-full">HỢP LỆ</span>
                           )}
                         </div>
 
@@ -929,9 +975,9 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
               className="max-w-md mx-auto bg-white border border-gray-150 rounded-md p-8 text-center space-y-6 shadow-sm"
             >
               <div className="space-y-2">
-                <h3 className="text-lg font-bold text-gray-900">Mã QR Truy Cập Nhanh "Chiến Ngay"</h3>
+                <h3 className="text-lg font-bold text-gray-900"><span translate="no" className="notranslate">Mã QR Truy Cập Nhanh "Chiến Ngay"</span></h3>
                 <p className="text-xs text-gray-500 leading-relaxed">
-                  Lưu trữ hoặc in mã QR này treo ở bảng tin, phòng sản xuất hoặc cửa phòng làm việc để rèn luyện tinh thần 3T hàng ngày.
+                  <span translate="no" className="notranslate">Lưu trữ hoặc in mã QR này treo ở bảng tin, phòng sản xuất hoặc cửa phòng làm việc để rèn luyện tinh thần 3T hàng ngày.</span>
                 </p>
               </div>
 
@@ -954,7 +1000,7 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
                 className="w-full flex items-center justify-center gap-2 bg-[#1971C2] hover:bg-opacity-95 text-white font-bold text-xs py-2 px-4 rounded-md shadow-sm"
               >
                 <FileDown className="h-4 w-4" />
-                In / Xuất Bản Mã QR Bảng Tin
+                <span translate="no" className="notranslate">In / Xuất Bản Mã QR Bảng Tin</span>
               </button>
             </motion.div>
           )}
@@ -970,11 +1016,11 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
               <div className="p-2 bg-red-50 rounded-full">
                 <AlertTriangle className="h-6 w-6 text-red-600" />
               </div>
-              <h3 className="text-base font-bold text-gray-900">Xác nhận xóa thành viên</h3>
+              <h3 className="text-base font-bold text-gray-900"><span translate="no" className="notranslate">Xác nhận xóa thành viên</span></h3>
             </div>
             
             <p className="text-xs text-gray-650 leading-relaxed font-sans font-normal">
-              Bạn có chắc chắn muốn xóa tài khoản của thành viên <strong>{userToDelete.name}</strong> (SĐT: {userToDelete.phone}) ra khỏi danh sách quản lý? Hành động này không thể hoàn tác!
+              <span translate="no" className="notranslate">Bạn có chắc chắn muốn xóa tài khoản của thành viên <strong>{userToDelete.name}</strong> (SĐT: {userToDelete.phone}) ra khỏi danh sách quản lý? Hành động này không thể hoàn tác!</span>
             </p>
 
             <div className="flex justify-end gap-2.5 pt-2 font-sans">
@@ -983,14 +1029,14 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
                 onClick={() => setUserToDelete(null)}
                 className="px-3 py-1.5 bg-gray-50 hover:bg-gray-150 border border-gray-250 rounded-md text-xs font-bold text-gray-650 transition-colors"
               >
-                Hủy bỏ
+                <span translate="no" className="notranslate">Hủy bỏ</span>
               </button>
               <button
                 type="button"
                 onClick={() => handleDeleteUser(userToDelete.id)}
                 className="px-3 py-1.5 bg-red-650 hover:bg-red-700 text-white rounded-md text-xs font-bold transition-all shadow-xs"
               >
-                Xác nhận Xóa
+                <span translate="no" className="notranslate">Xác nhận Xóa</span>
               </button>
             </div>
           </div>
@@ -1004,7 +1050,7 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
             <div className="flex justify-between items-center border-b border-gray-100 pb-3 font-sans">
               <h3 className="text-base font-bold text-gray-950 flex items-center gap-2">
                 <UserCheck className="h-5 w-5 text-[#1971C2]" />
-                Sửa Thông Tin CBNV
+                <span translate="no" className="notranslate">Sửa Thông Tin CBNV</span>
               </h3>
               <button
                 onClick={() => setEditingUser(null)}
@@ -1016,7 +1062,7 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
 
             <form onSubmit={handleSaveEdit} className="space-y-4 text-xs font-sans">
               <div className="space-y-1.5">
-                <label className="block text-gray-700 font-bold">Họ và Tên</label>
+                <label className="block text-gray-700 font-bold"><span translate="no" className="notranslate">Họ và Tên</span></label>
                 <input
                   type="text"
                   value={editName}
@@ -1028,7 +1074,7 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <label className="block text-gray-700 font-bold">Số Điện Thoại</label>
+                  <label className="block text-gray-700 font-bold"><span translate="no" className="notranslate">Số Điện Thoại</span></label>
                   <input
                     type="text"
                     value={editPhone}
@@ -1039,7 +1085,7 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="block text-gray-700 font-bold">Mã Nhân Sự</label>
+                  <label className="block text-gray-700 font-bold"><span translate="no" className="notranslate">Mã Nhân Sự</span></label>
                   <input
                     type="text"
                     placeholder="Ví dụ: 2018.00281"
@@ -1051,7 +1097,7 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
               </div>
 
               <div className="space-y-1.5">
-                <label className="block text-gray-700 font-bold">Mật khẩu đăng nhập (Mới hoặc cũ)</label>
+                <label className="block text-gray-700 font-bold"><span translate="no" className="notranslate">Mật khẩu đăng nhập (Mới hoặc cũ)</span></label>
                 <input
                   type="text"
                   value={editPassword}
@@ -1062,55 +1108,55 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
               </div>
 
               <div className="space-y-1.5">
-                <label className="block text-gray-750 font-bold">Thuộc Chi nhánh</label>
+                <label className="block text-gray-750 font-bold"><span translate="no" className="notranslate">Thuộc Chi nhánh</span></label>
                 <select
                   value={editBranch}
                   onChange={(e) => setEditBranch(e.target.value)}
                   className="w-full border border-gray-200 rounded px-3 py-2 text-xs outline-none focus:border-[#1971C2] bg-white text-gray-800"
                 >
                   {BRANCHES.map(b => (
-                    <option key={b} value={b}>{b}</option>
+                    <option key={b} value={b} translate="no" className="notranslate">{b}</option>
                   ))}
                 </select>
               </div>
 
               <div className="space-y-1.5">
-                <label className="block text-gray-750 font-bold">Thuộc Bộ Phận</label>
+                <label className="block text-gray-750 font-bold"><span translate="no" className="notranslate">Thuộc Bộ Phận</span></label>
                 <select
                   value={editDepartment}
                   onChange={(e) => setEditDepartment(e.target.value)}
                   className="w-full border border-gray-200 rounded px-3 py-2 text-xs outline-none focus:border-[#1971C2] bg-white text-gray-800"
                 >
                   {DEPARTMENTS.map(d => (
-                    <option key={d} value={d}>{d}</option>
+                    <option key={d} value={d} translate="no" className="notranslate">{d}</option>
                   ))}
                 </select>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <label className="block text-gray-750 font-bold">Vai trò hệ thống</label>
+                  <label className="block text-gray-750 font-bold"><span translate="no" className="notranslate">Vai trò hệ thống</span></label>
                   <select
                     value={editRole}
                     onChange={(e) => setEditRole(e.target.value as any)}
                     className="w-full border border-gray-200 rounded px-3 py-2 text-xs outline-none focus:border-[#1971C2] bg-white text-gray-800"
                   >
-                    <option value="employee">CBNV</option>
-                    <option value="approver">Trưởng bộ phận</option>
-                    <option value="admin">Quản trị tối cao</option>
+                    <option value="employee" translate="no" className="notranslate">CBNV</option>
+                    <option value="approver" translate="no" className="notranslate">Trưởng bộ phận</option>
+                    <option value="admin" translate="no" className="notranslate">Quản trị tối cao</option>
                   </select>
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="block text-gray-750 font-bold">Trạng thái tài khoản</label>
+                  <label className="block text-gray-750 font-bold"><span translate="no" className="notranslate">Trạng thái tài khoản</span></label>
                   <select
                     value={editStatus}
                     onChange={(e) => setEditStatus(e.target.value as any)}
                     className="w-full border border-gray-200 rounded px-3 py-2 text-xs outline-none focus:border-[#1971C2] bg-white text-gray-800"
                   >
-                    <option value="approved">Đã hoạt động</option>
-                    <option value="pending">Chờ kích hoạt</option>
-                    <option value="rejected">Tạm khóa / Từ chối</option>
+                    <option value="approved" translate="no" className="notranslate">Đã hoạt động</option>
+                    <option value="pending" translate="no" className="notranslate">Chờ kích hoạt</option>
+                    <option value="rejected" translate="no" className="notranslate">Tạm khóa / Từ chối</option>
                   </select>
                 </div>
               </div>
@@ -1121,13 +1167,13 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
                   onClick={() => setEditingUser(null)}
                   className="px-4 py-2 bg-gray-50 hover:bg-gray-150 border border-gray-250 rounded-md font-bold text-gray-650 transition-colors"
                 >
-                  Bỏ qua
+                  <span translate="no" className="notranslate">Bỏ qua</span>
                 </button>
                 <button
                   type="submit"
                   className="px-4 py-2 bg-[#1971C2] hover:bg-[#155d9e] text-white rounded-md font-bold transition-all shadow-xs"
                 >
-                  Lưu thay đổi
+                  <span translate="no" className="notranslate">Lưu thay đổi</span>
                 </button>
               </div>
             </form>

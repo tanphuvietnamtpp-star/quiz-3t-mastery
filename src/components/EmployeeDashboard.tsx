@@ -231,14 +231,14 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
       {isAdminReview && (
         <div className="bg-amber-500 text-white px-6 py-2.5 flex flex-col sm:flex-row justify-between items-center text-xs md:text-sm font-bold shadow-md z-50 gap-2">
           <div className="flex items-center gap-2">
-            <span className="bg-amber-700 px-2.5 py-1 rounded text-[10px] text-white tracking-widest shrink-0 uppercase">Chế độ xem thử</span>
-            <span>Anh/Chị đang trải nghiệm giao diện CBNV để trực tiếp kiểm duyệt Thi thử, Học từ sai và Phân tích 3T!</span>
+            <span translate="no" className="notranslate bg-amber-700 px-2.5 py-1 rounded text-[10px] text-white tracking-widest shrink-0 uppercase">Chế độ xem thử</span>
+            <span translate="no" className="notranslate">Anh/Chị đang trải nghiệm giao diện CBNV để trực tiếp kiểm duyệt Thi thử, Học từ sai và Phân tích 3T!</span>
           </div>
           <button 
             onClick={onBackToAdmin}
             className="bg-white text-gray-900 hover:bg-gray-100 transition-all font-bold px-4 py-1.5 rounded-lg shadow-sm font-sans shrink-0"
           >
-            Quay lại trang Quản trị
+            <span translate="no" className="notranslate">Quay lại trang Quản trị</span>
           </button>
         </div>
       )}
@@ -428,7 +428,7 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                   }`}
                 >
                   <Users className="h-4 w-4 text-blue-500" />
-                  Tiến độ cá nhân
+                  <span translate="no" className="notranslate">Tiến độ cá nhân</span>
                 </button>
                 <button
                   onClick={() => setAnalysisScope('collective')}
@@ -439,7 +439,7 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                   }`}
                 >
                   <Building2 className="h-4 w-4 text-[#1971C2]" />
-                  Bộ phận & Chi nhánh
+                  <span translate="no" className="notranslate">Bộ phận & Chi nhánh</span>
                 </button>
               </div>
 
@@ -511,10 +511,10 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                       <table className="w-full text-left text-xs md:text-sm border-collapse">
                         <thead>
                           <tr className="bg-gray-50/50 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-100">
-                            <th className="py-3 px-5 font-bold">Ngày thi</th>
-                            <th className="py-3 px-5 font-bold">Điểm đạt được</th>
-                            <th className="py-3 px-5 font-bold">Thời gian làm bài</th>
-                            <th className="py-3 px-5 font-bold text-right">Đánh giá</th>
+                            <th className="py-3 px-5 font-bold"><span translate="no" className="notranslate">Ngày thi</span></th>
+                            <th className="py-3 px-5 font-bold"><span translate="no" className="notranslate">Điểm đạt được</span></th>
+                            <th className="py-3 px-5 font-bold"><span translate="no" className="notranslate">Thời gian làm bài</span></th>
+                            <th className="py-3 px-5 font-bold text-right"><span translate="no" className="notranslate">Đánh giá</span></th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
@@ -540,9 +540,9 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                                 </td>
                                 <td className="py-3.5 px-5 text-right text-xs">
                                   {res.score === 30 ? (
-                                    <span className="text-green-600 font-extrabold uppercase tracking-wide">Xuất sắc (Đạt 100%)</span>
+                                    <span translate="no" className="notranslate text-green-600 font-extrabold uppercase tracking-wide">Xuất sắc (Đạt 100%)</span>
                                   ) : (
-                                    <span className="text-amber-600 font-extrabold uppercase tracking-wide">Chưa tối đa</span>
+                                    <span translate="no" className="notranslate text-amber-600 font-extrabold uppercase tracking-wide">Chưa tối đa</span>
                                   )}
                                 </td>
                               </tr>
@@ -560,10 +560,10 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                   <div className="bg-blue-50 border border-blue-150 p-5 rounded-xl shadow-xs text-left">
                     <h3 className="text-sm font-bold text-blue-900 flex items-center gap-2">
                       <Building2 className="h-5 w-5 text-[#1971C2]" />
-                      <span>Không gian thi đua: {user.department}</span>
+                      <span translate="no" className="notranslate">Không gian thi đua: {user.department}</span>
                     </h3>
                     <p className="text-xs text-blue-700 mt-1 leading-relaxed">
-                      Phân tích quá trình học tập rèn luyện 3T của toàn thể nhân sự thuộc phòng <strong>{user.department}</strong> tại <strong>{user.branch}</strong>. Lãnh đạo và tập thể cùng chung tay hoàn thành xuất sắc mục tiêu 100%!
+                      <span translate="no" className="notranslate">Phân tích quá trình học tập rèn luyện 3T của toàn thể nhân sự thuộc phòng <strong>{user.department}</strong> tại <strong>{user.branch}</strong>. Lãnh đạo và tập thể cùng chung tay hoàn thành xuất sắc mục tiêu 100%!</span>
                     </p>
                   </div>
 
@@ -571,26 +571,26 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div className="bg-white border border-gray-150 p-5 rounded-xl text-center shadow-xs">
                       <div className="text-xs text-gray-455 font-semibold uppercase tracking-wider">
-                        <span>Lập thành tích (Lượt thi bộ phận)</span>
+                        <span translate="no" className="notranslate">Lập thành tích (Lượt thi bộ phận)</span>
                       </div>
                       <div className="text-3xl font-extrabold text-gray-950 mt-1.5 font-sans">
-                        {deptTotalQuizzes} lượt
+                        <span translate="no" className="notranslate">{deptTotalQuizzes} lượt</span>
                       </div>
                     </div>
                     <div className="bg-white border border-gray-150 p-5 rounded-xl text-center shadow-xs">
                       <div className="text-xs text-gray-455 font-semibold uppercase tracking-wider">
-                        <span>Điểm trung bình bộ phận</span>
+                        <span translate="no" className="notranslate">Điểm trung bình bộ phận</span>
                       </div>
                       <div className="text-3xl font-extrabold text-[#1971C2] mt-1.5 font-sans">
-                        {deptAverageScore} / 30
+                        <span translate="no" className="notranslate">{deptAverageScore} / 30</span>
                       </div>
                     </div>
                     <div className="bg-white border border-gray-150 p-5 rounded-xl text-center shadow-xs">
                       <div className="text-xs text-gray-455 font-semibold uppercase tracking-wider">
-                        <span>Tỷ lệ hoàn thành xuất sắc</span>
+                        <span translate="no" className="notranslate">Tỷ lệ hoàn thành xuất sắc</span>
                       </div>
                       <div className="text-3xl font-extrabold text-green-600 mt-1.5 font-sans">
-                        {deptPassingRate}%
+                        <span translate="no" className="notranslate">{deptPassingRate}%</span>
                       </div>
                     </div>
                   </div>
@@ -600,46 +600,46 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                     <div className="border-b border-gray-100 pb-3">
                       <h4 className="text-sm font-bold text-gray-900 uppercase tracking-wider flex items-center gap-2">
                         <Trophy className="h-5 w-5 text-yellow-500 animate-pulse" />
-                        <span>Mức Độ Hoàn Thành 3 Giá Trị Cốt Lõi (3T)</span>
+                        <span translate="no" className="notranslate">Mức Độ Hoàn Thành 3 Giá Trị Cốt Lõi (3T)</span>
                       </h4>
-                      <p className="text-xs text-gray-450 mt-1">Sức mạnh tập thể phản ánh qua tỉ lệ trả lời đúng cấu trúc câu hỏi 3T tại bộ phận của bạn.</p>
+                      <p className="text-xs text-gray-450 mt-1"><span translate="no" className="notranslate">Sức mạnh tập thể phản ánh qua tỉ lệ trả lời đúng cấu trúc câu hỏi 3T tại bộ phận của bạn.</span></p>
                     </div>
 
                     <div className="space-y-5">
                       {/* T1 */}
                       <div className="space-y-2">
                         <div className="flex justify-between text-xs md:text-sm font-bold">
-                          <span className="text-[#1971C2]">T1 - TRỌNG TÂM KHÁCH HÀNG</span>
-                          <span className="text-[#1971C2]">{deptT1Percent}%</span>
+                          <span translate="no" className="notranslate text-[#1971C2]">T1 - TRỌNG TÂM KHÁCH HÀNG</span>
+                          <span translate="no" className="notranslate text-[#1971C2]">{deptT1Percent}%</span>
                         </div>
                         <div className="w-full h-3.5 bg-gray-100 rounded-full overflow-hidden">
                           <div style={{ width: `${deptT1Percent}%` }} className="bg-[#1971C2] h-full rounded-full transition-all duration-1000" />
                         </div>
-                        <p className="text-[11px] text-gray-500 italic">Thấu hiểu nhu cầu của khách hàng nội bộ và khách hàng bên ngoài để phục vụ xuất sắc.</p>
+                        <p className="text-[11px] text-gray-500 italic"><span translate="no" className="notranslate">Thấu hiểu nhu cầu của khách hàng nội bộ và khách hàng bên ngoài để phục vụ xuất sắc.</span></p>
                       </div>
 
                       {/* T2 */}
                       <div className="space-y-2">
                         <div className="flex justify-between text-xs md:text-sm font-bold">
-                          <span className="text-emerald-600">T2 - TINH GỌN (KAIZEN)</span>
-                          <span className="text-emerald-600">{deptT2Percent}%</span>
+                          <span translate="no" className="notranslate text-emerald-600">T2 - TINH GỌN (KAIZEN)</span>
+                          <span translate="no" className="notranslate text-emerald-600">{deptT2Percent}%</span>
                         </div>
                         <div className="w-full h-3.5 bg-gray-100 rounded-full overflow-hidden">
                           <div style={{ width: `${deptT2Percent}%` }} className="bg-emerald-500 h-full rounded-full transition-all duration-1000" />
                         </div>
-                        <p className="text-[11px] text-gray-500 italic">Làm đúng ngay từ đầu, giảm thiểu lãng phí và không ngừng cải tiến năng suất.</p>
+                        <p className="text-[11px] text-gray-500 italic"><span translate="no" className="notranslate">Làm đúng ngay từ đầu, giảm thiểu lãng phí và không ngừng cải tiến năng suất.</span></p>
                       </div>
 
                       {/* T3 */}
                       <div className="space-y-2">
                         <div className="flex justify-between text-xs md:text-sm font-bold">
-                          <span className="text-orange-600">T3 - TỐC ĐỘ QUYẾT LIỆT</span>
-                          <span className="text-orange-600">{deptT3Percent}%</span>
+                          <span translate="no" className="notranslate text-orange-600">T3 - TỐC ĐỘ QUYẾT LIỆT</span>
+                          <span translate="no" className="notranslate text-orange-600">{deptT3Percent}%</span>
                         </div>
                         <div className="w-full h-3.5 bg-gray-100 rounded-full overflow-hidden">
                           <div style={{ width: `${deptT3Percent}%` }} className="bg-orange-500 h-full rounded-full transition-all duration-1000" />
                         </div>
-                        <p className="text-[11px] text-gray-500 italic">Quyết liệt trong tư duy hành động, nhanh chóng giải quyết triệt để vấn đề.</p>
+                        <p className="text-[11px] text-gray-500 italic"><span translate="no" className="notranslate">Quyết liệt trong tư duy hành động, nhanh chóng giải quyết triệt để vấn đề.</span></p>
                       </div>
                     </div>
                   </div>
@@ -649,20 +649,20 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                     <div className="px-5 py-4 bg-gray-50 border-b border-gray-150">
                       <h4 className="text-sm font-bold text-gray-900 uppercase tracking-wider flex items-center gap-2">
                         <Users className="h-5 w-5 text-indigo-500" />
-                        <span>Bảng Xếp Hạng Thi Đua Học Tập Các Bộ Phận</span>
+                        <span translate="no" className="notranslate">Bảng Xếp Hạng Thi Đua Học Tập Các Bộ Phận</span>
                       </h4>
-                      <p className="text-xs text-gray-450 mt-1">Đánh giá thứ hạng dựa trên tổng điểm thi đua tích lũy và số lượt CBNV tham gia.</p>
+                      <p className="text-xs text-gray-450 mt-1"><span translate="no" className="notranslate">Đánh giá thứ hạng dựa trên tổng điểm thi đua tích lũy và số lượt CBNV tham gia.</span></p>
                     </div>
 
                     <div className="overflow-x-auto">
                       <table className="w-full text-left text-xs md:text-sm border-collapse">
                         <thead>
                           <tr className="bg-gray-50/50 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-100">
-                            <th className="py-3 px-5 font-bold text-center w-16">Hạng</th>
-                            <th className="py-3 px-5 font-bold">Bộ phận</th>
-                            <th className="py-3 px-5 font-bold text-center"> CBNV tham gia (Lượt)</th>
-                            <th className="py-3 px-5 font-bold text-center">Điểm trung bình</th>
-                            <th className="py-3 px-5 font-bold text-center">Chọn xuất sắc (30đ)</th>
+                            <th className="py-3 px-5 font-bold text-center w-16"><span translate="no" className="notranslate">Hạng</span></th>
+                            <th className="py-3 px-5 font-bold"><span translate="no" className="notranslate">Bộ phận</span></th>
+                            <th className="py-3 px-5 font-bold text-center"><span translate="no" className="notranslate"> CBNV tham gia (Lượt)</span></th>
+                            <th className="py-3 px-5 font-bold text-center"><span translate="no" className="notranslate">Điểm trung bình</span></th>
+                            <th className="py-3 px-5 font-bold text-center"><span translate="no" className="notranslate">Chọn xuất sắc (30đ)</span></th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
@@ -672,24 +672,24 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                               <tr key={item.name} className={`hover:bg-gray-50/50 transition-colors ${isMyDept ? 'bg-blue-50/40 text-[#1971C2] font-semibold' : ''}`}>
                                 <td className="py-4 px-5 text-center">
                                   {idx === 0 ? (
-                                    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-yellow-100 text-yellow-800 font-bold font-mono">1</span>
+                                    <span translate="no" className="notranslate inline-flex items-center justify-center w-6 h-6 rounded-full bg-yellow-100 text-yellow-800 font-bold font-mono">1</span>
                                   ) : idx === 1 ? (
-                                    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-gray-150 text-gray-800 font-bold font-mono">2</span>
+                                    <span translate="no" className="notranslate inline-flex items-center justify-center w-6 h-6 rounded-full bg-gray-150 text-gray-800 font-bold font-mono">2</span>
                                   ) : idx === 2 ? (
-                                    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-orange-100 text-orange-800 font-bold font-mono">3</span>
+                                    <span translate="no" className="notranslate inline-flex items-center justify-center w-6 h-6 rounded-full bg-orange-100 text-orange-800 font-bold font-mono">3</span>
                                   ) : (
-                                    <span className="text-gray-500 font-mono">{idx + 1}</span>
+                                    <span translate="no" className="notranslate text-gray-500 font-mono">{idx + 1}</span>
                                   )}
                                 </td>
                                 <td className="py-4 px-5 font-sans leading-tight">
-                                  <span>{item.name}</span>
+                                  <span translate="no" className="notranslate">{item.name}</span>
                                   {isMyDept && (
-                                    <span className="ml-2 text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-md font-bold uppercase shrink-0">Bộ phận của bạn</span>
+                                    <span translate="no" className="notranslate ml-2 text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-md font-bold uppercase shrink-0">Bộ phận của bạn</span>
                                   )}
                                 </td>
-                                <td className="py-4 px-5 text-center font-mono font-semibold">{item.count} lượt</td>
-                                <td className="py-4 px-5 text-center font-mono text-[#1971C2] font-bold">{item.avg} / 30</td>
-                                <td className="py-4 px-5 text-center font-mono font-semibold text-green-600">{item.rate}%</td>
+                                <td className="py-4 px-5 text-center font-mono font-semibold"><span translate="no" className="notranslate">{item.count} lượt</span></td>
+                                <td className="py-4 px-5 text-center font-mono text-[#1971C2] font-bold"><span translate="no" className="notranslate">{item.avg} / 30</span></td>
+                                <td className="py-4 px-5 text-center font-mono font-semibold text-green-600"><span translate="no" className="notranslate">{item.rate}%</span></td>
                               </tr>
                             );
                           })}

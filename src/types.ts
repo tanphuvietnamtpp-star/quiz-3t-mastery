@@ -6,7 +6,7 @@ export interface User {
   role: 'employee' | 'approver' | 'admin';
   department: string;
   branch: string;
-  status: 'pending' | 'approved' | 'rejected';
+  status: 'pending' | 'approved' | 'rejected' | 'PENDING' | 'APPROVED' | 'REJECTED';
   createdAt: string;
   employeeId?: string;
 }

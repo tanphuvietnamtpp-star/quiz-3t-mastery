@@ -60,8 +60,8 @@ export default function ApproverDashboard({ user, onLogout, slogan = '3T Hội T
   };
 
   // Divide users into: pending and approved list
-  const pendingUsers = users.filter(u => u.status === 'pending');
-  const approvedUsers = users.filter(u => u.status === 'approved');
+  const pendingUsers = users.filter(u => u.status?.toLowerCase() === 'pending');
+  const approvedUsers = users.filter(u => u.status?.toLowerCase() === 'approved');
 
   // Filter approved users by search value
   const filteredApprovedList = approvedUsers.filter(u => 
@@ -229,10 +229,10 @@ export default function ApproverDashboard({ user, onLogout, slogan = '3T Hội T
             <table className="w-full text-left text-sm border-collapse">
               <thead>
                 <tr className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-150">
-                  <th className="py-3 px-4 font-bold">Họ và Tên Nhân Viên</th>
-                  <th className="py-3 px-4 font-bold">Số ca Thi thử</th>
-                  <th className="py-3 px-4 font-bold">Điểm số trung bình</th>
-                  <th className="py-3 px-4 font-bold text-right">Phân loại Đánh giá</th>
+                  <th className="py-3 px-4 font-bold"><span translate="no" className="notranslate">Họ và Tên Nhân Viên</span></th>
+                  <th className="py-3 px-4 font-bold"><span translate="no" className="notranslate">Số ca Thi thử</span></th>
+                  <th className="py-3 px-4 font-bold"><span translate="no" className="notranslate">Điểm số trung bình</span></th>
+                  <th className="py-3 px-4 font-bold text-right"><span translate="no" className="notranslate">Phân loại Đánh giá</span></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 text-xs">

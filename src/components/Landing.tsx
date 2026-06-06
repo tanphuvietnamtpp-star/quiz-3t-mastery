@@ -42,12 +42,13 @@ export default function Landing({ onLoginSuccess, slogan }: LandingProps) {
 
     try {
       const user = await databaseService.loginUser(phone, password, employeeId);
-      if (user.status === 'pending') {
+      const normalizedStatus = user.status?.toLowerCase();
+      if (normalizedStatus === 'pending') {
         setError('Tài khoản của bạn đang chờ được duyệt bởi Trưởng Bộ phận / Ban quản trị. Vui lòng liên hệ quản lý để được kích hoạt.');
         setLoading(false);
         return;
       }
-      if (user.status === 'rejected') {
+      if (normalizedStatus === 'rejected') {
         setError('Tài khoản của bạn đã bị từ chối truy cập. Vui lòng liên hệ admin Lê Nhật Trường.');
         setLoading(false);
         return;
