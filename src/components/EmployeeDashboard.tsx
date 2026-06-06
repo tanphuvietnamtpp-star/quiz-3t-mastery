@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { databaseService } from '../firebase';
 import { User, Question, QuizResult } from '../types';
 import { formatDate, formatTimeInSeconds } from '../utils/format';
-import { BookOpen, Trophy, Award, BarChart3, ChevronRight, CheckCircle2, XCircle, ArrowRight, RotateCcw, HelpCircle, GraduationCap, AlertCircle, Users, TrendingUp, Building2, LogOut } from 'lucide-react';
+import { BookOpen, Trophy, Award, BarChart3, ChevronRight, CheckCircle2, XCircle, ArrowRight, RotateCcw, HelpCircle, GraduationCap, AlertCircle, Users, TrendingUp, Building2, LogOut, Home } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts';
 
@@ -247,7 +247,7 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
       <main className="flex-1 flex items-center justify-center p-2 sm:p-6 bg-gradient-to-b from-gray-50 to-gray-100 max-h-screen overflow-hidden">
         
         {/* Smartphone Frame Outer Shell with 50% thinner borders, scaled corner radius for phone frame */}
-        <div className="w-full sm:max-w-[415px] h-[95vh] sm:h-[810px] max-h-[920px] bg-[#0F1C2E] sm:rounded-[32px] p-1 sm:p-1.5 pb-2 shadow-2xl relative sm:border-[6px] sm:border-slate-800 ring-4 ring-slate-900/5 transition-all text-gray-800 flex flex-col my-1 shrink-0">
+        <div className="w-full sm:max-w-[415px] h-[95vh] sm:h-[810px] max-h-[920px] bg-[#0F1C2E] sm:rounded-[32px] p-0.5 shadow-2xl relative sm:border-[3px] sm:border-slate-800 ring-2 ring-slate-900/5 transition-all text-gray-800 flex flex-col my-1 shrink-0">
           
           {/* Physical Phone Top Notch / Speaker Deco element simulating phone layout */}
           <div className="hidden sm:flex absolute -top-0.5 left-1/2 -translate-x-1/2 w-24 h-3.5 bg-slate-800 rounded-b-md z-20 items-center justify-center">
@@ -672,22 +672,24 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
             >
               {!quizStarted ? (
                 // Landing Screen for Practice Exams
-                <div className="flex flex-col items-center justify-between text-center space-y-4 flex-1 h-full py-1 relative">
-                  {/* 3T Logo replacing Trophy Icon */}
-                  <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-[#0B3A60] border border-blue-900 shadow-md select-none shrink-0">
+                <div className="flex flex-col items-center justify-between text-center flex-1 h-full pt-1 pb-0.5 sm:pt-1.5 sm:pb-1 relative">
+                  {/* Centered Top & Mid content wrapper to keep them tight together */}
+                  <div className="flex flex-col items-center justify-center text-center space-y-4.5 sm:space-y-5 flex-1 w-full shrink-0">
+                    {/* 3T Logo replacing Trophy Icon */}
+                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-[#0B3A60] border border-blue-900 shadow-md select-none shrink-0">
                     <span translate="no" className="notranslate text-white text-2xl font-black tracking-tight font-sans">3T</span>
                   </div>
 
                   {/* VĂN HÓA 3T styled logo block */}
-                  <div className="space-y-0.5 w-full text-center shrink-0 animate-fade-in">
-                    <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight font-sans">
+                  <div className="space-y-1 w-full text-center shrink-0 animate-fade-in">
+                    <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight font-sans">
                       <span className="text-[#0B3A60] translate-no notranslate">VĂN HÓA </span>
                       <span className="text-[#E8590C] translate-no notranslate">3T</span>
                     </h1>
-                    <h3 className="text-[9px] sm:text-[10px] font-semibold tracking-[0.1em] text-gray-400 font-sans uppercase mt-0.5">
+                    <h3 className="text-[10px] sm:text-xs font-bold tracking-[0.1em] text-gray-400 font-sans uppercase">
                       <span translate="no" className="notranslate">{slogan}</span>
                     </h3>
-                    <p className="text-[11px] text-gray-500 max-w-xs mx-auto mt-1 leading-normal">
+                    <p className="text-xs sm:text-sm text-gray-500 max-w-xs mx-auto mt-1 leading-normal">
                       <span translate="no" className="notranslate">
                         Ứng Dụng Ôn Tập Quiz 3T Hàng Ngày
                       </span>
@@ -695,27 +697,27 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                   </div>
 
                   {/* Condensed responsive grid */}
-                  <div className="bg-gray-50 border border-gray-150 p-2 rounded-xl w-full max-w-sm grid grid-cols-2 gap-2 text-left text-[10px] sm:text-xs shrink-0">
+                  <div className="bg-gray-50 border border-gray-150 p-3 sm:p-3.5 rounded-xl w-full max-w-sm grid grid-cols-2 gap-3 text-left text-xs sm:text-sm shrink-0 shadow-2xs">
                     <div className="space-y-0.5">
-                      <div className="text-[9px] text-gray-450 uppercase tracking-wider">Số câu hỏi</div>
+                      <div className="text-[10px] sm:text-xs text-gray-450 uppercase tracking-wider font-semibold">Số câu hỏi</div>
                       <div className="font-bold text-gray-800">
                         <span translate="no" className="notranslate">03 câu (Ngẫu nhiên)</span>
                       </div>
                     </div>
                     <div className="space-y-0.5">
-                      <div className="text-[9px] text-gray-455 uppercase tracking-wider">Thời gian tính</div>
+                      <div className="text-[10px] sm:text-xs text-gray-455 uppercase tracking-wider font-semibold">Thời gian tính</div>
                       <div className="font-bold text-gray-800">
                         <span translate="no" className="notranslate font-sans">Tự do rèn luyện</span>
                       </div>
                     </div>
                     <div className="space-y-0.5">
-                      <div className="text-[9px] text-gray-455 uppercase tracking-wider">Tổng điểm tối đa</div>
+                      <div className="text-[10px] sm:text-xs text-gray-455 uppercase tracking-wider font-semibold">Tổng điểm tối đa</div>
                       <div className="font-bold text-gray-800">
                         <span translate="no" className="notranslate">30 Điểm (10đ / câu)</span>
                       </div>
                     </div>
                     <div className="space-y-0.5">
-                      <div className="text-[9px] text-gray-455 uppercase tracking-wider">Trạng thái</div>
+                      <div className="text-[10px] sm:text-xs text-gray-455 uppercase tracking-wider font-semibold">Trạng thái</div>
                       <div className="font-bold text-green-600">
                         <span translate="no" className="notranslate">Đã duyệt học viên</span>
                       </div>
@@ -723,11 +725,11 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                   </div>
 
                   {/* High Quality Exam Tips section */}
-                  <div className="w-full max-w-sm bg-blue-50/30 border border-blue-50 p-2 rounded-xl text-left text-[10px] sm:text-[11px] font-sans text-gray-650 space-y-0.5 shrink-0">
-                    <div className="font-semibold text-[#1971C2] flex items-center gap-1">
+                  <div className="w-full max-w-sm bg-blue-50/40 border border-blue-100 p-3 rounded-xl text-left text-xs sm:text-sm font-sans text-gray-650 space-y-1 shrink-0 shadow-3xs">
+                    <div className="font-bold text-[#1971C2] flex items-center gap-1">
                       <span translate="no" className="notranslate">💡 Mẹo làm bài hiệu quả:</span>
                     </div>
-                    <ul className="list-disc pl-4 space-y-0.5 leading-snug">
+                    <ul className="list-disc pl-4 space-y-0.5 leading-snug font-medium text-[11px] sm:text-xs">
                       <li>
                         <span translate="no" className="notranslate">Đọc kỹ giải thích chi tiết đáp án để khắc cốt ghi tâm.</span>
                       </li>
@@ -738,43 +740,44 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                   </div>
 
                   {/* Welcome Greeting Box for Employee */}
-                  <div className="w-full max-w-sm bg-blue-50/50 border border-blue-100 p-2 rounded-xl text-center shrink-0">
-                    <p className="text-[9px] text-[#1971C2] font-bold uppercase tracking-wider leading-none">Thành Viên Dự Thi</p>
-                    <h4 className="text-xs sm:text-sm font-extrabold text-[#0B3A60] mt-1 leading-snug">
+                  <div className="w-full max-w-sm bg-blue-50/50 border border-blue-100 p-3 rounded-xl text-center shrink-0 shadow-3xs">
+                    <p className="text-[10px] sm:text-xs text-[#1971C2] font-semibold uppercase tracking-wider leading-none">Thành Viên Dự Thi</p>
+                    <h4 className="text-xs sm:text-sm font-extrabold text-[#0B3A60] mt-1.5 leading-snug">
                       Chào mừng: <span className="text-[#E8590C]">{user.name}</span>
                     </h4>
-                    <p className="text-[9px] text-gray-450 mt-0.5">Bộ phận: {user.department}</p>
+                    <p className="text-[10px] sm:text-xs text-gray-450 mt-1">Bộ phận: {user.department}</p>
                   </div>
 
                   {/* Big Primary Start Button */}
                   <div className="w-full flex justify-center shrink-0">
                     <button
                       onClick={startQuiz}
-                      className="w-full max-w-sm flex items-center justify-center gap-2 py-2.5 px-4 bg-[#1971C2] hover:bg-opacity-95 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md transition-all active:scale-[0.98] cursor-pointer"
+                      className="w-full max-w-sm flex items-center justify-center gap-2 py-3 px-4 bg-[#1971C2] hover:bg-opacity-95 text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-md transition-all active:scale-[0.98] cursor-pointer"
                     >
                       <span translate="no" className="notranslate">Bắt Đầu Làm Bài Đánh Giá</span>
                       <ArrowRight className="h-4 w-4 shrink-0" />
                     </button>
                   </div>
+                  </div>
 
                   {/* Bottom Navigation Row: Ôn Tập (left), Đăng Xuất (middle) and Phân Tích (right) */}
-                  <div className="w-full flex items-center justify-between pt-2 border-t border-gray-100 gap-1 sm:gap-2 shrink-0">
+                  <div className="w-full flex items-center justify-between pt-2.5 sm:pt-3 border-t border-gray-100 gap-2 shrink-0 mt-auto">
                     <button
                       onClick={() => {
                         setActiveTab('practice');
                         setExpandedPracticeId(null);
                       }}
-                      className="flex items-center gap-1 py-1.5 px-2 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 rounded-xl transition-all hover:scale-105 active:scale-95 cursor-pointer text-[10px] sm:text-xs font-bold"
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 rounded-xl transition-all hover:scale-105 active:scale-95 cursor-pointer text-xs font-bold"
                     >
-                      <BookOpen className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                      <BookOpen className="h-4 w-4 text-amber-600 shrink-0" />
                       <span>ÔN TẬP</span>
                     </button>
 
                     <button
                       onClick={onLogout}
-                      className="flex items-center gap-1 py-1.5 px-2 bg-red-50 hover:bg-red-100 border border-red-200 text-red-800 rounded-xl transition-all hover:scale-105 active:scale-95 cursor-pointer text-[10px] sm:text-xs font-bold font-sans"
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 bg-red-50 hover:bg-red-100 border border-red-200 text-red-800 rounded-xl transition-all hover:scale-105 active:scale-95 cursor-pointer text-xs font-bold font-sans"
                     >
-                      <LogOut className="h-3.5 w-3.5 text-red-600 shrink-0" />
+                      <LogOut className="h-4 w-4 text-red-600 shrink-0" />
                       <span>ĐĂNG XUẤT</span>
                     </button>
 
@@ -783,39 +786,39 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                         setActiveTab('history');
                         setAnalysisScope('personal');
                       }}
-                      className="flex items-center gap-1 py-1.5 px-2 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-800 rounded-xl transition-all hover:scale-105 active:scale-95 cursor-pointer text-[10px] sm:text-xs font-bold"
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-800 rounded-xl transition-all hover:scale-105 active:scale-95 cursor-pointer text-xs font-bold"
                     >
+                      <BarChart3 className="h-4 w-4 text-indigo-600 shrink-0" />
                       <span>PHÂN TÍCH</span>
-                      <BarChart3 className="h-3.5 w-3.5 text-indigo-600 shrink-0" />
                     </button>
                   </div>
                 </div>
               ) : (
                 // Active Quiz Form
-                <div className="max-w-2xl mx-auto space-y-6">
+                <div className="w-full flex-1 flex flex-col h-full max-w-sm mx-auto justify-between">
                   {showResultsReview && lastQuizResult ? (
                     // Quiz Completed - Circular score percentage / Học từ sai Screen!
-                    <div className="space-y-6">
+                    <div className="w-full flex-1 flex flex-col h-full justify-between">
                       {!reviewMode ? (
                         // 1. HIGH-FIDELITY RESULT SCREEN
-                        <div className="bg-white border border-gray-150 rounded-xl p-8 shadow-sm flex flex-col items-center justify-center text-center space-y-6 max-w-md mx-auto">
-                          <h2 className="text-lg font-bold text-gray-900 font-sans tracking-wide">
+                        <div className="bg-white border border-gray-150 rounded-xl p-4 sm:p-5 shadow-sm flex flex-col items-center justify-between text-center w-full flex-1 h-full max-w-sm mx-auto">
+                          <h2 className="text-base sm:text-lg font-extrabold text-gray-900 font-sans tracking-wide">
                             <span translate="no" className="notranslate">Kết quả</span>
                           </h2>
 
                           {/* Circular Score percentage ring drawing */}
-                          <div className="relative h-44 w-44 flex items-center justify-center">
+                          <div className="relative h-36 w-36 flex items-center justify-center shrink-0">
                             <svg className="absolute transform -rotate-90 w-full h-full" viewBox="0 0 100 100">
                               {/* Track */}
                               <circle 
                                 cx="50" cy="50" r="40" 
-                                stroke="#f1f5f9" strokeWidth="7" fill="transparent" 
+                                stroke="#f1f5f9" strokeWidth="6" fill="transparent" 
                               />
                               {/* Score fill */}
                               <circle 
                                 cx="50" cy="50" r="40" 
                                 stroke="#1971C2" 
-                                strokeWidth="7" fill="transparent" 
+                                strokeWidth="6" fill="transparent" 
                                 strokeDasharray={`${2 * Math.PI * 40}`}
                                 strokeDashoffset={`${2 * Math.PI * 40 * (1 - lastQuizResult.score / 30)}`}
                                 strokeLinecap="round"
@@ -823,97 +826,128 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                               />
                             </svg>
                             <div className="text-center z-10 flex flex-col items-center">
-                              <span translate="no" className="notranslate text-4xl font-extrabold text-gray-950 block font-sans tracking-tight">
-                                {lastQuizResult.score === 30 ? '30/30' : lastQuizResult.score === 20 ? '20/30' : lastQuizResult.score === 10 ? '10/30' : '0/30'}
+                              <span translate="no" className="notranslate text-3xl font-extrabold text-gray-950 block font-sans tracking-tight leading-none">
+                                {lastQuizResult.score}/30
                               </span>
-                              <span translate="no" className="notranslate text-xs text-gray-400 font-medium block mt-1 tracking-wider uppercase">
+                              <span translate="no" className="notranslate text-[10px] text-gray-400 font-bold block mt-1 tracking-wider uppercase leading-none">
                                 Điểm số
                               </span>
                             </div>
                           </div>
 
-                          {/* Badge Đạt yêu cầu */}
-                          <div className="flex justify-center -mt-2">
-                            <span className="px-4 py-1 border border-green-200 bg-green-50 text-green-700 text-xs font-semibold rounded-full inline-flex items-center gap-1.5 shadow-sm">
-                              Đạt yêu cầu
-                            </span>
+                          {/* Badge Đạt yêu cầu / Trạng thái quy đổi điểm */}
+                          <div className="flex justify-center -mt-1.5 shrink-0">
+                            {(() => {
+                              const s = lastQuizResult.score;
+                              if (s < 15) {
+                                return (
+                                  <span className="px-5 py-1 border border-red-400 bg-red-50 text-red-600 text-xs sm:text-sm font-bold rounded-lg inline-flex items-center justify-center shadow-3xs tracking-wide">
+                                    Chưa đạt yêu cầu
+                                  </span>
+                                );
+                              } else if (s >= 15 && s < 20) {
+                                return (
+                                  <span className="px-5 py-1 border border-blue-400 bg-blue-50 text-blue-600 text-xs sm:text-sm font-bold rounded-lg inline-flex items-center justify-center shadow-3xs tracking-wide">
+                                    Đạt 90%
+                                  </span>
+                                );
+                              } else if (s >= 20 && s < 24) {
+                                return (
+                                  <span className="px-5 py-1 border border-emerald-400 bg-emerald-50 text-emerald-600 text-xs sm:text-sm font-bold rounded-lg inline-flex items-center justify-center shadow-3xs tracking-wide">
+                                    Đạt 100%
+                                  </span>
+                                );
+                              } else if (s >= 24 && s < 27) {
+                                return (
+                                  <span className="px-5 py-1 border border-purple-400 bg-purple-50 text-purple-600 text-xs sm:text-sm font-bold rounded-lg inline-flex items-center justify-center shadow-3xs tracking-wide">
+                                    Đạt 120%
+                                  </span>
+                                );
+                              } else {
+                                return (
+                                  <span className="px-5 py-1 border border-indigo-400 bg-indigo-50 text-indigo-600 text-xs sm:text-sm font-bold rounded-lg inline-flex items-center justify-center shadow-3xs tracking-wide">
+                                    Đạt 150%
+                                  </span>
+                                );
+                              }
+                            })()}
                           </div>
 
                           {/* Stat Grid (4 blocks matching exactly) */}
-                          <div className="grid grid-cols-2 gap-4 w-full">
+                          <div className="grid grid-cols-2 gap-3 w-full shrink-0">
                             {/* Câu đúng */}
-                            <div className="bg-white rounded-xl p-3.5 flex items-center gap-3 border border-gray-100 shadow-xs text-left">
-                              <div className="w-11 h-11 rounded-full bg-green-50 border border-green-100 flex items-center justify-center text-green-600 shrink-0">
-                                <CheckCircle2 className="h-5 w-5 stroke-[2.5]" />
+                            <div className="bg-white rounded-xl p-2.5 sm:p-3 flex items-center gap-2.5 border border-gray-100 shadow-3xs text-left">
+                              <div className="w-9 h-9 rounded-full bg-green-50 border border-green-100 flex items-center justify-center text-green-600 shrink-0">
+                                <CheckCircle2 className="h-4.5 w-4.5 stroke-[2.5]" />
                               </div>
                               <div>
-                                <div className="text-xl font-bold text-gray-900 font-mono leading-tight">
+                                <div className="text-lg font-bold text-gray-900 font-mono leading-none">
                                   {String(lastQuizResult.score / 10).padStart(2, '0')}
                                 </div>
-                                <div className="text-xs text-gray-450 font-medium">Câu đúng</div>
+                                <div className="text-[10px] sm:text-xs text-gray-450 font-bold mt-0.5">Câu đúng</div>
                               </div>
                             </div>
 
                             {/* Câu sai */}
-                            <div className="bg-white rounded-xl p-3.5 flex items-center gap-3 border border-gray-100 shadow-xs text-left">
-                              <div className="w-11 h-11 rounded-full bg-red-50 border border-red-100 flex items-center justify-center text-red-600 shrink-0">
-                                <XCircle className="h-5 w-5 stroke-[2.5]" />
+                            <div className="bg-white rounded-xl p-2.5 sm:p-3 flex items-center gap-2.5 border border-gray-100 shadow-3xs text-left">
+                              <div className="w-9 h-9 rounded-full bg-red-50 border border-red-100 flex items-center justify-center text-red-600 shrink-0">
+                                <XCircle className="h-4.5 w-4.5 stroke-[2.5]" />
                               </div>
                               <div>
-                                <div className="text-xl font-bold text-gray-900 font-mono leading-tight">
+                                <div className="text-lg font-bold text-gray-900 font-mono leading-none">
                                   {String(3 - lastQuizResult.score / 10).padStart(2, '0')}
                                 </div>
-                                <div className="text-xs text-gray-450 font-medium">Câu sai</div>
+                                <div className="text-[10px] sm:text-xs text-gray-450 font-bold mt-0.5">Câu sai</div>
                               </div>
                             </div>
 
                             {/* Bỏ qua */}
-                            <div className="bg-white rounded-xl p-3.5 flex items-center gap-3 border border-gray-100 shadow-xs text-left">
-                              <div className="w-11 h-11 rounded-full bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-500 shrink-0">
-                                <div className="font-bold text-lg select-none">-</div>
+                            <div className="bg-white rounded-xl p-2.5 sm:p-3 flex items-center gap-2.5 border border-gray-100 shadow-3xs text-left">
+                              <div className="w-9 h-9 rounded-full bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-500 shrink-0">
+                                <div className="font-bold text-base select-none leading-none">-</div>
                               </div>
                               <div>
-                                <div className="text-xl font-bold text-gray-900 font-mono leading-tight">0</div>
-                                <div className="text-xs text-gray-450 font-medium">Bỏ qua</div>
+                                <div className="text-lg font-bold text-gray-900 font-mono leading-none">0</div>
+                                <div className="text-[10px] sm:text-xs text-gray-455 font-bold mt-0.5">Bỏ qua</div>
                               </div>
                             </div>
 
                             {/* Thời gian */}
-                            <div className="bg-white rounded-xl p-3.5 flex items-center gap-3 border border-gray-100 shadow-xs text-left">
-                              <div className="w-11 h-11 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-500 shrink-0">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-500 stroke-[2.3]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <div className="bg-white rounded-xl p-2.5 sm:p-3 flex items-center gap-2.5 border border-gray-100 shadow-3xs text-left">
+                              <div className="w-9 h-9 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-500 shrink-0">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4.5 w-4.5 text-blue-500 stroke-[2.5]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
                               </div>
                               <div>
-                                <div className="text-base font-bold text-gray-900 font-mono leading-tight">
+                                <div className="text-base font-bold text-gray-900 font-mono leading-none">
                                   {formatTimeInSeconds(lastQuizResult.duration)}
                                 </div>
-                                <div className="text-xs text-gray-450 font-medium">Thời gian</div>
+                                <div className="text-[10px] sm:text-xs text-gray-455 font-bold mt-0.5">Thời gian</div>
                               </div>
                             </div>
                           </div>
 
                           {/* Accuracy block */}
-                          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-xs w-full space-y-3 text-left">
-                            <div className="flex justify-between items-center text-xs font-semibold text-gray-450 uppercase tracking-wider">
+                          <div className="bg-white rounded-xl p-3 border border-gray-100 shadow-3xs w-full space-y-2.5 text-left shrink-0">
+                            <div className="flex justify-between items-center text-[10px] font-bold text-gray-450 uppercase tracking-wider">
                               <span>Độ chính xác</span>
-                              <span className="font-bold text-gray-900 font-mono text-sm">{Math.round((lastQuizResult.score / 30) * 100)}%</span>
+                              <span className="font-bold text-gray-900 font-mono text-xs">{Math.round((lastQuizResult.score / 30) * 100)}%</span>
                             </div>
-                            <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden flex">
+                            <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden flex">
                               <div style={{ width: `${(lastQuizResult.score / 30) * 100}%` }} className="bg-[#4ade80] h-full transition-all duration-500" />
                               <div style={{ width: `${((30 - lastQuizResult.score) / 30) * 100}%` }} className="bg-[#f87171] h-full transition-all duration-500" />
                             </div>
-                            <div className="flex justify-center items-center gap-6 pt-1 text-xs text-gray-500 font-medium">
-                              <div className="flex items-center gap-1.5">
+                            <div className="flex justify-center items-center gap-4 pt-0.5 text-[10px] text-gray-500 font-bold">
+                              <div className="flex items-center gap-1">
                                 <span className="inline-block w-2.5 h-2.5 rounded-full bg-[#4ade80]"></span>
                                 <span>Đúng</span>
                               </div>
-                              <div className="flex items-center gap-1.5">
+                              <div className="flex items-center gap-1">
                                 <span className="inline-block w-2.5 h-2.5 rounded-full bg-[#f87171]"></span>
                                 <span>Sai</span>
                               </div>
-                              <div className="flex items-center gap-1.5">
+                              <div className="flex items-center gap-1">
                                 <span className="inline-block w-2.5 h-2.5 rounded-full bg-[#fbbf24]"></span>
                                 <span>Bỏ qua</span>
                               </div>
@@ -921,51 +955,58 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                           </div>
 
                           {/* Control action buttons */}
-                          <div className="flex gap-4 w-full pt-2">
+                          <div className="flex gap-2 w-full pt-1 shrink-0">
                             <button
                               onClick={() => { setQuizStarted(false); setShowResultsReview(false); setReviewMode(false); }}
-                              className="flex-1 py-3 px-4 bg-white border border-[#1971C2] text-[#1971C2] hover:bg-blue-50 font-bold rounded-lg text-xs md:text-sm shadow-xs transition-all active:scale-[0.98]"
+                              className="flex-1 py-2 sm:py-2.5 px-1.5 sm:px-2 bg-white border border-[#1971C2] text-[#1971C2] hover:bg-blue-50 font-bold rounded-lg text-[10px] sm:text-xs shadow-3xs transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-1 shrink-0"
                             >
-                              Về trang chủ
+                              <Home className="h-3.5 w-3.5 shrink-0" />
+                              <span>Về trang chủ</span>
                             </button>
                             <button
                               onClick={() => { setReviewMode(true); setReviewQuestionIndex(0); }}
-                              className="flex-1 py-3 px-4 bg-[#1971C2] hover:bg-opacity-95 text-white font-bold rounded-lg text-xs md:text-sm shadow-md transition-all active:scale-[0.98]"
+                              className="flex-1 py-2 sm:py-2.5 px-1 bg-[#1971C2] hover:bg-opacity-95 text-white font-bold rounded-lg text-[10px] sm:text-xs shadow-3xs transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center text-center shrink-0"
                             >
                               Xem câu trả lời
+                            </button>
+                            <button
+                              onClick={startQuiz}
+                              className="flex-[0.9] py-2 sm:py-2.5 px-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-[10px] sm:text-xs shadow-3xs transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center text-center shrink-0"
+                            >
+                              Làm tiếp
                             </button>
                           </div>
                         </div>
                       ) : (
                         // 2. HIGH-FIDELITY REVIEW SCREEN (HỌC TỪ SAI)
-                        <div className="bg-white border border-gray-150 rounded-xl p-6 shadow-sm space-y-6 max-w-lg mx-auto">
+                        <div className="bg-white border border-gray-150 rounded-xl p-4 sm:p-5 shadow-sm flex flex-col justify-between max-w-sm mx-auto w-full flex-1 h-full">
                           {/* Upper Header Review Title */}
-                          <div className="flex items-center justify-between pb-4 border-b border-gray-100">
+                          <div className="flex items-center justify-between pb-3 border-b border-gray-100">
                             <button 
                               onClick={() => setReviewMode(false)}
-                              className="p-1.5 hover:bg-gray-100 rounded-full text-gray-700 transition"
+                              className="p-1.5 hover:bg-gray-100 rounded-full text-gray-700 transition cursor-pointer"
                             >
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 stroke-[2.5]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5.5 w-5.5 stroke-[2.5]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
                               </svg>
                             </button>
-                            <h2 className="text-lg font-bold text-gray-900 font-sans tracking-wide">
+                            <h2 className="text-base sm:text-lg font-extrabold text-gray-900 font-sans tracking-wide">
                               Câu trả lời
                             </h2>
-                            <div className="w-9 h-9"></div> {/* Spacer balance */}
+                            <div className="w-8 h-8"></div> {/* Spacer balance */}
                           </div>
 
                           {currentQuizQuestions.length > 0 && (
-                            <div className="space-y-4">
-                              <div className="text-left space-y-1">
-                                <span className="text-xs font-bold text-gray-400 font-mono block">CÂU HỎI {reviewQuestionIndex + 1}</span>
-                                <h3 className="text-base font-sans font-bold text-gray-800 leading-snug">
+                            <div className="space-y-3.5 flex-1 flex flex-col justify-between mt-3">
+                              <div className="text-left space-y-0.5">
+                                <span className="text-[10px] font-bold text-gray-400 font-mono block">CÂU HỎI {reviewQuestionIndex + 1}</span>
+                                <h3 className="text-sm font-sans font-extrabold text-gray-800 leading-snug">
                                   {currentQuizQuestions[reviewQuestionIndex].text}
                                 </h3>
                               </div>
 
                               {currentQuizQuestions[reviewQuestionIndex].imageUrl && (
-                                <div className="rounded-md overflow-hidden max-h-56 border border-gray-100 flex justify-center bg-gray-50">
+                                <div className="rounded-xl overflow-hidden max-h-40 border border-gray-100 flex justify-center bg-gray-50 shadow-3xs">
                                   <img 
                                     src={currentQuizQuestions[reviewQuestionIndex].imageUrl} 
                                     alt="Sơ đồ minh hoạ" 
@@ -976,7 +1017,7 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                               )}
 
                               {/* Interactive Answer Options List (High Fidelity Option Highlight) */}
-                              <div className="grid grid-cols-1 gap-2.5 pt-2">
+                              <div className="grid grid-cols-1 gap-2 pt-1">
                                 {currentQuizQuestions[reviewQuestionIndex].options.map((opt, oIdx) => {
                                   const question = currentQuizQuestions[reviewQuestionIndex];
                                   const selectedIdx = selectedAnswers[question.id];
@@ -984,34 +1025,34 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                                   const isSelected = selectedIdx === oIdx;
 
                                   let containerStyle = "border-gray-200 bg-white hover:bg-gray-50/50";
-                                  let textStyle = "text-gray-700 font-medium";
-                                  let radioShapeStyle = "border-gray-300 text-gray-400";
+                                  let textStyle = "text-gray-750 font-semibold";
+                                  let radioShapeStyle = "border-gray-350 text-gray-400";
                                   let radioActiveDot = false;
 
                                   if (isCorrectOpt) {
-                                    containerStyle = "border-[#4ade80] bg-[#f0fdf4] text-green-900 font-medium shadow-2xs ring-1 ring-[#48bb78]";
-                                    textStyle = "text-green-800 font-semibold";
+                                    containerStyle = "border-[#4ade80] bg-[#f0fdf4] text-green-900 shadow-3xs ring-1 ring-[#48bb78]";
+                                    textStyle = "text-green-800 font-extrabold";
                                     radioShapeStyle = "border-green-600 text-green-600 bg-green-50";
                                     radioActiveDot = true;
                                   } else if (isSelected) {
-                                    containerStyle = "border-red-300 bg-red-50/50 text-red-900 font-medium ring-1 ring-red-400";
-                                    textStyle = "text-red-800 font-semibold";
-                                    radioShapeStyle = "border-red-600 text-red-600 bg-red-50";
+                                    containerStyle = "border-red-350 bg-red-50/50 text-red-900 ring-1 ring-red-400";
+                                    textStyle = "text-red-800 font-extrabold";
+                                    radioShapeStyle = "border-red-650 text-red-650 bg-red-50";
                                     radioActiveDot = true;
                                   }
 
                                   return (
                                     <div 
                                       key={oIdx} 
-                                      className={`w-full p-4 text-xs md:text-sm rounded-xl border flex items-center gap-3 transition-all ${containerStyle}`}
+                                      className={`w-full p-3 text-xs rounded-xl border flex items-center gap-2.5 transition-all ${containerStyle}`}
                                     >
                                       {/* Radio dot element */}
-                                      <div className={`h-5 w-5 rounded-full shrink-0 flex items-center justify-center border ${radioShapeStyle}`}>
+                                      <div className={`h-4.5 w-4.5 rounded-full shrink-0 flex items-center justify-center border ${radioShapeStyle}`}>
                                         {radioActiveDot && (
-                                          <div className={`h-2.5 w-2.5 rounded-full ${isCorrectOpt ? 'bg-green-600' : 'bg-red-600'}`} />
+                                          <div className={`h-2.5 w-2.5 rounded-full ${isCorrectOpt ? 'bg-green-600' : 'bg-red-650'}`} />
                                         )}
                                       </div>
-                                      <div className={`flex-1 text-xs md:text-sm ${textStyle}`}>
+                                      <div className={`flex-1 text-xs font-semibold ${textStyle}`}>
                                         {opt}
                                       </div>
                                     </div>
@@ -1020,12 +1061,12 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                               </div>
 
                               {/* Custom failure warning banner / explanation */}
-                              <div className="bg-orange-50 border-l-4 border-orange-400 p-4 rounded-r-xl text-xs md:text-sm text-orange-950 mt-4 leading-relaxed">
-                                <h5 className="font-bold text-orange-850 flex items-center gap-1.5 mb-1">
+                              <div className="bg-orange-50 border-l-4 border-orange-400 p-3 rounded-r-xl text-xs text-orange-950 mt-3 leading-relaxed">
+                                <h5 className="font-bold text-orange-850 flex items-center gap-1 mb-0.5">
                                   <AlertCircle className="h-4 w-4 text-orange-500 shrink-0" />
-                                  <span>Dặn dò & Giải thích lãnh đạo:</span>
+                                  <span>Dặn dỏi & Giải thích:</span>
                                 </h5>
-                                <p className="font-semibold italic">
+                                <p className="font-semibold italic text-[11px] sm:text-xs">
                                   "Anh/Chị nhớ nhé: {currentQuizQuestions[reviewQuestionIndex].explanation}"
                                 </p>
                               </div>
@@ -1138,17 +1179,17 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                         </div>
                       </div>
 
-                      {/* Main quiz interface - cardless for maximum compact layout */}
-                      <div className="flex-1 flex flex-col justify-between space-y-2.5">
+                      {/* Main quiz interface - restored to luxury card layout with elegant spacing */}
+                      <div className="bg-white border border-gray-150 rounded-2xl p-4 sm:p-5 shadow-xs flex-1 flex flex-col justify-between space-y-4">
                         
                         {/* Progress display and countdown timer on same row */}
-                        <div className="space-y-1 shrink-0">
-                          <div className="flex justify-between items-center text-[10px] sm:text-xs font-semibold text-gray-500">
+                        <div className="space-y-1.5 shrink-0">
+                          <div className="flex justify-between items-center text-xs sm:text-sm font-semibold text-gray-500">
                             <div>
                                <span translate="no" className="notranslate">{currentQuestionIndex + 1}/3 câu hỏi</span>
                             </div>
-                            <div className="bg-green-50 border border-green-100 text-green-700 px-2 py-0.5 rounded-md font-mono font-bold flex items-center gap-1 text-[10px] sm:text-xs">
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-green-600 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <div className="bg-green-50 border border-green-100 text-green-700 px-2.5 py-1 rounded-md font-mono font-bold flex items-center gap-1.5 text-xs sm:text-sm shadow-3xs">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-green-600 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                               </svg>
                               <span translate="no" className="notranslate">{formatTimeInSeconds(quizTimer)}</span>
@@ -1156,7 +1197,7 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                           </div>
                           
                           {/* Continuous progress line exactly like company app bar */}
-                          <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
+                          <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
                             <div 
                               className="bg-[#1971C2] h-full transition-all duration-300 rounded-full" 
                               style={{ width: `${((currentQuestionIndex + 1) / 3) * 100}%` }} 
@@ -1164,41 +1205,41 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                           </div>
                         </div>
 
-                        {/* Ultra-compact micro-notice for BACK advice - addressing screenshot red arrow comment! */}
-                        <div className="bg-blue-50/50 border border-blue-100 px-2 py-1.5 rounded-lg text-left shrink-0">
-                          <p className="text-[10px] sm:text-[11px] text-blue-800 leading-normal font-sans">
+                        {/* Standard elegant notice for BACK advice - addressing screenshot red arrow comment! */}
+                        <div className="bg-blue-50/50 border border-blue-100 p-3 rounded-xl text-left shrink-0 shadow-3xs">
+                          <p className="text-xs text-blue-800 leading-relaxed font-sans">
                             💡 <b>Mẹo sửa sai:</b> Nếu chọn nhầm, ấn nút <b>BACK (&larr;)</b> ở góc trên cùng để đổi đề và làm lại từ câu 1 (duy nhất 1 lần).
                           </p>
                         </div>
 
                         {/* Notice messages / Success or Warning */}
                         {quizInfoMessage && (
-                          <div className="flex items-center gap-1.5 rounded-lg bg-green-50/80 p-2 text-xs text-green-800 border border-green-150 font-sans text-left shrink-0 animate-pulse">
+                          <div className="flex items-center gap-2 rounded-xl bg-green-50/80 p-3 text-xs sm:text-sm text-green-800 border border-green-150 font-sans text-left shrink-0 animate-pulse">
                             <span className="w-1.5 h-1.5 bg-green-500 rounded-full shrink-0"></span>
                             <span translate="no" className="notranslate font-semibold">{quizInfoMessage}</span>
                           </div>
                         )}
 
                         {errorState && (
-                          <div className="flex items-start gap-1.5 rounded-lg bg-red-50/80 p-2 text-xs text-red-700 border border-red-155 font-sans text-left shrink-0">
-                            <AlertCircle className="h-3.5 w-3.5 shrink-0 text-red-500 mt-0.5" />
+                          <div className="flex items-start gap-2 rounded-xl bg-red-50/80 p-3 text-xs sm:text-sm text-red-700 border border-red-155 font-sans text-left shrink-0">
+                            <AlertCircle className="h-4 w-4 shrink-0 text-red-500 mt-0.5" />
                             <span translate="no" className="notranslate">{errorState}</span>
                           </div>
                         )}
 
                         {/* Question display */}
                         {currentQuizQuestions.length > 0 && (
-                          <div className="flex-1 flex flex-col justify-center space-y-2.5 text-left font-sans">
-                            <div className="text-[9px] font-bold text-gray-400 tracking-wide uppercase shrink-0">
+                          <div className="flex-1 flex flex-col justify-center space-y-3.5 text-left font-sans">
+                            <div className="text-[10px] sm:text-xs font-extrabold text-gray-400 tracking-wider uppercase shrink-0">
                               <span translate="no" className="notranslate">CÂU HỎI {currentQuestionIndex + 1}</span>
                             </div>
-                            <h3 className="text-xs sm:text-sm font-sans font-extrabold text-gray-950 leading-snug shrink-0">
+                            <h3 className="text-sm sm:text-base font-sans font-extrabold text-gray-950 leading-snug shrink-0">
                               <span translate="no" className="notranslate">{currentQuizQuestions[currentQuestionIndex].text}</span>
                             </h3>
 
                             {/* Image illustration if present */}
                             {currentQuizQuestions[currentQuestionIndex].imageUrl && (
-                              <div className="rounded-lg overflow-hidden max-h-[105px] sm:max-h-[145px] border border-gray-100 flex justify-center bg-gray-50 my-1 shrink-0">
+                              <div className="rounded-xl overflow-hidden max-h-[160px] sm:max-h-[200px] border border-gray-150 flex justify-center bg-gray-50 my-1 shrink-0 shadow-3xs">
                                 <img 
                                   src={currentQuizQuestions[currentQuestionIndex].imageUrl} 
                                   alt="Sơ đồ câu hỏi" 
@@ -1209,7 +1250,7 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                             )}
 
                             {/* Options list styling matching Company visual system */}
-                            <div className="grid grid-cols-1 gap-1.5 sm:gap-2">
+                            <div className="grid grid-cols-1 gap-2.5 sm:gap-3">
                               {currentQuizQuestions[currentQuestionIndex].options.map((opt, oIdx) => {
                                 const qId = currentQuizQuestions[currentQuestionIndex].id;
                                 const isSelected = selectedAnswers[qId] === oIdx;
@@ -1223,20 +1264,20 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                                       // Clear temporary success messages when selecting
                                       setQuizInfoMessage(null);
                                     }}
-                                    className={`w-full text-left p-2.5 sm:p-3 text-xs rounded-xl border transition-all flex items-center gap-2 active:scale-[0.99] group ${
+                                    className={`w-full text-left p-3.5 sm:p-4 text-xs sm:text-sm rounded-xl border transition-all flex items-center gap-3 active:scale-[0.99] group shadow-2xs ${
                                       isSelected 
                                       ? 'bg-blue-50 border-[#1971C2] text-[#1971C2] font-bold ring-1 ring-[#1971C2]' 
                                       : 'bg-white hover:bg-gray-50 border-gray-200 text-gray-700'
                                     }`}
                                   >
-                                    <div className={`h-4.5 w-4.5 rounded-full shrink-0 flex items-center justify-center border font-sans text-[10px] font-bold transition-all ${
+                                    <div className={`h-5 w-5 rounded-full shrink-0 flex items-center justify-center border font-sans text-xs font-bold transition-all ${
                                       isSelected 
                                       ? 'bg-[#1971C2] text-white border-[#1971C2]' 
-                                      : 'border-gray-200 text-gray-450'
+                                      : 'border-gray-250 text-gray-450'
                                     }`}>
                                       {String.fromCharCode(65 + oIdx)}
                                     </div>
-                                    <div className="flex-1 text-[11px] sm:text-xs">
+                                    <div className="flex-1 text-xs sm:text-sm font-semibold">
                                       <span translate="no" className="notranslate">{opt}</span>
                                     </div>
                                   </button>
@@ -1247,14 +1288,14 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                         )}
 
                         {/* Slide/Submit buttons styled explicitly matching the custom design */}
-                        <div className="flex justify-between items-center pt-2 sm:pt-2.5 border-t border-gray-100 gap-3 font-sans shrink-0">
+                        <div className="flex justify-between items-center pt-3 border-t border-gray-100 gap-3 font-sans shrink-0">
                           <button
                             disabled={currentQuestionIndex === 0}
                             onClick={() => {
                               setCurrentQuestionIndex(prev => prev - 1);
                               setQuizInfoMessage(null);
                             }}
-                            className="px-3.5 py-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-600 rounded-lg text-xs font-bold disabled:opacity-40 transition-colors cursor-pointer"
+                            className="px-4 py-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-600 rounded-lg text-xs font-bold disabled:opacity-40 transition-colors cursor-pointer"
                           >
                             <span translate="no" className="notranslate">Câu Trước</span>
                           </button>
