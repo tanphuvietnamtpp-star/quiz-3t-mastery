@@ -157,7 +157,7 @@ export const initializeDatabase = async (): Promise<void> => {
 
     if (app && isFirebaseConfigured) {
       try {
-        if (targetDbId) {
+        if (targetDbId && targetDbId !== '(default)') {
           const dbCandidate = getFirestore(app, targetDbId);
           // Quickly test if the custom named database exists with a strict 1500ms timeout
           try {
@@ -176,6 +176,7 @@ export const initializeDatabase = async (): Promise<void> => {
         } else {
           db = getFirestore(app);
         }
+        console.log("[SUCCESS] ĐÃ KẾT NỐI ĐÚNG VÀO DỰ ÁN: quiz-3t-mastery");
         await forceSeedSupremeAdmin();
       } catch (err) {
         console.error("Error setting up Firestore:", err);

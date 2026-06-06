@@ -5,7 +5,7 @@ import { INITIAL_QUESTIONS } from '../data/mockQuestions';
 import { 
   Users, HelpCircle, ImagePlus, QrCode, AlertTriangle, 
   Trash2, Plus, Sparkles, LogOut, CheckCircle2, UserCheck, 
-  RefreshCcw, UserMinus, FileDown
+  RefreshCcw, UserMinus, FileDown, Pencil, Lock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -628,50 +628,63 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
                                 </span>
                               </td>
                               <td className="py-3 px-4 text-right whitespace-nowrap">
-                                <div className="flex items-center justify-end gap-1.5 font-sans">
+                                <div className="flex items-center justify-end gap-2 font-sans">
                                   {item.id !== 'admin_lenhattruong' && item.name !== 'Lê Nhật Trường' && (
                                     <>
-                                      {/* Edit button */}
-                                      <button
-                                        onClick={() => handleOpenEdit(item)}
-                                        className="px-2 py-0.5 text-xs text-[#1971C2] bg-blue-50 hover:bg-blue-100 border border-blue-100 rounded-md font-bold transition-all cursor-pointer"
-                                        title="Sửa thông tin tài khoản"
-                                      >
-                                        <span translate="no" className="notranslate">Sửa</span>
-                                      </button>
-
-                                      {/* Toggle role operator */}
-                                      <button
-                                        onClick={() => handleToggleRole(item.id, item.role)}
-                                        className="px-2 py-0.5 text-xs text-gray-650 hover:text-blue-600 bg-white border border-gray-250 rounded-md font-bold transition-all cursor-pointer"
-                                      >
-                                        <span translate="no" className="notranslate">{item.role === 'employee' ? 'Đặt Trưởng BP' : 'Hạ CBNV'}</span>
-                                      </button>
-
                                       {/* Approve / Reject Actions */}
                                       {item.status?.toLowerCase() !== 'approved' ? (
                                         <button
                                           onClick={() => handleApproveUser(item.id)}
-                                          className="px-2 py-0.5 text-xs text-white bg-green-650 hover:bg-green-700 rounded-md font-bold transition-all cursor-pointer"
+                                          className="p-1.5 rounded-lg border text-emerald-600 bg-emerald-50 border-emerald-200 hover:bg-emerald-100 hover:text-emerald-700 transition-all flex items-center justify-center hover:scale-105 active:scale-95 shadow-sm cursor-pointer"
+                                          title="Phê duyệt tài khoản hoạt động"
                                         >
-                                          <span translate="no" className="notranslate">Duyệt</span>
+                                          <CheckCircle2 className="h-4 w-4" />
                                         </button>
                                       ) : (
                                         <button
                                           onClick={() => handleRejectUser(item.id)}
-                                          className="px-2 py-0.5 text-xs text-white bg-amber-600 hover:bg-amber-700 rounded-md font-bold transition-all cursor-pointer"
+                                          className="p-1.5 rounded-lg border text-amber-600 bg-amber-50 border-amber-250 hover:bg-amber-100 hover:text-amber-700 transition-all flex items-center justify-center hover:scale-105 active:scale-95 shadow-sm cursor-pointer"
+                                          title="Tạm khóa tài khoản"
                                         >
-                                          <span translate="no" className="notranslate">Khóa</span>
+                                          <Lock className="h-4 w-4" />
+                                        </button>
+                                      )}
+
+                                      {/* Edit button */}
+                                      <button
+                                        onClick={() => handleOpenEdit(item)}
+                                        className="p-1.5 rounded-lg border text-blue-600 bg-blue-50 border-blue-200 hover:bg-blue-100 hover:text-blue-700 transition-all flex items-center justify-center hover:scale-105 active:scale-95 shadow-sm cursor-pointer"
+                                        title="Sửa thông tin tài khoản"
+                                      >
+                                        <Pencil className="h-4 w-4" />
+                                      </button>
+
+                                      {/* Toggle role operator */}
+                                      {item.role === 'employee' ? (
+                                        <button
+                                          onClick={() => handleToggleRole(item.id, item.role)}
+                                          className="p-1.5 rounded-lg border text-indigo-600 bg-indigo-50 border-indigo-200 hover:bg-indigo-100 hover:text-indigo-700 transition-all flex items-center justify-center hover:scale-105 active:scale-95 shadow-sm cursor-pointer"
+                                          title="Đặt làm Trưởng bộ phận (Duyệt viên)"
+                                        >
+                                          <UserCheck className="h-4 w-4" />
+                                        </button>
+                                      ) : (
+                                        <button
+                                          onClick={() => handleToggleRole(item.id, item.role)}
+                                          className="p-1.5 rounded-lg border text-slate-600 bg-slate-50 border-slate-200 hover:bg-slate-100 hover:text-slate-700 transition-all flex items-center justify-center hover:scale-105 active:scale-95 shadow-sm cursor-pointer"
+                                          title="Hạ cấp xuống Cán bộ nhân viên"
+                                        >
+                                          <UserMinus className="h-4 w-4" />
                                         </button>
                                       )}
 
                                       {/* Delete button */}
                                       <button
                                         onClick={() => setUserToDelete(item)}
-                                        className="px-2 py-0.5 text-xs text-white bg-red-650 hover:bg-red-700 rounded-md font-bold transition-all cursor-pointer"
-                                        title="Xóa vĩnh viễn"
+                                        className="p-1.5 rounded-lg border text-rose-600 bg-rose-50 border-rose-200 hover:bg-rose-100 hover:text-rose-700 transition-all flex items-center justify-center hover:scale-105 active:scale-95 shadow-sm cursor-pointer"
+                                        title="Xóa tài khoản vĩnh viễn"
                                       >
-                                        <span translate="no" className="notranslate">Xóa</span>
+                                        <Trash2 className="h-4 w-4" />
                                       </button>
                                     </>
                                   )}

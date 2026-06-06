@@ -1,10 +1,9 @@
 {
-  "projectId": "gen-lang-client-0867844296",
-  "appId": "1:454219795973:web:3cfc1f19a1b6318e8a166c",
-  "apiKey": "AIzaSyAn7Pf9BpmrZR3-AjCnSsDObmBlWp33cLY",
-  "authDomain": "gen-lang-client-0867844296.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-ecc1b3f8-3351-42f1-8679-b82e4248607a",
-  "storageBucket": "gen-lang-client-0867844296.firebasestorage.app",
-  "messagingSenderId": "454219795973",
-  "measurementId": ""
+  "projectId": "quiz-3t-mastery",
+  "firestoreDatabaseId": "(default)",
+  "apiKey": "AIzaSyAr_PlaceholderKey_FOR_SAFETY",
+  "authDomain": "quiz-3t-mastery.firebaseapp.com",
+  "appId": "1:23528570388:web:7ef506f0e4b8686d0b30ef",
+  "storageBucket": "quiz-3t-mastery.firebasestorage.app",
+  "messagingSenderId": "23528570388"
 }
