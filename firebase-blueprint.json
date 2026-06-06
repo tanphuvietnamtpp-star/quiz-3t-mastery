@@ -1,0 +1,67 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Information about employees, department heads or senior admin registrar credentials.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "password": { "type": "string" },
+        "role": { "type": "string", "enum": ["employee", "approver", "admin"] },
+        "department": { "type": "string" },
+        "branch": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "phone", "role", "department", "branch", "status"]
+    },
+    "Question": {
+      "title": "Question",
+      "description": "3T safety and regulation interactive questionnaire model metadata.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "text": { "type": "string" },
+        "options": { "type": "array" },
+        "correctAnswerIndex": { "type": "integer" },
+        "explanation": { "type": "string" }
+      },
+      "required": ["id", "text", "options", "correctAnswerIndex", "explanation"]
+    },
+    "QuizResult": {
+      "title": "QuizResult",
+      "description": "Daily 3T mock result score card logged for team analytics metrics.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "department": { "type": "string" },
+        "branch": { "type": "string" },
+        "score": { "type": "integer" },
+        "totalQuestions": { "type": "integer" },
+        "date": { "type": "string" },
+        "timestamp": { "type": "integer" },
+        "answers": { "type": "array" },
+        "duration": { "type": "integer" }
+      },
+      "required": ["id", "userId", "userName", "department", "branch", "score", "totalQuestions", "date", "timestamp", "answers", "duration"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Directory storing company staffs sorted by ID."
+    },
+    "questions/{questionId}": {
+      "schema": { "$ref": "#/entities/Question" },
+      "description": "Collection pool indexing all standard 3T question list."
+    },
+    "quiz_results/{resultId}": {
+      "schema": { "$ref": "#/entities/QuizResult" },
+      "description": "Historic quiz result logs recorded for metrics reporting and analysis."
+    }
+  }
+}
