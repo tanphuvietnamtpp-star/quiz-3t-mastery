@@ -37,6 +37,48 @@ export default function Landing({ onLoginSuccess, slogan }: LandingProps) {
   const [success, setSuccess] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  const handleEmployeeIdChange = (value: string, previousValue: string, setFn: (val: string) => void) => {
+    let val = value.replace(/\s+/g, ''); // Trim all whitespace
+    val = val.replace(/[^0-9.]/g, ''); // Only allow digits and dots
+    
+    if (val.length > 10) {
+      val = val.substring(0, 10); // Limit to maximum 10 characters
+    }
+    
+    // Automatically insert dot if user is typing forward and reaches 4 digits
+    if (val.length > previousValue.length) {
+      if (/^\d{4}$/.test(val)) {
+        val = val + '.';
+      }
+    }
+    setFn(val);
+  };
+
+  const isEmployeeIdValid = (id: string) => {
+    return /^\d{4}\.\d{5}$/.test(id);
+  };
+
+  const isPhoneValid = (p: string) => {
+    const digits = p.replace(/\s+/g, '');
+    return digits.length === 10 && digits.startsWith('0');
+  };
+
+  const handlePhoneChange = (value: string) => {
+    // Chỉ nhận số: Tuyệt đối không cho gõ chữ hoặc ký tự đặc biệt
+    const digits = value.replace(/\D/g, '').slice(0, 10);
+    
+    // Tự động định dạng: 0907 767 304
+    let formatted = '';
+    if (digits.length <= 4) {
+      formatted = digits;
+    } else if (digits.length <= 7) {
+      formatted = `${digits.slice(0, 4)} ${digits.slice(4)}`;
+    } else {
+      formatted = `${digits.slice(0, 4)} ${digits.slice(4, 7)} ${digits.slice(7)}`;
+    }
+    setPhone(formatted);
+  };
+
   const [approvalNotification, setApprovalNotification] = useState<{
     type: 'pending' | 'approved';
     employeeId: string;
@@ -392,19 +434,24 @@ export default function Landing({ onLoginSuccess, slogan }: LandingProps) {
 
                 <div>
                   <label className="block text-xs font-medium text-gray-500 uppercase tracking-widest mb-1">
-                    <span translate="no" className="notranslate">Mã Nhân Sự</span>
+                    <span translate="no" className="notranslate">MÃ NHÂN SỰ</span>
                   </label>
                   <div className="relative">
                     <UserIcon className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
                     <input
                       type="text"
                       value={employeeId}
-                      onChange={(e) => setEmployeeId(e.target.value)}
-                      placeholder="Nhập mã nhân sự..."
+                      onChange={(e) => handleEmployeeIdChange(e.target.value, employeeId, setEmployeeId)}
+                      placeholder="Ví dụ: 2026.00001"
                       className="w-full rounded-md border border-gray-250 py-2 pl-10 pr-4 text-sm outline-none focus:border-[#1971C2] focus:ring-1 focus:ring-[#1971C2]"
                       required
                     />
                   </div>
+                  {employeeId && !isEmployeeIdValid(employeeId) && (
+                    <div className="mt-1">
+                      <span translate="no" className="notranslate text-red-500 text-[10px]">Mã nhân sự phải đúng định dạng YYYY.XXXXX (10 ký tự)</span>
+                    </div>
+                  )}
                 </div>
 
                 <div>
@@ -468,7 +515,10 @@ export default function Landing({ onLoginSuccess, slogan }: LandingProps) {
                 </div>
 
                 <div className="pt-1 text-[11.5px] text-gray-500/95 text-center bg-gray-50/80 rounded border border-gray-150 p-2.5 leading-relaxed font-sans">
-                  Nếu không đăng nhập được thì liên hệ Admin: <a href="tel:0907767304" className="text-[#1971C2] font-semibold hover:underline">0907767304</a>.
+                  Nếu không đăng nhập được, liên hệ Admin:
+                  <div className="mt-0.5">
+                    <a href="tel:0907767304" className="text-[#1971C2] font-semibold hover:underline">0907767304</a> (Mr. Trường)
+                  </div>
                 </div>
               </motion.form>
             ) : (
@@ -495,43 +545,55 @@ export default function Landing({ onLoginSuccess, slogan }: LandingProps) {
                       required
                     />
                   </div>
-                  <p className="mt-1 text-xs text-gray-450 italic">
-                    <span translate="no" className="notranslate">* Lưu ý: Điền chính xác "Lê Nhật Trường" nếu là quản trị viên tối cao.</span>
-                  </p>
                 </div>
 
                 <div>
                   <label className="block text-xs font-medium text-gray-500 uppercase tracking-widest mb-1">
-                    <span translate="no" className="notranslate">Mã Nhân Sự</span>
+                    <span translate="no" className="notranslate">MÃ NHÂN SỰ</span>
                   </label>
                   <div className="relative">
                     <UserIcon className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
                     <input
                       type="text"
                       value={employeeId}
-                      onChange={(e) => setEmployeeId(e.target.value)}
-                      placeholder="Nhập mã nhân sự mới..."
+                      onChange={(e) => handleEmployeeIdChange(e.target.value, employeeId, setEmployeeId)}
+                      placeholder="Ví dụ: 2026.00001"
                       className="w-full rounded-md border border-gray-250 py-2 pl-10 pr-4 text-sm outline-none focus:border-[#1971C2] focus:ring-1 focus:ring-[#1971C2]"
                       required
                     />
                   </div>
+                  {employeeId && !isEmployeeIdValid(employeeId) && (
+                    <div className="mt-1">
+                      <span translate="no" className="notranslate text-red-500 text-[10px]">Mã nhân sự phải đúng định dạng YYYY.XXXXX (10 ký tự)</span>
+                    </div>
+                  )}
                 </div>
 
                 <div>
                   <label className="block text-xs font-medium text-gray-500 uppercase tracking-widest mb-1">
-                    <span translate="no" className="notranslate">Số điện thoại</span>
+                    <span translate="no" className="notranslate">SỐ ĐIỆN THOẠI</span>
                   </label>
+                  <span translate="no" className="notranslate text-blue-600 text-[9px] italic block mb-1.5 whitespace-nowrap overflow-hidden text-ellipsis" title="Lưu ý: Vui lòng nhập chính xác SĐT của anh/chị để hệ thống kiểm tra phê duyệt">Lưu ý: Vui lòng nhập chính xác SĐT của anh/chị để hệ thống kiểm tra phê duyệt</span>
                   <div className="relative">
-                    <Phone className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                    <Phone className="absolute left-3 top-2.5 h-4 w-4 text-gray-400 z-10" />
                     <input
                       type="tel"
                       value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      placeholder="Vị trí đăng ký liên hệ..."
-                      className="w-full rounded-md border border-gray-250 py-2 pl-10 pr-4 text-sm outline-none focus:border-[#1971C2] focus:ring-1 focus:ring-[#1971C2]"
+                      onChange={(e) => handlePhoneChange(e.target.value)}
+                      placeholder="Ví dụ: 0907 767 304"
+                      className={`w-full rounded-md border py-2 pl-10 pr-4 text-sm outline-none focus:ring-1 transition-all ${
+                        phone.length > 0 && !isPhoneValid(phone)
+                          ? 'border-red-500 focus:border-red-500 focus:ring-red-500 ring-1 ring-red-500 bg-red-50/25'
+                          : 'border-gray-250 focus:border-[#1971C2] focus:ring-[#1971C2]'
+                      }`}
                       required
                     />
                   </div>
+                  {phone.length > 0 && !isPhoneValid(phone) && (
+                    <div className="mt-1">
+                      <span translate="no" className="notranslate text-red-500 text-[10px]">Vui lòng nhập đúng SĐT cá nhân gồm 10 chữ số (bắt đầu bằng số 0)</span>
+                    </div>
+                  )}
                 </div>
 
                 <div>
@@ -608,7 +670,7 @@ export default function Landing({ onLoginSuccess, slogan }: LandingProps) {
                 <div className="pt-2">
                   <button
                     type="submit"
-                    disabled={loading}
+                    disabled={loading || !isEmployeeIdValid(employeeId) || !isPhoneValid(phone)}
                     className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md text-sm font-bold text-white bg-[#1971C2] hover:bg-opacity-95 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#1971C2] shadow-sm disabled:opacity-50"
                   >
                     {loading ? (
