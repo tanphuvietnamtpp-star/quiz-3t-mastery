@@ -47,63 +47,7 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
     };
   }, []);
 
-  // Tự động kích hoạt toàn màn hình khi mở app lên và khi có tương tác đầu tiên
-  useEffect(() => {
-    // 1. Cố gắng chạy ngay lập tức khi component được mount (nếu môi trường cho phép)
-    const docEl = document.documentElement as any;
-    try {
-      if (!document.fullscreenElement) {
-        if (docEl.requestFullscreen) {
-          docEl.requestFullscreen().catch(() => {});
-        } else if (docEl.webkitRequestFullscreen) {
-          docEl.webkitRequestFullscreen();
-        } else if (docEl.mozRequestFullScreen) {
-          docEl.mozRequestFullScreen();
-        } else if (docEl.msRequestFullscreen) {
-          docEl.msRequestFullscreen();
-        }
-      }
-    } catch (e) {
-      // Chặn và bỏ qua lỗi nếu trình duyệt khóa quyền tự động khởi chạy
-    }
 
-    // 2. Chạy ngay khi có bất kỳ tương tác người dùng đầu tiên nào (hợp lệ để lách chính sách bảo mật trình duyệt)
-    const autoFullscreenOnInteraction = () => {
-      if (!document.fullscreenElement) {
-        try {
-          if (docEl.requestFullscreen) {
-            docEl.requestFullscreen().catch(() => {});
-          } else if (docEl.webkitRequestFullscreen) {
-            docEl.webkitRequestFullscreen();
-          } else if (docEl.mozRequestFullScreen) {
-            docEl.mozRequestFullScreen();
-          } else if (docEl.msRequestFullscreen) {
-            docEl.msRequestFullscreen();
-          }
-        } catch (err) {
-          console.warn("Auto-fullscreen failed on interaction:", err);
-        }
-      }
-      // Dọn dẹp listener sau lần tương tác đầu tiên
-      cleanupListeners();
-    };
-
-    const cleanupListeners = () => {
-      window.removeEventListener('click', autoFullscreenOnInteraction);
-      window.removeEventListener('touchstart', autoFullscreenOnInteraction);
-      window.removeEventListener('mousedown', autoFullscreenOnInteraction);
-      window.removeEventListener('keydown', autoFullscreenOnInteraction);
-    };
-
-    window.addEventListener('click', autoFullscreenOnInteraction);
-    window.addEventListener('touchstart', autoFullscreenOnInteraction);
-    window.addEventListener('mousedown', autoFullscreenOnInteraction);
-    window.addEventListener('keydown', autoFullscreenOnInteraction);
-
-    return () => {
-      cleanupListeners();
-    };
-  }, []);
 
   const toggleFullscreen = () => {
     try {
