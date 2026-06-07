@@ -12,6 +12,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [simulateEmployee, setSimulateEmployee] = useState(false);
   const [slogan, setSlogan] = useState('3T Hội Tụ - Tân Phú Vươn Xa');
+  const [adminInitialTab, setAdminInitialTab] = useState<'users' | 'questions' | 'add_images' | 'qr' | 'stats' | 'encoding'>('users');
 
   // Check saved session in LocalStorage on startup
   useEffect(() => {
@@ -74,6 +75,40 @@ export default function App() {
     loadStartupData();
   }, []);
 
+  // Tự động kiểm tra và kích hoạt chế độ toàn màn hình để ẩn thanh địa chỉ trình duyệt khi có tương tác đầu tiên bất kỳ đâu trên ứng dụng
+  useEffect(() => {
+    const autoFullscreenOnAnyInteraction = () => {
+      // Trigger fullscreen on mobile and tablet scale window sizes to hide the browser address bars seamlessly
+      const isMobileOrTablet = window.innerWidth < 1024 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      if (isMobileOrTablet && !document.fullscreenElement) {
+        const docEl = document.documentElement as any;
+        try {
+          if (docEl.requestFullscreen) {
+            docEl.requestFullscreen().catch(() => {});
+          } else if (docEl.webkitRequestFullscreen) {
+            docEl.webkitRequestFullscreen();
+          } else if (docEl.mozRequestFullScreen) {
+            docEl.mozRequestFullScreen();
+          } else if (docEl.msRequestFullscreen) {
+            docEl.msRequestFullscreen();
+          }
+        } catch (err) {
+          console.warn("Auto-fullscreen failed:", err);
+        }
+      }
+      // Dọn dẹp listener sau lần tương tác đầu tiên
+      window.removeEventListener('click', autoFullscreenOnAnyInteraction);
+      window.removeEventListener('touchstart', autoFullscreenOnAnyInteraction);
+    };
+
+    window.addEventListener('click', autoFullscreenOnAnyInteraction);
+    window.addEventListener('touchstart', autoFullscreenOnAnyInteraction);
+    return () => {
+      window.removeEventListener('click', autoFullscreenOnAnyInteraction);
+      window.removeEventListener('touchstart', autoFullscreenOnAnyInteraction);
+    };
+  }, []);
+
   const handleLoginSuccess = (user: User) => {
     setCurrentUser(user);
     localStorage.setItem('3t_active_user', JSON.stringify(user));
@@ -133,16 +168,25 @@ export default function App() {
                   user={currentUser} 
                   onLogout={handleLogout} 
                   isAdminReview={true}
-                  onBackToAdmin={() => setSimulateEmployee(false)}
+                  onBackToAdmin={(tab) => {
+                    if (tab) {
+                      setAdminInitialTab(tab);
+                    }
+                    setSimulateEmployee(false);
+                  }}
                   slogan={slogan}
                 />
               ) : (
                 <AdminDashboard 
                   user={currentUser} 
                   onLogout={handleLogout} 
-                  onSimulateEmployee={() => setSimulateEmployee(true)}
+                  onSimulateEmployee={() => {
+                    setAdminInitialTab('users');
+                    setSimulateEmployee(true);
+                  }}
                   slogan={slogan}
                   onUpdateSlogan={handleUpdateSlogan}
+                  initialTab={adminInitialTab}
                 />
               )
             ) : currentUser.role === 'approver' ? (

@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { databaseService } from '../firebase';
-import { User, Question, QuizResult, BRANCHES, DEPARTMENTS } from '../types';
+import { User, Question, QuizResult, BRANCHES, DEPARTMENTS, CompanyMapping } from '../types';
 import { INITIAL_QUESTIONS } from '../data/mockQuestions';
 import { 
   Users, HelpCircle, ImagePlus, QrCode, AlertTriangle, 
   Trash2, Plus, Sparkles, LogOut, CheckCircle2, UserCheck, 
-  RefreshCcw, UserMinus, FileDown, Pencil, Lock
+  RefreshCcw, UserMinus, FileDown, Pencil, Lock, BarChart3,
+  Database, Building, Briefcase, Landmark, Home
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import StatsDashboard from './StatsDashboard';
 
 interface AdminDashboardProps {
   user: User;
@@ -15,25 +17,56 @@ interface AdminDashboardProps {
   onSimulateEmployee: () => void;
   slogan: string;
   onUpdateSlogan: (slogan: string) => void;
+  initialTab?: 'users' | 'questions' | 'add_images' | 'qr' | 'stats' | 'encoding';
 }
 
-export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slogan, onUpdateSlogan }: AdminDashboardProps) {
+export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slogan, onUpdateSlogan, initialTab }: AdminDashboardProps) {
   const [users, setUsers] = useState<User[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [results, setResults] = useState<QuizResult[]>([]);
   
-  const [activeTab, setActiveTab] = useState<'users' | 'questions' | 'add_images' | 'qr'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'questions' | 'add_images' | 'qr' | 'stats' | 'encoding'>('users');
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
 
   // States for Editing and Deleting Users
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void | Promise<void>;
+  } | null>(null);
+  const [editingMapping, setEditingMapping] = useState<{
+    type: 'company' | 'branch' | 'department';
+    coId: string;
+    brId?: string;
+    deptId?: string;
+    oldName: string;
+    newName: string;
+  } | null>(null);
   const [editName, setEditName] = useState('');
   const [editPhone, setEditPhone] = useState('');
   const [editEmployeeId, setEditEmployeeId] = useState('');
+  const [editCompany, setEditCompany] = useState('');
   const [editDepartment, setEditDepartment] = useState('');
   const [editBranch, setEditBranch] = useState('');
+  
+  // Dynamic Encoding management state
+  const [companyMappings, setCompanyMappings] = useState<CompanyMapping[]>([]);
+  const [selectedCoId, setSelectedCoId] = useState<string>('');
+  const [selectedBrId, setSelectedBrId] = useState<string>('');
+  
+  const [newCompanyName, setNewCompanyName] = useState('');
+  const [newBranchName, setNewBranchName] = useState('');
+  const [newDepartmentName, setNewDepartmentName] = useState('');
   const [editRole, setEditRole] = useState<'employee' | 'approver' | 'admin'>('employee');
   const [editStatus, setEditStatus] = useState<'approved' | 'pending' | 'rejected'>('pending');
   const [editPassword, setEditPassword] = useState('');
@@ -60,6 +93,15 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
 
       const allRes = await databaseService.getQuizResults();
       setResults(allRes);
+
+      const allMappings = await databaseService.getCompanyMappings();
+      setCompanyMappings(allMappings);
+      if (allMappings.length > 0 && !selectedCoId) {
+        setSelectedCoId(allMappings[0].id);
+        if (allMappings[0].branches.length > 0) {
+          setSelectedBrId(allMappings[0].branches[0].id);
+        }
+      }
     } catch (err) {
       console.error("Lỗi khi tải dữ liệu Admin:", err);
     } finally {
@@ -128,8 +170,31 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
     setEditName(targetUser.name || '');
     setEditPhone(targetUser.phone || '');
     setEditEmployeeId(targetUser.employeeId || '');
-    setEditDepartment(targetUser.department || '');
-    setEditBranch(targetUser.branch || '');
+    
+    // Normalize values to NFC and trim them
+    const userCo = (targetUser.company || 'TÂN PHÚ VIỆT NAM').trim().normalize('NFC');
+    const userBr = (targetUser.branch || '').trim().normalize('NFC');
+    const userDept = (targetUser.department || '').trim().normalize('NFC');
+
+    // Find closest matching company in mappings
+    const matchedCo = companyMappings.find(c => c.name.trim().normalize('NFC') === userCo) 
+      || companyMappings.find(c => c.name.trim().normalize('NFC').includes(userCo))
+      || companyMappings[0];
+
+    // Find legacy matched branch, or default to first branch
+    const matchedBr = matchedCo?.branches.find(b => b.name.trim().normalize('NFC') === userBr)
+      || matchedCo?.branches.find(b => b.name.trim().normalize('NFC').includes(userBr))
+      || matchedCo?.branches[0];
+
+    // Find legacy matched department, or default to first department
+    const matchedDept = matchedBr?.departments.find(d => d.name.trim().normalize('NFC') === userDept)
+      || matchedBr?.departments.find(d => d.name.trim().normalize('NFC').includes(userDept))
+      || matchedBr?.departments[0];
+
+    setEditCompany(matchedCo ? matchedCo.name : (targetUser.company || 'TÂN PHÚ VIỆT NAM'));
+    setEditBranch(matchedBr ? matchedBr.name : (targetUser.branch || ''));
+    setEditDepartment(matchedDept ? matchedDept.name : (targetUser.department || ''));
+
     setEditRole(targetUser.role || 'employee');
     setEditStatus(targetUser.status || 'pending');
     setEditPassword(targetUser.password || '123');
@@ -149,6 +214,7 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
         name: editName.trim(),
         phone: editPhone.trim(),
         employeeId: editEmployeeId.trim(),
+        company: editCompany,
         department: editDepartment,
         branch: editBranch,
         role: editRole,
@@ -174,6 +240,275 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
       await loadData();
     } catch (err) {
       setNotice({ type: 'error', msg: 'Có lỗi xảy ra khi xóa tài khoản CBNV.' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Encoding Management logic helpers
+  const handleAddCompany = async () => {
+    if (!newCompanyName.trim()) return;
+    const newCo: CompanyMapping = {
+      id: 'co_' + Math.random().toString(36).substring(2, 9),
+      name: newCompanyName.trim(),
+      branches: []
+    };
+    const updated = [...companyMappings, newCo];
+    try {
+      setLoading(true);
+      await databaseService.saveCompanyMappings(updated);
+      setCompanyMappings(updated);
+      setNewCompanyName('');
+      setSelectedCoId(newCo.id);
+      setNotice({ type: 'success', msg: `Đã thêm Công Ty Thành Viên "${newCo.name}" thành công!` });
+    } catch (err) {
+      setNotice({ type: 'error', msg: 'Có lỗi xảy ra khi thêm công ty thành viên.' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddBranch = async () => {
+    if (!newBranchName.trim() || !selectedCoId) return;
+    const updated = companyMappings.map(co => {
+      if (co.id === selectedCoId) {
+        return {
+          ...co,
+          branches: [
+            ...co.branches,
+            {
+              id: 'br_' + Math.random().toString(36).substring(2, 9),
+              name: newBranchName.trim(),
+              departments: []
+            }
+          ]
+        };
+      }
+      return co;
+    });
+    try {
+      setLoading(true);
+      await databaseService.saveCompanyMappings(updated);
+      setCompanyMappings(updated);
+      setNewBranchName('');
+      setNotice({ type: 'success', msg: `Đã thêm Chi nhánh / Văn phòng mới!` });
+    } catch (err) {
+      setNotice({ type: 'error', msg: 'Có lỗi xảy ra khi thêm chi nhánh.' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddDepartment = async () => {
+    if (!newDepartmentName.trim() || !selectedCoId || !selectedBrId) return;
+    const updated = companyMappings.map(co => {
+      if (co.id === selectedCoId) {
+        return {
+          ...co,
+          branches: co.branches.map(br => {
+            if (br.id === selectedBrId) {
+              return {
+                ...br,
+                departments: [
+                  ...br.departments,
+                  {
+                    id: 'dept_' + Math.random().toString(36).substring(2, 9),
+                    name: newDepartmentName.trim()
+                  }
+                ]
+              };
+            }
+            return br;
+          })
+        };
+      }
+      return co;
+    });
+    try {
+      setLoading(true);
+      await databaseService.saveCompanyMappings(updated);
+      setCompanyMappings(updated);
+      setNewDepartmentName('');
+      setNotice({ type: 'success', msg: `Đã thêm Bộ phận / Đơn vị mới!` });
+    } catch (err) {
+      setNotice({ type: 'error', msg: 'Có lỗi xảy ra khi thêm bộ phận.' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteCompanyMapping = (coId: string) => {
+    const co = companyMappings.find(c => c.id === coId);
+    if (!co) return;
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Xác nhận xóa Công ty',
+      message: `Bạn có chắc chắn muốn xóa Công ty "${co.name}" cùng tất cả Chi nhánh, Bộ phận trực thuộc? Hành động này không thể hoàn tác!`,
+      onConfirm: async () => {
+        const updated = companyMappings.filter(c => c.id !== coId);
+        try {
+          setLoading(true);
+          await databaseService.saveCompanyMappings(updated);
+          setCompanyMappings(updated);
+          if (selectedCoId === coId) {
+            setSelectedCoId('');
+            setSelectedBrId('');
+          }
+          setNotice({ type: 'success', msg: `Đã xóa Công ty "${co.name}" thành công.` });
+        } catch (err) {
+          setNotice({ type: 'error', msg: 'Có lỗi xảy ra khi xóa.' });
+        } finally {
+          setLoading(false);
+          setConfirmDialog(null);
+        }
+      }
+    });
+  };
+
+  const handleDeleteBranchMapping = (coId: string, brId: string) => {
+    const co = companyMappings.find(c => c.id === coId);
+    const br = co?.branches.find(b => b.id === brId);
+    if (!co || !br) return;
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Xác nhận xóa Chi nhánh',
+      message: `Bạn có chắc chắn muốn xóa Chi nhánh "${br.name}" cùng tất cả Bộ phận trực thuộc? Hành động này không thể hoàn tác!`,
+      onConfirm: async () => {
+        const updated = companyMappings.map(c => {
+          if (c.id === coId) {
+            return {
+              ...c,
+              branches: c.branches.filter(b => b.id !== brId)
+            };
+          }
+          return c;
+        });
+        try {
+          setLoading(true);
+          await databaseService.saveCompanyMappings(updated);
+          setCompanyMappings(updated);
+          if (selectedBrId === brId) {
+            setSelectedBrId('');
+          }
+          setNotice({ type: 'success', msg: `Đã xóa Chi nhánh "${br.name}".` });
+        } catch (err) {
+          setNotice({ type: 'error', msg: 'Có lỗi xảy ra khi xóa.' });
+        } finally {
+          setLoading(false);
+          setConfirmDialog(null);
+        }
+      }
+    });
+  };
+
+  const handleDeleteDepartmentMapping = (coId: string, brId: string, deptId: string) => {
+    const co = companyMappings.find(c => c.id === coId);
+    const br = co?.branches.find(b => b.id === brId);
+    const dept = br?.departments.find(d => d.id === deptId);
+    if (!co || !br || !dept) return;
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Xác nhận xóa Bộ phận',
+      message: `Bạn có chắc chắn muốn xóa Bộ phận/Đơn vị "${dept.name}"? Hành động này không thể hoàn tác!`,
+      onConfirm: async () => {
+        const updated = companyMappings.map(c => {
+          if (c.id === coId) {
+            return {
+              ...c,
+              branches: c.branches.map(b => {
+                if (b.id === brId) {
+                  return {
+                    ...b,
+                    departments: b.departments.filter(d => d.id !== deptId)
+                  };
+                }
+                return b;
+              })
+            };
+          }
+          return c;
+        });
+        try {
+          setLoading(true);
+          await databaseService.saveCompanyMappings(updated);
+          setCompanyMappings(updated);
+          setNotice({ type: 'success', msg: `Đã xóa Bộ phận "${dept.name}".` });
+        } catch (err) {
+          setNotice({ type: 'error', msg: 'Có lỗi xảy ra khi xóa.' });
+        } finally {
+          setLoading(false);
+          setConfirmDialog(null);
+        }
+      }
+    });
+  };
+
+  const handleEditMapping = async () => {
+    if (!editingMapping || !editingMapping.newName.trim()) return;
+    const { type, coId, brId, deptId, oldName, newName } = editingMapping;
+    const trimmedNewName = newName.trim();
+    if (trimmedNewName === oldName) {
+      setEditingMapping(null);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // 1. Update company mappings array structure
+      const updated = companyMappings.map(co => {
+        if (type === 'company' && co.id === coId) {
+          return { ...co, name: trimmedNewName };
+        }
+        if (co.id === coId) {
+          return {
+            ...co,
+            branches: co.branches.map(br => {
+              if (type === 'branch' && br.id === brId) {
+                return { ...br, name: trimmedNewName };
+              }
+              if (br.id === brId) {
+                return {
+                  ...br,
+                  departments: br.departments.map(dept => {
+                    if (type === 'department' && dept.id === deptId) {
+                      return { ...dept, name: trimmedNewName };
+                    }
+                    return dept;
+                  })
+                };
+              }
+              return br;
+            })
+          };
+        }
+        return co;
+      });
+
+      // Save structural change
+      await databaseService.saveCompanyMappings(updated);
+      setCompanyMappings(updated);
+
+      // Extract details for related profile synchronization
+      const currentCo = companyMappings.find(c => c.id === coId);
+      const currentBr = currentCo?.branches.find(b => b.id === brId);
+
+      const extra = {
+        companyName: currentCo?.name || '',
+        branchName: currentBr?.name || ''
+      };
+
+      // 2. Sync profile fields & quiz results under the cloud or local db
+      const syncRes = await (databaseService as any).syncMappingNames(type, oldName, trimmedNewName, extra);
+
+      setNotice({ 
+        type: 'success', 
+        msg: `Đã chỉnh sửa thành công và đồng bộ cho ${syncRes.usersUpdated} tài khoản, ${syncRes.resultsUpdated} kết quả liên quan.` 
+      });
+      setEditingMapping(null);
+      await loadData();
+    } catch (err) {
+      console.error(err);
+      setNotice({ type: 'error', msg: 'Có lỗi xảy ra khi cập nhật và đồng bộ liên kết.' });
     } finally {
       setLoading(false);
     }
@@ -354,29 +689,53 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
       return;
     }
 
+    // Chuẩn hóa và làm sạch dữ liệu câu hỏi trước khi lưu vào Firestore để tránh lỗi unsupported field value: undefined
+    const cleanQuestions: Question[] = validQuestions.map(q => {
+      const cleanQ: Question = {
+        id: q.id,
+        text: q.text,
+        options: q.options,
+        correctAnswerIndex: q.correctAnswerIndex,
+        explanation: q.explanation
+      };
+      if (q.imageUrl) {
+        cleanQ.imageUrl = q.imageUrl;
+      }
+      return cleanQ;
+    });
+
     try {
       setLoading(true);
-      await databaseService.saveQuestions(validQuestions);
-      setNotice({ type: 'success', msg: `Đã lưu thành công ${validQuestions.length} câu hỏi mới vào hệ thống!` });
+      await databaseService.saveQuestions(cleanQuestions);
+      setNotice({ type: 'success', msg: `Đã lưu thành công ${cleanQuestions.length} câu hỏi mới vào hệ thống!` });
       setExtractedQuestions([]);
       setSelectedImages([]);
       await loadData();
     } catch (err) {
+      console.error("Lỗi lưu câu hỏi bóc tách:", err);
       setNotice({ type: 'error', msg: 'Có lỗi xảy ra khi lưu ngân hàng đề.' });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDeleteQuestion = async (id: string) => {
-    if (!window.confirm("Bạn có chắc chắn muốn xóa câu hỏi này khỏi hệ thống rèn luyện?")) return;
-    try {
-      await databaseService.deleteQuestion(id);
-      setNotice({ type: 'success', msg: 'Đã xóa câu hỏi khỏi cơ sở dữ liệu.' });
-      await loadData();
-    } catch (err) {
-      setNotice({ type: 'error', msg: 'Xóa câu hỏi thất bại.' });
-    }
+  const handleDeleteQuestion = (id: string) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Xác nhận xóa câu hỏi',
+      message: "Bạn có chắc chắn muốn xóa câu hỏi này khỏi hệ thống rèn luyện?",
+      onConfirm: async () => {
+        try {
+          await databaseService.deleteQuestion(id);
+          setNotice({ type: 'success', msg: 'Đã xóa câu hỏi khỏi cơ sở dữ liệu.' });
+          await loadData();
+        } catch (err) {
+          setNotice({ type: 'error', msg: 'Xóa câu hỏi thất bại.' });
+        } finally {
+          setConfirmDialog(null);
+        }
+      }
+    });
   };
 
   return (
@@ -392,8 +751,8 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
               <h1 className="text-xl font-sans font-bold text-gray-900 leading-none">
                 <span translate="no" className="notranslate">Quản Trị Tối Cao: Lê Nhật Trường</span>
               </h1>
-              <p className="text-xs text-[#1971C2] mt-1 font-semibold">
-                <span translate="no" className="notranslate">Chủ quản hệ thống học tập tập đoàn 3T rèn luyện</span>
+              <p className="text-xs text-[#1971C2] mt-1 font-semibold flex items-center gap-1.5">
+                <span translate="no" className="notranslate">Trưởng Phòng Quản lý Chất Lượng (TP.QLCL)</span>
               </p>
             </div>
           </div>
@@ -508,6 +867,24 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
             <QrCode className="h-4 w-4" />
             <span translate="no" className="notranslate">Mã QR "Chiến" Ngay</span>
           </button>
+          <button
+            onClick={() => { setActiveTab('stats'); setNotice(null); }}
+            className={`pb-3 px-4 text-sm font-medium border-b-2 transition-all flex items-center gap-2 ${
+              activeTab === 'stats' ? 'border-[#1971C2] text-[#1971C2] font-bold' : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <BarChart3 className="h-4 w-4" />
+            <span translate="no" className="notranslate">Trang Thống Kê</span>
+          </button>
+          <button
+            onClick={() => { setActiveTab('encoding'); setNotice(null); }}
+            className={`pb-3 px-4 text-sm font-medium border-b-2 transition-all flex items-center gap-2 ${
+              activeTab === 'encoding' ? 'border-[#1971C2] text-[#1971C2] font-bold' : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <Database className="h-4 w-4" />
+            <span translate="no" className="notranslate">Trang Mã Hóa</span>
+          </button>
         </div>
 
         {/* Viewport Render panels */}
@@ -523,17 +900,26 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
               className="space-y-6"
             >
               <div className="bg-white border border-gray-150 rounded-md shadow-sm overflow-hidden">
-                <div className="p-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
+                <div className="p-4 border-b border-gray-100 bg-gray-50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
                     <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest"><span translate="no" className="notranslate">Danh sách CBNV đăng ký hệ thống</span></h3>
                     <p className="text-xs text-gray-400 mt-0.5"><span translate="no" className="notranslate">Với tư cách Admin tối cao, bạn có thể phê duyệt quyền vào sảnh học tập cho CBNV quốc gia.</span></p>
                   </div>
-                  <button 
-                    onClick={loadData}
-                    className="p-1.5 border border-gray-200 hover:bg-gray-100 rounded-md text-gray-500 transition-all"
-                  >
-                    <RefreshCcw className="h-4 w-4" />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={onSimulateEmployee}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-green-600 hover:bg-green-700 rounded-md shadow-xs transition-all cursor-pointer active:scale-95"
+                    >
+                      <Home className="h-3.5 w-3.5" />
+                      <span>VỀ TRANG CHỦ 3T (ĐIỆN THOẠI)</span>
+                    </button>
+                    <button 
+                      onClick={loadData}
+                      className="p-1.5 border border-gray-200 hover:bg-gray-100 rounded-md text-gray-500 transition-all"
+                    >
+                      <RefreshCcw className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
 
                 <div className="overflow-x-auto">
@@ -562,8 +948,14 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
                           seenKeys.add(uniqueKey);
                           return true;
                         });
-                        // 2. Sort PENDING (or pending) status first to the top
+                        // 2. Sort: Admin Lê Nhật Trường (supreme admin) first, then pending requests, then other users
                         const sorted = [...deduped].sort((a, b) => {
+                          const isALNT = (a.name || '').trim().normalize('NFC').toLowerCase().includes('lê nhật trường') || a.phone?.trim() === '0907767304';
+                          const isBLNT = (b.name || '').trim().normalize('NFC').toLowerCase().includes('lê nhật trường') || b.phone?.trim() === '0907767304';
+                          
+                          if (isALNT && !isBLNT) return -1;
+                          if (!isALNT && isBLNT) return 1;
+
                           const aPending = a.status?.toLowerCase() === 'pending';
                           const bPending = b.status?.toLowerCase() === 'pending';
                           if (aPending && !bPending) return -1;
@@ -710,6 +1102,23 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
               exit={{ opacity: 0, y: -10 }}
               className="space-y-6"
             >
+              <div className="bg-white border border-gray-150 rounded-md p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs font-sans">
+                <div>
+                  <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest flex items-center gap-1.5">
+                    <HelpCircle className="h-4 w-4 text-blue-600" />
+                    <span>Ngân Hàng Đề Thủ Công</span>
+                  </h3>
+                  <p className="text-xs text-gray-400 mt-0.5">Quản lý và điều chỉnh danh sách câu hỏi trắc nghiệm 3T.</p>
+                </div>
+                <button
+                  onClick={onSimulateEmployee}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-green-600 hover:bg-green-700 rounded-md shadow-xs transition-all cursor-pointer active:scale-95 whitespace-nowrap"
+                >
+                  <Home className="h-3.5 w-3.5" />
+                  <span>VỀ TRANG CHỦ 3T (ĐIỆN THOẠI)</span>
+                </button>
+              </div>
+
               {/* Seed controller help */}
               {questions.length === 0 && (
                 <div className="bg-blue-50 border border-blue-100 p-6 rounded-md flex justify-between items-center gap-4">
@@ -854,6 +1263,23 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
               exit={{ opacity: 0, y: -10 }}
               className="space-y-6"
             >
+              <div className="bg-white border border-gray-150 rounded-md p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                <div>
+                  <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest flex items-center gap-1.5 font-sans">
+                    <ImagePlus className="h-4 w-4 text-purple-650" />
+                    <span>Trích xuất Câu Hỏi AI (Hình Ảnh)</span>
+                  </h3>
+                  <p className="text-xs text-gray-400 mt-0.5">Tải lên hình ảnh chụp đề thi để bóc tách tự động bằng AI siêu tốc.</p>
+                </div>
+                <button
+                  onClick={onSimulateEmployee}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-green-600 hover:bg-green-700 rounded-md shadow-xs transition-all cursor-pointer active:scale-95 whitespace-nowrap"
+                >
+                  <Home className="h-3.5 w-3.5" />
+                  <span>VỀ TRANG CHỦ 3T (ĐIỆN THOẠI)</span>
+                </button>
+              </div>
+
               {/* Image Input field Box */}
               <div className="bg-white border-2 border-dashed border-gray-200 rounded-md p-8 text-center space-y-4">
                 <div className="bg-blue-50 text-blue-600 h-12 w-12 rounded-full flex items-center justify-center mx-auto border border-blue-100">
@@ -985,9 +1411,27 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="max-w-md mx-auto bg-white border border-gray-150 rounded-md p-8 text-center space-y-6 shadow-sm"
+              className="space-y-6"
             >
-              <div className="space-y-2">
+              <div className="bg-white border border-gray-150 rounded-md p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs font-sans">
+                <div>
+                  <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest flex items-center gap-1.5">
+                    <QrCode className="h-4 w-4 text-emerald-600" />
+                    <span>Mã QR "Chiến" Ngay</span>
+                  </h3>
+                  <p className="text-xs text-gray-400 mt-0.5">Xuất bản mã QR để CBNV quét nhanh bằng điện thoại và làm bài trắc nghiệm.</p>
+                </div>
+                <button
+                  onClick={onSimulateEmployee}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-green-600 hover:bg-green-700 rounded-md shadow-xs transition-all cursor-pointer active:scale-95 whitespace-nowrap"
+                >
+                  <Home className="h-3.5 w-3.5" />
+                  <span>VỀ TRANG CHỦ 3T (ĐIỆN THOẠI)</span>
+                </button>
+              </div>
+
+              <div className="max-w-md mx-auto bg-white border border-gray-150 rounded-md p-8 text-center space-y-6 shadow-sm">
+                <div className="space-y-2">
                 <h3 className="text-lg font-bold text-gray-900"><span translate="no" className="notranslate">Mã QR Truy Cập Nhanh "Chiến Ngay"</span></h3>
                 <p className="text-xs text-gray-500 leading-relaxed">
                   <span translate="no" className="notranslate">Lưu trữ hoặc in mã QR này treo ở bảng tin, phòng sản xuất hoặc cửa phòng làm việc để rèn luyện tinh thần 3T hàng ngày.</span>
@@ -1015,6 +1459,298 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
                 <FileDown className="h-4 w-4" />
                 <span translate="no" className="notranslate">In / Xuất Bản Mã QR Bảng Tin</span>
               </button>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Statistics View */}
+          {activeTab === 'stats' && (
+            <motion.div
+              key="stats_view"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="space-y-6"
+            >
+              <StatsDashboard 
+                users={users} 
+                results={results} 
+                onRefresh={loadData} 
+                onBackToHome={onSimulateEmployee}
+              />
+            </motion.div>
+          )}
+
+          {/* Encoding Management Panel View */}
+          {activeTab === 'encoding' && (
+            <motion.div
+              key="encoding_view"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="space-y-6"
+            >
+              <div className="bg-white border border-gray-150 rounded-md p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs font-sans">
+                <div>
+                  <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest flex items-center gap-1.5">
+                    <Database className="h-4 w-4 text-[#1971C2]" />
+                    <span>Trang Mã Hóa Dữ Liệu</span>
+                  </h3>
+                  <p className="text-xs text-gray-400 mt-0.5">Quản lý các danh mục mã hóa về công ty thành viên, phòng ban và chi nhánh.</p>
+                </div>
+                <button
+                  onClick={onSimulateEmployee}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-green-600 hover:bg-green-700 rounded-md shadow-xs transition-all cursor-pointer active:scale-95 whitespace-nowrap"
+                >
+                  <Home className="h-3.5 w-3.5" />
+                  <span>VỀ TRANG CHỦ 3T (ĐIỆN THOẠI)</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 font-sans">
+                
+                {/* 1. Companies Panel */}
+                <div className="bg-white border border-gray-150 rounded-md shadow-sm p-5 space-y-4">
+                  <div className="flex items-center gap-2 border-b border-gray-100 pb-3">
+                    <Building className="h-5 w-5 text-[#1971C2]" />
+                    <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider">1. CÔNG TY THÀNH VIÊN</h3>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Thêm Công ty mới..."
+                      value={newCompanyName}
+                      onChange={(e) => setNewCompanyName(e.target.value)}
+                      className="flex-1 border border-gray-250 rounded px-2.5 py-1.5 text-xs outline-none focus:border-[#1971C2]"
+                    />
+                    <button
+                      onClick={handleAddCompany}
+                      className="bg-[#1971C2] hover:bg-opacity-90 text-white rounded px-3 py-1.5 text-xs font-bold transition-all flex items-center justify-center cursor-pointer"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  <div className="space-y-1.5 max-h-[350px] overflow-y-auto pr-1">
+                    {companyMappings.map((co) => (
+                      <div
+                        key={co.id}
+                        onClick={() => {
+                          setSelectedCoId(co.id);
+                          if (co.branches.length > 0) {
+                            setSelectedBrId(co.branches[0].id);
+                          } else {
+                            setSelectedBrId('');
+                          }
+                        }}
+                        className={`p-3 rounded-md border text-xs flex justify-between items-center cursor-pointer transition-all ${
+                          selectedCoId === co.id
+                            ? 'bg-blue-50 border-blue-300 text-blue-900 font-bold'
+                            : 'bg-gray-50/50 border-gray-200 text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        <span className="truncate">{co.name}</span>
+                        <div className="flex items-center gap-0.5">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingMapping({
+                                type: 'company',
+                                coId: co.id,
+                                oldName: co.name,
+                                newName: co.name
+                              });
+                            }}
+                            className="text-[#1971C2] hover:text-blue-700 p-1.5 rounded hover:bg-blue-50 cursor-pointer"
+                            title="Sửa"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteCompanyMapping(co.id);
+                            }}
+                            className="text-red-500 hover:text-red-700 p-1.5 rounded hover:bg-red-50 cursor-pointer"
+                            title="Xóa"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    {companyMappings.length === 0 && (
+                      <p className="text-xs text-gray-400 italic text-center py-4">Chưa có công ty thành viên nào.</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* 2. Branches Panel */}
+                <div className="bg-white border border-gray-150 rounded-md shadow-sm p-5 space-y-4">
+                  <div className="flex items-center gap-2 border-b border-gray-100 pb-3">
+                    <Landmark className="h-5 w-5 text-[#1971C2]" />
+                    <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider">2. CHI NHÁNH / VĂN PHÒNG ĐẠI DIỆN</h3>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Thêm Chi nhánh/VPĐD..."
+                      value={newBranchName}
+                      disabled={!selectedCoId}
+                      onChange={(e) => setNewBranchName(e.target.value)}
+                      className="flex-1 border border-gray-250 rounded px-2.5 py-1.5 text-xs outline-none focus:border-[#1971C2] disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    />
+                    <button
+                      onClick={handleAddBranch}
+                      disabled={!selectedCoId}
+                      className="bg-[#1971C2] hover:bg-opacity-90 text-white rounded px-3 py-1.5 text-xs font-bold transition-all disabled:opacity-50 flex items-center justify-center cursor-pointer"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  <div className="space-y-1.5 max-h-[350px] overflow-y-auto pr-1">
+                    {(() => {
+                      const activeCo = companyMappings.find(c => c.id === selectedCoId);
+                      if (!activeCo) return <p className="text-xs text-gray-400 italic text-center py-4">Vui lòng chọn 1 Công ty thành viên trước.</p>;
+                      
+                      return (
+                        <>
+                          <div className="px-1 pb-1.5 mb-1.5 border-b border-dashed border-gray-100">
+                            <span className="text-[10px] text-gray-400 uppercase font-bold">Của công ty: {activeCo.name}</span>
+                          </div>
+                          {activeCo.branches.map((br) => (
+                            <div
+                              key={br.id}
+                              onClick={() => setSelectedBrId(br.id)}
+                              className={`p-3 rounded-md border text-xs flex justify-between items-center cursor-pointer transition-all ${
+                                selectedBrId === br.id
+                                  ? 'bg-blue-50 border-blue-300 text-blue-900 font-bold'
+                                  : 'bg-gray-50/50 border-gray-200 text-gray-700 hover:bg-gray-50'
+                              }`}
+                            >
+                              <span className="truncate">{br.name}</span>
+                              <div className="flex items-center gap-0.5">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setEditingMapping({
+                                      type: 'branch',
+                                      coId: selectedCoId,
+                                      brId: br.id,
+                                      oldName: br.name,
+                                      newName: br.name
+                                    });
+                                  }}
+                                  className="text-[#1971C2] hover:text-blue-700 p-1.5 rounded hover:bg-blue-50 cursor-pointer"
+                                  title="Sửa"
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteBranchMapping(selectedCoId, br.id);
+                                  }}
+                                  className="text-red-500 hover:text-red-700 p-1.5 rounded hover:bg-red-50 cursor-pointer"
+                                  title="Xóa"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                          {activeCo.branches.length === 0 && (
+                            <p className="text-xs text-gray-400 italic text-center py-4">Chưa có Chi nhánh nào dưới Công ty này.</p>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+
+                {/* 3. Departments Panel */}
+                <div className="bg-white border border-gray-150 rounded-md shadow-sm p-5 space-y-4">
+                  <div className="flex items-center gap-2 border-b border-gray-100 pb-3">
+                    <Briefcase className="h-5 w-5 text-[#1971C2]" />
+                    <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider">3. BỘ PHẬN / ĐƠN VỊ</h3>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Thêm Bộ phận / Đơn vị..."
+                      value={newDepartmentName}
+                      disabled={!selectedCoId || !selectedBrId}
+                      onChange={(e) => setNewDepartmentName(e.target.value)}
+                      className="flex-1 border border-gray-250 rounded px-2.5 py-1.5 text-xs outline-none focus:border-[#1971C2] disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    />
+                    <button
+                      onClick={handleAddDepartment}
+                      disabled={!selectedCoId || !selectedBrId}
+                      className="bg-[#1971C2] hover:bg-opacity-90 text-white rounded px-3 py-1.5 text-xs font-bold transition-all disabled:opacity-50 flex items-center justify-center cursor-pointer"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  <div className="space-y-1.5 max-h-[350px] overflow-y-auto pr-1">
+                    {(() => {
+                      const activeCo = companyMappings.find(c => c.id === selectedCoId);
+                      const activeBr = activeCo?.branches.find(b => b.id === selectedBrId);
+                      if (!activeCo || !activeBr) return <p className="text-xs text-gray-400 italic text-center py-4">Vui lòng chọn 1 Chi nhánh/VPĐD trước.</p>;
+                      
+                      return (
+                        <>
+                          <div className="px-1 pb-1.5 mb-1.5 border-b border-dashed border-gray-100 flex flex-col gap-0.5">
+                            <span className="text-[10px] text-gray-400 uppercase font-bold truncate text-ellipsis">Của Công ty: {activeCo.name}</span>
+                            <span className="text-[10px] text-gray-400 uppercase font-bold truncate text-ellipsis">Chi nhánh: {activeBr.name}</span>
+                          </div>
+                          {activeBr.departments.map((dept) => (
+                            <div
+                              key={dept.id}
+                              className="p-3 rounded-md border border-gray-200 bg-gray-50/50 text-gray-700 text-xs flex justify-between items-center transition-all hover:bg-gray-50"
+                            >
+                              <span className="truncate">{dept.name}</span>
+                              <div className="flex items-center gap-0.5">
+                                <button
+                                  onClick={() => {
+                                    setEditingMapping({
+                                      type: 'department',
+                                      coId: selectedCoId,
+                                      brId: selectedBrId,
+                                      deptId: dept.id,
+                                      oldName: dept.name,
+                                      newName: dept.name
+                                    });
+                                  }}
+                                  className="text-[#1971C2] hover:text-blue-700 p-1.5 rounded hover:bg-blue-50 cursor-pointer animate-none"
+                                  title="Sửa"
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteDepartmentMapping(selectedCoId, selectedBrId, dept.id)}
+                                  className="text-red-500 hover:text-red-700 p-1.5 rounded hover:bg-red-50 cursor-pointer animate-none"
+                                  title="Xóa"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                          {activeBr.departments.length === 0 && (
+                            <p className="text-xs text-gray-400 italic text-center py-4">Chưa có Bộ phận nào dưới Chi nhánh này.</p>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+
+              </div>
             </motion.div>
           )}
 
@@ -1050,6 +1786,108 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
                 className="px-3 py-1.5 bg-red-650 hover:bg-red-700 text-white rounded-md text-xs font-bold transition-all shadow-xs"
               >
                 <span translate="no" className="notranslate">Xác nhận Xóa</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Dynamic Action Confirmation Drawer/Overlay Modal */}
+      {confirmDialog && confirmDialog.isOpen && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white rounded-lg border border-gray-150 max-w-sm w-full p-6 shadow-xl space-y-4">
+            <div className="flex items-center gap-3 text-red-655 font-sans">
+              <div className="p-2 bg-red-50 rounded-full">
+                <AlertTriangle className="h-6 w-6 text-red-600" />
+              </div>
+              <h3 className="text-base font-bold text-gray-900">
+                <span translate="no" className="notranslate">{confirmDialog.title}</span>
+              </h3>
+            </div>
+            
+            <p className="text-xs text-gray-650 leading-relaxed font-sans font-normal">
+              <span translate="no" className="notranslate">{confirmDialog.message}</span>
+            </p>
+
+            <div className="flex justify-end gap-2.5 pt-2 font-sans">
+              <button
+                type="button"
+                onClick={() => setConfirmDialog(null)}
+                className="px-3 py-1.5 bg-gray-50 hover:bg-gray-150 border border-gray-250 rounded-md text-xs font-bold text-gray-655 transition-colors cursor-pointer"
+              >
+                <span translate="no" className="notranslate">Hủy bỏ</span>
+              </button>
+              <button
+                type="button"
+                onClick={confirmDialog.onConfirm}
+                className="px-3 py-1.5 bg-red-650 hover:bg-red-700 text-white rounded-md text-xs font-bold transition-all shadow-xs cursor-pointer"
+              >
+                <span translate="no" className="notranslate">Xác nhận</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Organization Mapping Modal */}
+      {editingMapping && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-lg border border-gray-150 max-w-sm w-full p-6 shadow-xl space-y-4">
+            <div className="flex items-center gap-3 text-blue-600 font-sans">
+              <div className="p-2 bg-blue-50 rounded-full">
+                <Pencil className="h-6 w-6 text-[#1971C2]" />
+              </div>
+              <h3 className="text-base font-bold text-gray-900">
+                <span>
+                  {editingMapping.type === 'company' && 'Sửa Tên Công Ty'}
+                  {editingMapping.type === 'branch' && 'Sửa Tên Chi Nhánh'}
+                  {editingMapping.type === 'department' && 'Sửa Tên Bộ Phận'}
+                </span>
+              </h3>
+            </div>
+            
+            <div className="space-y-3 font-sans text-xs">
+              <div className="space-y-1">
+                <label className="text-[10px] text-gray-400 uppercase font-bold">Tên cũ:</label>
+                <p className="p-2.5 bg-gray-50 border border-gray-200 rounded text-gray-600 font-medium break-words">
+                  {editingMapping.oldName}
+                </p>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] text-gray-400 uppercase font-bold">Tên mới:</label>
+                <input
+                  type="text"
+                  value={editingMapping.newName}
+                  onChange={(e) => setEditingMapping(prev => prev ? { ...prev, newName: e.target.value } : null)}
+                  placeholder="Nhập tên mới..."
+                  className="w-full border border-gray-250 rounded px-3 py-2 text-xs outline-none focus:border-[#1971C2] font-medium"
+                />
+              </div>
+
+              <div className="text-[11px] text-amber-700 leading-relaxed bg-amber-50 rounded p-2.5 border border-amber-100 flex gap-1.5">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 self-start mt-0.5" />
+                <span>
+                  <strong>Đồng bộ tự động:</strong> Tên mới sẽ cập nhật trực tiếp sơ đồ tổ chức, đồng bộ toàn bộ tài khoản CBNV và lịch sử làm bài liên quan tức thì.
+                </span>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2.5 pt-2 font-sans">
+              <button
+                type="button"
+                onClick={() => setEditingMapping(null)}
+                className="px-3 py-1.5 bg-gray-50 hover:bg-gray-150 border border-gray-250 rounded-md text-xs font-bold text-gray-650 transition-colors cursor-pointer"
+              >
+                <span>Hủy bỏ</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleEditMapping}
+                disabled={!editingMapping.newName.trim() || editingMapping.newName.trim() === editingMapping.oldName}
+                className="px-3 py-1.5 bg-[#1971C2] hover:bg-opacity-95 disabled:opacity-50 text-white rounded-md text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center justify-center"
+              >
+                <span>Lưu thay đổi</span>
               </button>
             </div>
           </div>
@@ -1121,27 +1959,65 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
               </div>
 
               <div className="space-y-1.5">
-                <label className="block text-gray-750 font-bold"><span translate="no" className="notranslate">Thuộc Chi nhánh</span></label>
+                <label className="block text-gray-750 font-bold"><span translate="no" className="notranslate">Công Ty Thành Viên</span></label>
                 <select
-                  value={editBranch}
-                  onChange={(e) => setEditBranch(e.target.value)}
+                  value={editCompany}
+                  onChange={(e) => {
+                    const coName = e.target.value;
+                    setEditCompany(coName);
+                    const co = companyMappings.find(m => m.name.trim().normalize('NFC') === coName.trim().normalize('NFC'));
+                    if (co && co.branches.length > 0) {
+                      setEditBranch(co.branches[0].name);
+                      if (co.branches[0].departments.length > 0) {
+                        setEditDepartment(co.branches[0].departments[0].name);
+                      } else {
+                        setEditDepartment('');
+                      }
+                    } else {
+                      setEditBranch('');
+                      setEditDepartment('');
+                    }
+                  }}
                   className="w-full border border-gray-200 rounded px-3 py-2 text-xs outline-none focus:border-[#1971C2] bg-white text-gray-800"
                 >
-                  {BRANCHES.map(b => (
-                    <option key={b} value={b} translate="no" className="notranslate">{b}</option>
+                  {companyMappings.map(co => (
+                    <option key={co.id} value={co.name}>{co.name}</option>
                   ))}
                 </select>
               </div>
 
               <div className="space-y-1.5">
-                <label className="block text-gray-750 font-bold"><span translate="no" className="notranslate">Thuộc Bộ Phận</span></label>
+                <label className="block text-gray-750 font-bold"><span translate="no" className="notranslate">CHI NHÁNH/ VĂN PHÒNG ĐẠI DIỆN</span></label>
+                <select
+                  value={editBranch}
+                  onChange={(e) => {
+                    const brName = e.target.value;
+                    setEditBranch(brName);
+                    const co = companyMappings.find(m => m.name.trim().normalize('NFC') === editCompany.trim().normalize('NFC'));
+                    const br = co?.branches.find(b => b.name.trim().normalize('NFC') === brName.trim().normalize('NFC'));
+                    if (br && br.departments.length > 0) {
+                      setEditDepartment(br.departments[0].name);
+                    } else {
+                      setEditDepartment('');
+                    }
+                  }}
+                  className="w-full border border-gray-200 rounded px-3 py-2 text-xs outline-none focus:border-[#1971C2] bg-white text-gray-800"
+                >
+                  {(companyMappings.find(m => m.name.trim().normalize('NFC') === editCompany.trim().normalize('NFC'))?.branches || []).map(b => (
+                    <option key={b.id} value={b.name}>{b.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-gray-750 font-bold"><span translate="no" className="notranslate">BỘ PHẬN/ ĐƠN VỊ</span></label>
                 <select
                   value={editDepartment}
                   onChange={(e) => setEditDepartment(e.target.value)}
                   className="w-full border border-gray-200 rounded px-3 py-2 text-xs outline-none focus:border-[#1971C2] bg-white text-gray-800"
                 >
-                  {DEPARTMENTS.map(d => (
-                    <option key={d} value={d} translate="no" className="notranslate">{d}</option>
+                  {(companyMappings.find(m => m.name.trim().normalize('NFC') === editCompany.trim().normalize('NFC'))?.branches.find(b => b.name.trim().normalize('NFC') === editBranch.trim().normalize('NFC'))?.departments || []).map(d => (
+                    <option key={d.id} value={d.name}>{d.name}</option>
                   ))}
                 </select>
               </div>

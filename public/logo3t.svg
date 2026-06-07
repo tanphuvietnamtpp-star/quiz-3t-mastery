@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" style="background: transparent;">
+  <defs>
+    <!-- Background Gradient: Deep blue to dark midnight blue -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0B3A60" />
+      <stop offset="100%" stop-color="#051C30" />
+    </linearGradient>
+
+    <!-- Glossy reflection overlay -->
+    <linearGradient id="glassGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.15" />
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0.0" />
+    </linearGradient>
+
+    <!-- Drop Shadow for Letters -->
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="3" dy="6" stdDeviation="5" flood-color="#000000" flood-opacity="0.4" />
+    </filter>
+
+    <!-- Glowing Effect for the legendary "3" -->
+    <filter id="glow3" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Outer Rounded Container (Perfectly fits mobile launcher grids) -->
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)" />
+
+  <!-- Diagonal gloss highlight -->
+  <path d="M 0,0 L 512,0 L 512,180 L 0,320 Z" fill="url(#glassGrad)" pointer-events="none" />
+
+  <!-- Corner shine -->
+  <path d="M 0,0 L 150,0 Q 0,150 0,0 Z" fill="#ffffff" opacity="0.08" />
+
+  <!-- Content Group -->
+  <g transform="translate(0, 0)">
+    <!-- 3T Typography Group centered mathematically -->
+    <text x="50%" y="64%" 
+          font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" 
+          font-weight="900" 
+          font-size="285" 
+          text-anchor="middle" 
+          letter-spacing="-14" 
+          filter="url(#shadow)">
+      <!-- Orange Glowing legendary "3" -->
+      <tspan fill="#E8590C" filter="url(#glow3)">3</tspan>
+      <!-- Solid White "T" -->
+      <tspan fill="#FFFFFF" dx="-4">T</tspan>
+    </text>
+
+    <!-- Subtle elegant subtext explaining "Quiz 3T" -->
+    <text x="50%" y="82%" 
+          font-family="system-ui, -apple-system, sans-serif" 
+          font-weight="700" 
+          font-size="28" 
+          fill="#3BC9DB" 
+          letter-spacing="5" 
+          text-anchor="middle" 
+          opacity="0.9"
+          filter="url(#shadow)">
+      QUIZ 3T
+    </text>
+  </g>
+
+  <!-- Outer subtle border rim for extra depth -->
+  <rect x="4" y="4" width="504" height="504" rx="108" fill="none" stroke="#FFFFFF" stroke-opacity="0.1" stroke-width="8" />
+</svg>

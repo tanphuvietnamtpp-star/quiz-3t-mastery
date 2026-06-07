@@ -4,6 +4,7 @@ export interface User {
   phone: string;
   password?: string;
   role: 'employee' | 'approver' | 'admin';
+  company?: string;
   department: string;
   branch: string;
   status: 'pending' | 'approved' | 'rejected' | 'PENDING' | 'APPROVED' | 'REJECTED';
@@ -24,6 +25,7 @@ export interface QuizResult {
   id: string;
   userId: string;
   userName: string;
+  company?: string;
   department: string;
   branch: string;
   score: number;
@@ -44,7 +46,21 @@ export interface Department {
   branch: string;
 }
 
+export interface CompanyMapping {
+  id: string;
+  name: string;
+  branches: {
+    id: string;
+    name: string;
+    departments: {
+      id: string;
+      name: string;
+    }[];
+  }[];
+}
+
 export const BRANCHES = [
+  'Văn Phòng Nam Kỳ',
   'Hội sở chính',
   'Chi nhánh miền Nam',
   'Chi nhánh miền Bắc',

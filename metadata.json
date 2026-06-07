@@ -1,5 +1,5 @@
 {
-  "name": "Trắc Nghiệm 3T Mastery",
+  "name": "quiz-3t-mastery",
   "description": "Hệ thống trắc nghiệm thi đua kiến thức 3T - Công ty Tài chính Tân Phú.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

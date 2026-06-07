@@ -14,7 +14,7 @@ import {
   onSnapshot
 } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
-import { User, Question, QuizResult, BRANCHES, DEPARTMENTS } from './types';
+import { User, Question, QuizResult, BRANCHES, DEPARTMENTS, CompanyMapping } from './types';
 import { INITIAL_QUESTIONS } from './data/mockQuestions';
 import rawFirebaseConfig from './firebase-applet-config.json';
 
@@ -75,6 +75,73 @@ let auth: any = null;
 let isFirebaseConfigured = false;
 let initPromise: Promise<void> | null = null;
 
+// Default INITIAL_COMPANY_MAPPINGS
+export const INITIAL_COMPANY_MAPPINGS: CompanyMapping[] = [
+  {
+    id: 'tanphuvietnam',
+    name: 'TÂN PHÚ VIỆT NAM',
+    branches: [
+      {
+        id: 'vpnamky',
+        name: 'Văn Phòng Nam Kỳ',
+        departments: [
+          { id: 'pqlcl', name: 'Phòng Quản Lý Chất Lượng (P.QLCL)' },
+          { id: 'psx', name: 'Phòng Sản Xuất' },
+          { id: 'pns', name: 'Phòng Nhân Sự' },
+          { id: 'pkt', name: 'Phòng Kế Toán' },
+          { id: 'pkd', name: 'Phòng Kinh Doanh' }
+        ]
+      },
+      {
+        id: 'vpbacninh',
+        name: 'Văn Phòng Bắc Ninh',
+        departments: [
+          { id: 'vpbacninh-bgd', name: 'Ban Giám Đốc' },
+          { id: 'vpbacninh-psx', name: 'Phòng Sản Xuất' },
+          { id: 'vpbacninh-pns', name: 'Phòng Nhân Sự' }
+        ]
+      }
+    ]
+  },
+  {
+    id: 'baobitanphu',
+    name: 'BAO BÌ TÂN PHÚ',
+    branches: [
+      {
+        id: 'cnlongan',
+        name: 'Chi nhánh Long An',
+        departments: [
+          { id: 'cnla-tcd', name: 'Tổ Cơ Điện' },
+          { id: 'cnla-pdbcl', name: 'Phòng Đảm Bảo Chất Lượng' },
+          { id: 'cnla-psx', name: 'Phòng Sản Xuất' }
+        ]
+      },
+      {
+        id: 'cnhungyen',
+        name: 'Chi nhánh Hưng Yên',
+        departments: [
+          { id: 'cnhy-hyns', name: 'Hành Chính Nhân Sự' },
+          { id: 'cnhy-kt', name: 'Kế Toán' }
+        ]
+      }
+    ]
+  },
+  {
+    id: 'nhuatienphong',
+    name: 'NHỰA TIÊN PHONG TÂN PHÚ',
+    branches: [
+      {
+        id: 'cn-danang',
+        name: 'Văn Phòng Đà Nẵng',
+        departments: [
+          { id: 'cndn-pkd', name: 'Phòng Kinh Doanh' },
+          { id: 'cndn-bpk', name: 'Bộ Phận Kho' }
+        ]
+      }
+    ]
+  }
+];
+
 // Seed default Admin Lê Nhật Trường which can automatically log in or register
 const defaultAdmin: User = {
   id: 'admin_lenhattruong',
@@ -82,8 +149,9 @@ const defaultAdmin: User = {
   phone: '0907767304',
   password: '111222',
   role: 'admin',
-  department: 'Ban Giám Đốc',
-  branch: 'Hội sở chính',
+  company: 'TÂN PHÚ VIỆT NAM',
+  department: 'Phòng Quản Lý Chất Lượng (P.QLCL)',
+  branch: 'Văn Phòng Nam Kỳ',
   status: 'approved',
   createdAt: '2026-06-06T08:30:36Z',
   employeeId: '2018.00281'
@@ -102,8 +170,9 @@ const forceSeedSupremeAdmin = async () => {
         password: '111222',
         role: 'admin',
         status: 'approved',
-        department: 'Ban Giám Đốc',
-        branch: 'Hội sở chính',
+        company: 'TÂN PHÚ VIỆT NAM',
+        department: 'Phòng Quản Lý Chất Lượng (P.QLCL)',
+        branch: 'Văn Phòng Nam Kỳ',
         employeeId: '2018.00281',
         createdAt: adminSnap && adminSnap.exists() ? (adminSnap.data()?.createdAt || new Date().toISOString()) : new Date().toISOString()
       };
@@ -238,6 +307,30 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 }
 
 // Ensure local storage has fallback data to make the app fully operational out-of-the-box in preview!
+export const getQuotaStats = (): { reads: number; writes: number; deletes: number } => {
+  const todayStr = new Date().toISOString().split('T')[0];
+  const stored = localStorage.getItem('3t_firebase_quota');
+  if (stored) {
+    try {
+      const parsed = JSON.parse(stored);
+      if (parsed.date === todayStr) {
+        return { reads: parsed.reads || 0, writes: parsed.writes || 0, deletes: parsed.deletes || 0 };
+      }
+    } catch {}
+  }
+  return { reads: 0, writes: 0, deletes: 0 };
+};
+
+export const incrementQuota = (type: 'reads' | 'writes' | 'deletes', count: number = 1) => {
+  const todayStr = new Date().toISOString().split('T')[0];
+  const stats = getQuotaStats();
+  stats[type] += count;
+  localStorage.setItem('3t_firebase_quota', JSON.stringify({
+    ...stats,
+    date: todayStr
+  }));
+};
+
 const getLocalData = <T>(key: string, defaultValue: T): T => {
   const data = localStorage.getItem(key);
   return data ? JSON.parse(data) : defaultValue;
@@ -250,6 +343,10 @@ const setLocalData = <T>(key: string, value: T): void => {
 // Seed questions if not present
 if (!localStorage.getItem('3t_questions')) {
   setLocalData('3t_questions', INITIAL_QUESTIONS);
+}
+
+if (!localStorage.getItem('3t_company_mappings')) {
+  setLocalData('3t_company_mappings', INITIAL_COMPANY_MAPPINGS);
 }
 
 // Clear stale "3t_users" LocalStorage garbage instantly to ensure clean environment
@@ -281,8 +378,9 @@ export const sanitizeUserList = (users: User[]): User[] => {
           password: u.password || '111222',
           role: 'admin',
           status: 'approved',
-          department: u.department || 'Ban Giám Đốc',
-          branch: u.branch || 'Hội sở chính',
+          company: 'TÂN PHÚ VIỆT NAM',
+          department: 'Phòng Quản Lý Chất Lượng (P.QLCL)',
+          branch: u.branch || 'Văn Phòng Nam Kỳ',
           employeeId: u.employeeId || '2018.00281',
           createdAt: u.createdAt || new Date().toISOString()
         };
@@ -296,8 +394,9 @@ export const sanitizeUserList = (users: User[]): User[] => {
           phone: '0907767304',
           role: 'admin',
           status: 'approved',
-          department: supremeAdminMerged.department || u.department || 'Ban Giám Đốc',
-          branch: supremeAdminMerged.branch || u.branch || 'Hội sở chính',
+          company: 'TÂN PHÚ VIỆT NAM',
+          department: 'Phòng Quản Lý Chất Lượng (P.QLCL)',
+          branch: supremeAdminMerged.branch || u.branch || 'Văn Phòng Nam Kỳ',
           employeeId: supremeAdminMerged.employeeId || u.employeeId || '2018.00281',
           password: supremeAdminMerged.password || u.password || '111222'
         };
@@ -370,11 +469,13 @@ export const databaseService = {
       id: isLNT ? 'admin_lenhattruong' : ('usr_' + Math.random().toString(36).substring(2, 9)),
       role,
       status,
+      company: userData.company || 'TÂN PHÚ VIỆT NAM',
       createdAt: new Date().toISOString()
     };
 
     try {
       const querySnapshot = await getDocs(collection(db, 'user_profiles'));
+      incrementQuota('reads', querySnapshot.size);
       const usersList: User[] = [];
       querySnapshot.forEach((doc) => {
         usersList.push(doc.data() as User);
@@ -385,6 +486,7 @@ export const databaseService = {
       }
 
       await setDoc(doc(db, 'user_profiles', newUser.id), newUser);
+      incrementQuota('writes', 1);
       return newUser;
     } catch (err: any) {
       if (err.message && (err.message.includes('đăng ký') || err.message.includes('trống'))) {
@@ -429,6 +531,7 @@ export const databaseService = {
 
     try {
       const querySnapshot = await getDocs(collection(db, 'user_profiles'));
+      incrementQuota('reads', querySnapshot.size);
       const users: User[] = [];
       querySnapshot.forEach((doc) => {
         users.push(doc.data() as User);
@@ -438,11 +541,27 @@ export const databaseService = {
       // Seed first Admin if the collection is completely empty
       if (cleaned.length === 0) {
         await setDoc(doc(db, 'user_profiles', defaultAdmin.id), defaultAdmin);
+        incrementQuota('writes', 1);
         cleaned.push(defaultAdmin);
       }
       return cleaned;
     } catch (err) {
       handleFirestoreError(err, OperationType.GET, 'user_profiles');
+    }
+  },
+
+  async getUserByEmployeeId(employeeId: string): Promise<User | null> {
+    await initializeDatabase();
+    if (!isFirebaseConfigured || !db) {
+      const localUsers = getLocalData<User[]>('3t_users', []);
+      return localUsers.find(u => u.employeeId?.trim().toLowerCase() === employeeId.trim().toLowerCase()) || null;
+    }
+    try {
+      const users = await this.getUsers();
+      return users?.find(u => u.employeeId?.trim().toLowerCase() === employeeId.trim().toLowerCase()) || null;
+    } catch (err) {
+      console.warn("Lỗi tìm thông tin người dùng bằng mã nhân sự:", err);
+      return null;
     }
   },
 
@@ -455,6 +574,7 @@ export const databaseService = {
 
     const q = collection(db, 'user_profiles');
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      incrementQuota('reads', querySnapshot.size);
       const usersList: User[] = [];
       querySnapshot.forEach((doc) => {
         usersList.push(doc.data() as User);
@@ -463,7 +583,9 @@ export const databaseService = {
       const cleaned = sanitizeUserList(usersList);
       // Seed first Admin if the collection is completely empty
       if (cleaned.length === 0) {
-        setDoc(doc(db, 'user_profiles', defaultAdmin.id), defaultAdmin).catch(err => {
+        setDoc(doc(db, 'user_profiles', defaultAdmin.id), defaultAdmin).then(() => {
+          incrementQuota('writes', 1);
+        }).catch(err => {
           console.error("Failed to seed default admin via onSnapshot:", err);
         });
         cleaned.push(defaultAdmin);
@@ -483,6 +605,7 @@ export const databaseService = {
 
     try {
       await updateDoc(doc(db, 'user_profiles', userId), data);
+      incrementQuota('writes', 1);
       return;
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `user_profiles/${userId}`);
@@ -497,6 +620,7 @@ export const databaseService = {
 
     try {
       await deleteDoc(doc(db, 'user_profiles', userId));
+      incrementQuota('deletes', 1);
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, `user_profiles/${userId}`);
     }
@@ -508,6 +632,7 @@ export const databaseService = {
     if (isFirebaseConfigured && db) {
       try {
         const querySnapshot = await getDocs(collection(db, 'questions'));
+        incrementQuota('reads', querySnapshot.size);
         const questions: Question[] = [];
         querySnapshot.forEach((doc) => {
           questions.push(doc.data() as Question);
@@ -527,6 +652,7 @@ export const databaseService = {
       try {
         for (const q of newQuestions) {
           await setDoc(doc(db, 'questions', q.id), q);
+          incrementQuota('writes', 1);
         }
       } catch (err) {
         handleFirestoreError(err, OperationType.WRITE, 'questions');
@@ -563,6 +689,7 @@ export const databaseService = {
     if (isFirebaseConfigured && db) {
       try {
         const querySnapshot = await getDocs(collection(db, 'quiz_results'));
+        incrementQuota('reads', querySnapshot.size);
         const results: QuizResult[] = [];
         querySnapshot.forEach((doc) => {
           results.push(doc.data() as QuizResult);
@@ -581,6 +708,7 @@ export const databaseService = {
     if (isFirebaseConfigured && db) {
       try {
         await setDoc(doc(db, 'quiz_results', result.id), result);
+        incrementQuota('writes', 1);
       } catch (err) {
         handleFirestoreError(err, OperationType.WRITE, `quiz_results/${result.id}`);
       }
@@ -596,6 +724,7 @@ export const databaseService = {
     if (isFirebaseConfigured && db) {
       try {
         const querySnapshot = await getDocs(collection(db, 'config'));
+        incrementQuota('reads', querySnapshot.size);
         let txt = '';
         querySnapshot.forEach((doc) => {
           if (doc.id === 'slogan') {
@@ -615,11 +744,138 @@ export const databaseService = {
     if (isFirebaseConfigured && db) {
       try {
         await setDoc(doc(db, 'config', 'slogan'), { text: slogan });
+        incrementQuota('writes', 1);
       } catch (err) {
         console.warn('Error writing slogan to Firestore:', err);
       }
     }
     localStorage.setItem('3t_slogan', slogan);
+  },
+
+  async getCompanyMappings(): Promise<CompanyMapping[]> {
+    await initializeDatabase();
+    if (isFirebaseConfigured && db) {
+      try {
+        const querySnapshot = await getDocs(collection(db, 'config'));
+        incrementQuota('reads', querySnapshot.size);
+        let mappings: CompanyMapping[] | null = null;
+        querySnapshot.forEach((doc) => {
+          if (doc.id === 'company_mappings') {
+            mappings = doc.data().mappings;
+          }
+        });
+        if (mappings) return mappings;
+      } catch (err) {
+        console.warn('Error reading company mappings from Firestore:', err);
+      }
+    }
+    return getLocalData<CompanyMapping[]>('3t_company_mappings', INITIAL_COMPANY_MAPPINGS);
+  },
+
+  async saveCompanyMappings(mappings: CompanyMapping[]): Promise<void> {
+    await initializeDatabase();
+    if (isFirebaseConfigured && db) {
+      try {
+        await setDoc(doc(db, 'config', 'company_mappings'), { mappings });
+        incrementQuota('writes', 1);
+      } catch (err) {
+        console.warn('Error writing company mappings to Firestore:', err);
+      }
+    }
+    setLocalData('3t_company_mappings', mappings);
+  },
+
+  async syncMappingNames(
+    type: 'company' | 'branch' | 'department', 
+    oldName: string, 
+    newName: string, 
+    extra?: { companyName?: string; branchName?: string }
+  ): Promise<{ usersUpdated: number; resultsUpdated: number }> {
+    await initializeDatabase();
+    let usersUpdated = 0;
+    let resultsUpdated = 0;
+
+    if (isFirebaseConfigured && db) {
+      try {
+        // 1. Get all user profiles to update
+        const userSnap = await getDocs(collection(db, 'user_profiles'));
+        incrementQuota('reads', userSnap.size);
+        for (const docObj of userSnap.docs) {
+          const u = docObj.data() as User;
+          let needsUpdate = false;
+          const userUpdate: Partial<User> = {};
+
+          if (type === 'company' && u.company === oldName) {
+            userUpdate.company = newName;
+            needsUpdate = true;
+          } else if (type === 'branch' && u.branch === oldName && u.company === extra?.companyName) {
+            userUpdate.branch = newName;
+            needsUpdate = true;
+          } else if (type === 'department' && u.department === oldName && u.company === extra?.companyName && u.branch === extra?.branchName) {
+            userUpdate.department = newName;
+            needsUpdate = true;
+          }
+
+          if (needsUpdate) {
+            await updateDoc(doc(db, 'user_profiles', docObj.id), userUpdate);
+            incrementQuota('writes', 1);
+            usersUpdated++;
+          }
+        }
+
+        // 2. Get and update quiz results
+        const resultsSnap = await getDocs(collection(db, 'quiz_results'));
+        incrementQuota('reads', resultsSnap.size);
+        for (const docObj of resultsSnap.docs) {
+          const res = docObj.data() as QuizResult;
+          let needsUpdate = false;
+          const resultUpdate: Partial<QuizResult> = {};
+
+          if (type === 'company' && res.company === oldName) {
+            resultUpdate.company = newName;
+            needsUpdate = true;
+          } else if (type === 'branch' && res.branch === oldName && res.company === extra?.companyName) {
+            resultUpdate.branch = newName;
+            needsUpdate = true;
+          } else if (type === 'department' && res.department === oldName && res.company === extra?.companyName && res.branch === extra?.branchName) {
+            resultUpdate.department = newName;
+            needsUpdate = true;
+          }
+
+          if (needsUpdate) {
+            await updateDoc(doc(db, 'quiz_results', docObj.id), resultUpdate);
+            incrementQuota('writes', 1);
+            resultsUpdated++;
+          }
+        }
+      } catch (err) {
+        console.warn("Cloud synchronization error:", err);
+      }
+    }
+
+    // 3. Fallback/Local storage backup synchronization
+    const localResults = localStorage.getItem('3t_quiz_results');
+    if (localResults) {
+      try {
+        const parsed = JSON.parse(localResults) as QuizResult[];
+        const updatedLocalRes = parsed.map(res => {
+          let updatedRes = { ...res };
+          if (type === 'company' && res.company === oldName) {
+            updatedRes.company = newName;
+          } else if (type === 'branch' && res.branch === oldName && res.company === extra?.companyName) {
+            updatedRes.branch = newName;
+          } else if (type === 'department' && res.department === oldName && res.company === extra?.companyName && res.branch === extra?.branchName) {
+            updatedRes.department = newName;
+          }
+          return updatedRes;
+        });
+        localStorage.setItem('3t_quiz_results', JSON.stringify(updatedLocalRes));
+      } catch (e) {
+        console.warn(e);
+      }
+    }
+
+    return { usersUpdated, resultsUpdated };
   }
 };
 

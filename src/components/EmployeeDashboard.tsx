@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { databaseService } from '../firebase';
 import { User, Question, QuizResult } from '../types';
 import { formatDate, formatTimeInSeconds } from '../utils/format';
-import { BookOpen, Trophy, Award, BarChart3, ChevronRight, CheckCircle2, XCircle, ArrowRight, RotateCcw, HelpCircle, GraduationCap, AlertCircle, Users, TrendingUp, Building2, LogOut, Home, Maximize2, Minimize2 } from 'lucide-react';
+import { BookOpen, Trophy, Award, BarChart3, ChevronRight, CheckCircle2, XCircle, ArrowRight, RotateCcw, HelpCircle, GraduationCap, AlertCircle, Users, TrendingUp, Building2, LogOut, Home, Maximize2, Minimize2, UserCheck, ImagePlus, Lock } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts';
 
@@ -10,12 +10,26 @@ interface EmployeeDashboardProps {
   user: User;
   onLogout: () => void;
   isAdminReview?: boolean;
-  onBackToAdmin?: () => void;
+  onBackToAdmin?: (tab?: 'users' | 'add_images' | 'stats' | 'encoding') => void;
   slogan?: string;
 }
 
 export default function EmployeeDashboard({ user, onLogout, isAdminReview = false, onBackToAdmin, slogan = '3T Hội Tụ - Tân Phú Vươn Xa' }: EmployeeDashboardProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [pendingUsersCount, setPendingUsersCount] = useState(0);
+
+  useEffect(() => {
+    if (!isAdminReview) return;
+    try {
+      const unsubscribe = databaseService.subscribeUsers((allUsers) => {
+        const pending = allUsers.filter(u => u.status?.toLowerCase() === 'pending');
+        setPendingUsersCount(pending.length);
+      });
+      return () => unsubscribe();
+    } catch (err) {
+      console.error("Lỗi khi tải thông báo số lượng phê duyệt:", err);
+    }
+  }, [isAdminReview]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -433,25 +447,6 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
         {/* Smartphone Frame Outer Shell with mathematically concentric corner radius */}
         <div className="w-full sm:max-w-[415px] h-full sm:h-[810px] max-h-full sm:max-h-[810px] bg-[#0F1C2E] rounded-[32px] p-1 shadow-2xl relative border-4 border-slate-800 ring-2 ring-slate-900/5 transition-all text-gray-800 flex flex-col my-0.5 sm:my-1 shrink-0 overflow-hidden">
           
-          {/* Floating Fullscreen / Hide Address Bar Action Button */}
-          <button
-            onClick={toggleFullscreen}
-            className="absolute top-1.5 right-1.5 z-40 py-1.5 px-2 bg-[#1971C2] hover:bg-[#155FA0] active:scale-95 text-white text-[8.5px] font-extrabold tracking-tight rounded-full shadow-lg border border-blue-400 select-none cursor-pointer flex items-center gap-1 leading-none hover:shadow-xl transition-all"
-            title={isFullscreen ? "Màn hình thường" : "Ẩn thanh địa chỉ trình duyệt"}
-          >
-            {isFullscreen ? (
-              <>
-                <Minimize2 className="h-3 w-3 shrink-0" />
-                <span>MÀN HÌNH THƯỜNG</span>
-              </>
-            ) : (
-              <>
-                <Maximize2 className="h-3 w-3 shrink-0 animate-pulse text-blue-100" />
-                <span>ẨN ĐỊA CHỈ <span className="hidden min-[360px]:inline">📲</span></span>
-              </>
-            )}
-          </button>
-
           {/* Physical Phone Top Notch / Speaker Deco element simulating phone layout */}
           <div className="hidden sm:flex absolute -top-0.5 left-1/2 -translate-x-1/2 w-24 h-3.5 bg-slate-800 rounded-b-md z-20 items-center justify-center">
             <div className="w-8 h-0.5 bg-slate-900 rounded-full"></div>
@@ -880,13 +875,93 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                 <div className="flex flex-col items-center justify-between text-center flex-1 h-full pt-1 pb-0.5 sm:pt-1.5 sm:pb-1 relative">
                   {/* Centered Top & Mid content wrapper to keep them tight together */}
                   <div className="flex flex-col items-center justify-center text-center space-y-4.5 sm:space-y-5 flex-1 w-full shrink-0">
+                    
+                    {/* Admin rapid action buttons */}
+                    {isAdminReview && (
+                      <div className="w-full max-w-sm mx-auto bg-slate-50/90 border border-slate-200/60 rounded-xl p-2 shadow-xs mb-4 sm:mb-5">
+                        <div className="text-[9px] font-extrabold text-[#0B3A60]/85 uppercase tracking-wider mb-2 text-center">
+                          CÔNG CỤ NHANH QUẢN TRỊ VIÊN
+                        </div>
+                        <div className="grid grid-cols-4 gap-1 px-0.5">
+                          <button
+                            onClick={() => onBackToAdmin?.('users')}
+                            className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group"
+                            title="Phê Duyệt & Phân Quyền"
+                          >
+                            <div className="h-7 w-7 rounded-lg bg-blue-50 border border-blue-100/60 flex items-center justify-center group-hover:bg-blue-100 transition-colors shrink-0 relative">
+                              <UserCheck className="h-3.5 w-3.5 text-[#1971C2]" />
+                              {pendingUsersCount > 0 && (
+                                <span className="absolute -top-1.5 -right-1.5 bg-red-600 text-white text-[9.5px] font-extrabold h-4 px-1 rounded-full border border-white flex items-center justify-center shadow-md min-w-[16px] leading-none animate-bounce">
+                                  {pendingUsersCount}
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[8.5px] font-bold leading-tight truncate w-full text-center text-gray-700">Phê Duyệt</span>
+                          </button>
+
+                          <button
+                            onClick={() => onBackToAdmin?.('add_images')}
+                            className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group"
+                            title="Trích xuất Câu Hỏi AI (Hình Ảnh)"
+                          >
+                            <div className="h-7 w-7 rounded-lg bg-purple-50 border border-purple-100/60 flex items-center justify-center group-hover:bg-purple-100 transition-colors shrink-0">
+                              <ImagePlus className="h-3.5 w-3.5 text-purple-600" />
+                            </div>
+                            <span className="text-[8.5px] font-bold leading-tight truncate w-full text-center text-gray-700">Trích xuất AI</span>
+                          </button>
+
+                          <button
+                            onClick={() => onBackToAdmin?.('stats')}
+                            className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group"
+                            title="Trang Thống Kê"
+                          >
+                            <div className="h-7 w-7 rounded-lg bg-emerald-50 border border-emerald-100/60 flex items-center justify-center group-hover:bg-emerald-100 transition-colors shrink-0">
+                              <BarChart3 className="h-3.5 w-3.5 text-emerald-600" />
+                            </div>
+                            <span className="text-[8.5px] font-bold leading-tight truncate w-full text-center text-gray-700">Thống Kê</span>
+                          </button>
+
+                          <button
+                            onClick={() => onBackToAdmin?.('encoding')}
+                            className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group"
+                            title="Trang Mã Hóa"
+                          >
+                            <div className="h-7 w-7 rounded-lg bg-amber-50 border border-amber-100/60 flex items-center justify-center group-hover:bg-amber-100 transition-colors shrink-0">
+                              <Lock className="h-3.5 w-3.5 text-amber-600" />
+                            </div>
+                            <span className="text-[8.5px] font-bold leading-tight truncate w-full text-center text-gray-700">Mã Hóa</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
                     {/* 3T Logo replacing Trophy Icon */}
                   <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-tr from-[#07243c] via-[#0B3A60] to-[#1d5985] border-2 border-blue-400/20 shadow-md ring-4 ring-blue-950/10 select-none shrink-0 relative overflow-hidden">
                     {/* Glossy light effect */}
                     <div className="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/10 to-transparent pointer-events-none transform -skew-y-12" />
                     <div className="absolute -bottom-4 -right-4 w-10 h-10 bg-[#E8590C]/20 rounded-full blur-md pointer-events-none" />
                     <span translate="no" className="notranslate text-3xl font-black tracking-tighter font-sans relative z-10 flex items-center justify-center">
-                      <span className="text-[#E8590C] drop-shadow-[0_1px_1px_rgba(0,0,0,0.25)]">3</span>
+                      <motion.span 
+                        animate={{ 
+                          color: ["#E8590C", "#FFD700", "#FF5A5F", "#DE5499", "#E8590C"],
+                          scale: [1, 1.15, 0.95, 1],
+                          filter: [
+                            "drop-shadow(0 0 2px rgba(232,89,12,0.4))",
+                            "drop-shadow(0 0 10px rgba(255,215,0,0.85))",
+                            "drop-shadow(0 0 6px rgba(255,90,95,0.7))",
+                            "drop-shadow(0 0 10px rgba(222,84,153,0.8))",
+                            "drop-shadow(0 0 2px rgba(232,89,12,0.4))"
+                          ]
+                        }}
+                        transition={{ 
+                          duration: 4, 
+                          repeat: Infinity, 
+                          ease: "easeInOut" 
+                        }}
+                        className="drop-shadow-[0_1.5px_1.5px_rgba(0,0,0,0.45)]"
+                      >
+                        3
+                      </motion.span>
                       <span className="text-white -ml-0.5 drop-shadow-[0_1.5px_1.5px_rgba(0,0,0,0.35)]">T</span>
                     </span>
                   </div>
