@@ -192,7 +192,7 @@ export default function App() {
             ) : currentUser.role === 'approver' ? (
               <ApproverDashboard user={currentUser} onLogout={handleLogout} slogan={slogan} />
             ) : (
-              <EmployeeDashboard user={currentUser} onLogout={handleLogout} slogan={slogan} />
+              <EmployeeDashboard user={currentUser} onLogout={handleLogout} slogan={slogan} isAdminReview={true} />
             )}
           </motion.div>
         )}

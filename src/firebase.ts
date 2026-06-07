@@ -684,11 +684,17 @@ export const databaseService = {
   },
 
   // Quiz Results / History
-  async getQuizResults(): Promise<QuizResult[]> {
+  async getQuizResults(fetchOnlyRecent = true): Promise<QuizResult[]> {
     await initializeDatabase();
     if (isFirebaseConfigured && db) {
       try {
-        const querySnapshot = await getDocs(collection(db, 'quiz_results'));
+        let qRef: any = collection(db, 'quiz_results');
+        if (fetchOnlyRecent) {
+          // Default: Fetch only quiz results from the last 30 days to optimize Firestore reads
+          const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+          qRef = query(collection(db, 'quiz_results'), where('timestamp', '>=', thirtyDaysAgo));
+        }
+        const querySnapshot = await getDocs(qRef);
         incrementQuota('reads', querySnapshot.size);
         const results: QuizResult[] = [];
         querySnapshot.forEach((doc) => {
@@ -700,7 +706,34 @@ export const databaseService = {
       }
     }
 
-    return getLocalData<QuizResult[]>('3t_quiz_results', []);
+    const localData = getLocalData<QuizResult[]>('3t_quiz_results', []);
+    if (fetchOnlyRecent) {
+      const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+      return localData.filter(r => r.timestamp >= thirtyDaysAgo);
+    }
+    return localData;
+  },
+
+  async deleteQuizResults(resultIds: string[]): Promise<number> {
+    await initializeDatabase();
+    let deletedCount = 0;
+    if (isFirebaseConfigured && db) {
+      try {
+        for (const id of resultIds) {
+          await deleteDoc(doc(db, 'quiz_results', id));
+          incrementQuota('deletes', 1);
+          deletedCount++;
+        }
+      } catch (err) {
+        handleFirestoreError(err, OperationType.DELETE, `quiz_results`);
+      }
+    }
+
+    const results = getLocalData<QuizResult[]>('3t_quiz_results', []);
+    const filtered = results.filter(r => !resultIds.includes(r.id));
+    setLocalData('3t_quiz_results', filtered);
+
+    return deletedCount;
   },
 
   async saveQuizResult(result: QuizResult): Promise<void> {

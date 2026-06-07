@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { databaseService } from '../firebase';
 import { User, Question, QuizResult } from '../types';
 import { formatDate, formatTimeInSeconds } from '../utils/format';
-import { BookOpen, Trophy, Award, BarChart3, ChevronRight, CheckCircle2, XCircle, ArrowRight, RotateCcw, HelpCircle, GraduationCap, AlertCircle, Users, TrendingUp, Building2, LogOut, Home, Maximize2, Minimize2, UserCheck, ImagePlus, Lock } from 'lucide-react';
+import { BookOpen, Trophy, Award, BarChart3, ChevronRight, CheckCircle2, XCircle, ArrowRight, RotateCcw, HelpCircle, GraduationCap, AlertCircle, Users, TrendingUp, Building2, LogOut, Home, Maximize2, Minimize2, UserCheck, ImagePlus, Lock, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts';
 
@@ -19,7 +19,7 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
   const [pendingUsersCount, setPendingUsersCount] = useState(0);
 
   useEffect(() => {
-    if (!isAdminReview) return;
+    if (!isAdminReview || user.role !== 'admin') return;
     try {
       const unsubscribe = databaseService.subscribeUsers((allUsers) => {
         const pending = allUsers.filter(u => u.status?.toLowerCase() === 'pending');
@@ -29,7 +29,7 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
     } catch (err) {
       console.error("Lỗi khi tải thông báo số lượng phê duyệt:", err);
     }
-  }, [isAdminReview]);
+  }, [isAdminReview, user.role]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -110,10 +110,186 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
     }
   };
 
-  const [activeTab, setActiveTab] = useState<'practice' | 'quiz' | 'history'>('quiz');
+  const [activeTab, setActiveTab] = useState<'practice' | 'quiz' | 'history' | 'ai_extract'>('quiz');
   const [questions, setQuestions] = useState<Question[]>([]);
   const [results, setResults] = useState<QuizResult[]>([]);
   const [allResults, setAllResults] = useState<QuizResult[]>([]);
+
+  // AI Image extraction states (simulated inside smartphone viewport for admins)
+  const [selectedImages, setSelectedImages] = useState<{ file: File; compressedBase64: string }[]>([]);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [extracting, setExtracting] = useState(false);
+  const [extractedQuestions, setExtractedQuestions] = useState<any[]>([]);
+  const [aiNotice, setAiNotice] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
+
+  const refreshQuestions = async () => {
+    try {
+      const qs = await databaseService.getQuestions();
+      setQuestions(qs);
+    } catch (err) {
+      console.error("Lỗi khi đồng bộ câu hỏi mới:", err);
+    }
+  };
+
+  // Compression helper (Canvas-based Resizer & quality compressor to maintain quotas)
+  const compressImage = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+          
+          // Max dimension scaling constraint
+          const MAX_SIZE = 1024;
+          if (width > height) {
+            if (width > MAX_SIZE) {
+              height *= MAX_SIZE / width;
+              width = MAX_SIZE;
+            }
+          } else {
+            if (height > MAX_SIZE) {
+              width *= MAX_SIZE / height;
+              height = MAX_SIZE;
+            }
+          }
+          
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.65);
+            const base64Chunk = dataUrl.split(',')[1];
+            resolve(base64Chunk);
+          } else {
+            reject(new Error("Không thể khởi tạo môi trường vẽ canvas."));
+          }
+        };
+        img.onerror = () => reject(new Error("Lỗi khi đọc file ảnh."));
+        img.src = event.target?.result as string;
+      };
+      reader.onerror = () => reject(new Error("Lỗi khi tải file."));
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    setAiNotice(null);
+    setAiLoading(true);
+
+    const promises = Array.from(files).map(async (file: File) => {
+      try {
+        const compressed = await compressImage(file);
+        return { file, compressedBase64: compressed };
+      } catch (err) {
+        console.error("Compression error:", err);
+        return null;
+      }
+    });
+
+    const results = (await Promise.all(promises)).filter((r): r is { file: File; compressedBase64: string } => r !== null);
+    setSelectedImages(prev => [...prev, ...results]);
+    setAiLoading(false);
+  };
+
+  const handleExtractWithAI = async () => {
+    if (selectedImages.length === 0) return;
+    setAiNotice(null);
+    setExtracting(true);
+
+    try {
+      const imagePayloads = selectedImages.map(img => ({
+        mimeType: img.file.type || "image/jpeg",
+        data: img.compressedBase64
+      }));
+
+      const response = await fetch('/api/extract-questions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ images: imagePayloads })
+      });
+
+      if (!response.ok) {
+        const errResult = await response.json();
+        throw new Error(errResult.error || "Gặp lỗi trong tiến trình giải mã hình ảnh.");
+      }
+
+      const result = await response.json();
+      const aiQuestions: Question[] = result.questions || [];
+
+      if (aiQuestions.length === 0) {
+        setAiNotice({ type: 'error', msg: 'Không tìm thấy câu hỏi trắc nghiệm hợp lệ nào trong các hình ảnh đã chọn.' });
+        setExtracting(false);
+        return;
+      }
+
+      // Automatically check for duplication compared to our active questions database (Semantic/Word overlap comparison)
+      const formattedWithDuplicates = aiQuestions.map(extracted => {
+        const normExtracted = extracted.text.replace(/\s+/g, '').toLowerCase();
+        
+        const duplicateMatch = questions.find(existing => {
+          const normExisting = existing.text.replace(/\s+/g, '').toLowerCase();
+          return normExisting.includes(normExtracted) || normExtracted.includes(normExisting);
+        });
+
+        return {
+          ...extracted,
+          isDuplicate: !!duplicateMatch,
+          duplicateOriginal: duplicateMatch?.text
+        };
+      });
+
+      setExtractedQuestions(formattedWithDuplicates);
+      setAiNotice({ type: 'success', msg: `Bóc tách thành công và đối soát trùng lặp ${aiQuestions.length} câu hỏi!` });
+
+    } catch (err: any) {
+      console.error(err);
+      setAiNotice({ type: 'error', msg: err.message || 'Lỗi bóc tách dữ liệu bằng AI.' });
+    } finally {
+      setExtracting(false);
+    }
+  };
+
+  const handleSaveExtractedQuestions = async () => {
+    const validQuestions = extractedQuestions.filter(q => !q.isDuplicate);
+    if (validQuestions.length === 0) {
+      setAiNotice({ type: 'error', msg: 'Tất cả câu hỏi bóc tách đều nằm thế trùng lặp. Không có dữ liệu lưu trữ mới.' });
+      return;
+    }
+
+    const cleanQuestions: Question[] = validQuestions.map(q => {
+      const cleanQ: Question = {
+        id: q.id,
+        text: q.text,
+        options: q.options,
+        correctAnswerIndex: q.correctAnswerIndex,
+        explanation: q.explanation
+      };
+      if (q.imageUrl) {
+        cleanQ.imageUrl = q.imageUrl;
+      }
+      return cleanQ;
+    });
+
+    try {
+      setAiLoading(true);
+      await databaseService.saveQuestions(cleanQuestions);
+      setAiNotice({ type: 'success', msg: `Đã lưu thành công ${cleanQuestions.length} câu hỏi mới vào hệ thống!` });
+      setExtractedQuestions([]);
+      setSelectedImages([]);
+      await refreshQuestions();
+    } catch (err) {
+      console.error("Lỗi lưu câu hỏi bóc tách:", err);
+      setAiNotice({ type: 'error', msg: 'Có lỗi xảy ra khi lưu ngân hàng đề.' });
+    } finally {
+      setAiLoading(false);
+    }
+  };
   
   // States of Active Quiz
   const [quizStarted, setQuizStarted] = useState(false);
@@ -426,18 +602,20 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
   return (
     <div className="h-[100dvh] min-h-[100dvh] max-h-[100dvh] overflow-hidden bg-gray-50 flex flex-col">
       {/* Simulation preview banner - Hidden on mobile viewports so mock screen can occupy the top space (tràn lên trên) */}
-      {isAdminReview && (
+      {isAdminReview && user.role === 'admin' && (
         <div className="hidden sm:flex bg-amber-500 text-white px-6 py-2 flex-col sm:flex-row justify-between items-center text-xs md:text-sm font-bold shadow-md z-50 gap-1.5 shrink-0">
           <div className="flex items-center gap-2">
             <span translate="no" className="notranslate bg-amber-700 px-2 py-0.5 rounded text-[10px] text-white tracking-widest shrink-0 uppercase">Chế độ xem thử</span>
             <span translate="no" className="notranslate">Anh/Chị đang trải nghiệm giao diện CBNV để trực tiếp kiểm duyệt Thi thử, Học từ sai và Phân tích 3T!</span>
           </div>
-          <button 
-            onClick={onBackToAdmin}
-            className="bg-white text-gray-900 hover:bg-gray-100 transition-all font-bold px-3 py-1 rounded shadow-sm font-sans shrink-0 text-xs"
-          >
-            <span translate="no" className="notranslate">Quay lại trang Quản trị</span>
-          </button>
+          {onBackToAdmin && (
+            <button 
+              onClick={onBackToAdmin}
+              className="bg-white text-gray-900 hover:bg-gray-100 transition-all font-bold px-3 py-1 rounded shadow-sm font-sans shrink-0 text-xs"
+            >
+              <span translate="no" className="notranslate">Quay lại trang Quản trị</span>
+            </button>
+          )}
         </div>
       )}
 
@@ -485,7 +663,7 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                     </h3>
                     <p className="text-[11px] text-yellow-700 mt-1 leading-relaxed">
                       <span translate="no" className="notranslate">
-                        Dưới đây là ngân hàng đề câu hỏi an toàn lao động và tinh thần tuân thủ 3T được ban quản trị biên soạn. 
+                        Dưới đây là ngân hàng đề câu hỏi Quiz 3T được ban quản trị TASCO biên soạn. 
                         Nhân viên hãy nghiên cứu kỹ đáp án chính xác kèm theo các lời nhắn dặn dò để rèn luyện vững vàng trước khi bước vào kỳ thi thực tế.
                       </span>
                     </p>
@@ -552,6 +730,166 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                   </div>
                 ))}
               </div>
+            </motion.div>
+          )}
+
+          {/* AI Extract Tab Viewport inside Smartphone Simulation for Administrators */}
+          {activeTab === 'ai_extract' && !quizStarted && (
+            <motion.div
+              key="ai_extract_viewport"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="space-y-4 font-sans"
+            >
+              {/* Top navigation header inside smartphone */}
+              <div className="flex items-center gap-2 border-b border-gray-100 pb-2.5">
+                <button
+                  onClick={() => {
+                    setActiveTab('quiz');
+                    setAiNotice(null);
+                    setExtractedQuestions([]);
+                    setSelectedImages([]);
+                  }}
+                  className="p-1.5 px-2.5 bg-gray-110 hover:bg-gray-200 text-gray-700 rounded-lg flex items-center justify-center cursor-pointer transition-colors"
+                  title="Về Trang chủ"
+                >
+                  <Home className="h-4 w-4 text-gray-600" />
+                </button>
+                <span className="text-xs font-black text-purple-750 uppercase tracking-wider">Trích xuất AI trực tiếp</span>
+              </div>
+
+              {/* Informative Header card */}
+              <div className="bg-purple-50/70 border border-purple-100 p-3.5 rounded-xl">
+                <h3 className="text-xs font-bold text-purple-800 flex items-center gap-1.5">
+                  <ImagePlus className="h-4 w-4 text-purple-600 shrink-0" />
+                  <span>Trích Xuất Đề Bằng AI</span>
+                </h3>
+                <p className="text-[11px] text-purple-705 mt-1 leading-relaxed">
+                  Quét chữ tự động từ ảnh chụp đề thi bằng trí tuệ nhân tạo Gemini. Hệ thống sẽ tự động rà quét kiểm tra và lọc mẫu trùng lặp trước khi lưu.
+                </p>
+              </div>
+
+              {aiNotice && (
+                <div className={`p-3 rounded-lg text-[11px] leading-relaxed font-semibold border ${
+                  aiNotice.type === 'success' 
+                    ? 'bg-green-50 text-green-905 border-green-200 shadow-3xs' 
+                    : 'bg-red-50 text-red-905 border-red-200 shadow-3xs'
+                }`}>
+                  {aiNotice.msg}
+                </div>
+              )}
+
+              {/* Camera upload zone */}
+              <div className="border border-dashed border-gray-200 hover:border-purple-300 rounded-xl p-4 text-center bg-gray-50/50 hover:bg-gray-55 transition-all relative cursor-pointer">
+                <input
+                  type="file"
+                  multiple
+                  accept="image/*"
+                  onChange={handleImageChange}
+                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                  disabled={extracting || aiLoading}
+                />
+                <div className="flex flex-col items-center justify-center gap-1">
+                  <ImagePlus className="h-8 w-8 text-purple-500 animate-pulse" />
+                  <span className="text-xs font-bold text-gray-655">Kéo thả ảnh hoặc Chụp Đề thi</span>
+                  <span className="text-[10px] text-gray-450 italic">Hỗ trợ ảnh tài liệu chụp trực diện</span>
+                </div>
+              </div>
+
+              {selectedImages.length > 0 && (
+                <div className="space-y-3">
+                  <div className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Hình đã chọn ({selectedImages.length})</div>
+                  <div className="flex gap-2 flex-wrap pb-1 max-h-[140px] overflow-y-auto">
+                    {selectedImages.map((img, iIdx) => (
+                      <div key={iIdx} className="relative h-14 w-14 rounded-lg overflow-hidden bg-white border border-gray-200 shadow-3xs group shrink-0">
+                        <img 
+                          src={`data:image/jpeg;base64,${img.compressedBase64}`} 
+                          alt="preview" 
+                          className="object-cover h-full w-full" 
+                          referrerPolicy="no-referrer"
+                        />
+                        <button
+                          onClick={() => setSelectedImages(prev => prev.filter((_, i) => i !== iIdx))}
+                          className="absolute bg-black/60 hover:bg-black text-white rounded-full p-0.5 top-0.5 right-0.5 cursor-pointer"
+                        >
+                          <XCircle className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <button
+                    onClick={handleExtractWithAI}
+                    disabled={extracting || selectedImages.length === 0}
+                    className="w-full py-2.5 bg-[#1971C2] hover:bg-opacity-95 text-white font-extrabold text-[11px] tracking-wide rounded-xl shadow-md transition-all active:scale-95 disabled:opacity-50 text-center flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <Sparkles className="h-3.5 w-3.5" />
+                    <span>{extracting ? 'Trí tuệ Nhân tạo Gemini đang bóc...' : 'PHÂN TÍCH BÓC TÁCH ĐỀ BẰNG AI'}</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Extracted results visualization in layout list */}
+              {extractedQuestions.length > 0 && (
+                <div className="space-y-3 border-t border-gray-150 pt-4.5">
+                  <div className="flex justify-between items-center gap-2">
+                    <div className="text-[10px] font-black uppercase text-[#0B3A60] tracking-wider">Đề AI bóc tách</div>
+                    <button
+                      onClick={handleSaveExtractedQuestions}
+                      disabled={aiLoading}
+                      className="px-3 py-1.5 bg-green-600 hover:bg-green-700 active:scale-95 text-white font-black text-[10px] rounded-lg transition-all shadow-sm cursor-pointer"
+                    >
+                      LƯU ĐỀ KHÔNG TRÙNG
+                    </button>
+                  </div>
+
+                  <div className="space-y-3 max-h-[380px] overflow-y-auto pr-1 style-scrollbar">
+                    {extractedQuestions.map((eq, qIdx) => (
+                      <div 
+                        key={eq.id}
+                        className={`p-3 rounded-lg border text-xs leading-relaxed ${
+                          eq.isDuplicate ? 'bg-orange-50/50 border-orange-200 text-orange-950' : 'bg-gray-50/50 border-gray-200 text-gray-800'
+                        }`}
+                      >
+                        <div className="flex justify-between items-start gap-2 mb-1.5">
+                          <span className="text-[9px] font-black uppercase bg-white border border-gray-250 px-1.5 py-0.5 rounded text-gray-650 font-sans">Mẫu {qIdx + 1}</span>
+                          {eq.isDuplicate && (
+                            <span className="text-[8px] font-black text-orange-700 bg-orange-100 border border-orange-200 px-1.5 py-0.5 rounded-full flex items-center gap-0.5 shrink-0 uppercase tracking-tighter">
+                              <AlertCircle className="h-2.5 w-2.5" /> Trùng ngân hàng đề cũ
+                            </span>
+                          )}
+                        </div>
+
+                        <p className="font-bold text-gray-900 mb-2 font-sans">{eq.text}</p>
+                        
+                        <div className="space-y-1 mb-2 font-sans">
+                          {eq.options.map((opt: string, oIdx: number) => {
+                            const isCorrect = oIdx === eq.correctAnswerIndex;
+                            return (
+                              <div 
+                                key={oIdx}
+                                className={`p-2 rounded text-[11px] flex items-center justify-between border ${
+                                  isCorrect 
+                                    ? 'bg-green-50 border-green-200 text-green-955 font-bold' 
+                                    : 'bg-white border-gray-150 text-gray-600'
+                                }`}
+                              >
+                                <span>{String.fromCharCode(65 + oIdx)}. {opt}</span>
+                                {isCorrect && <CheckCircle2 className="h-3 w-3 text-green-600 shrink-0" />}
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        <div className="bg-blue-50/50 p-2 rounded text-[10px] text-blue-800 leading-relaxed font-semibold font-sans">
+                          Dặn dò: {eq.explanation}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </motion.div>
           )}
 
@@ -877,7 +1215,7 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                   <div className="flex flex-col items-center justify-center text-center space-y-4.5 sm:space-y-5 flex-1 w-full shrink-0">
                     
                     {/* Admin rapid action buttons */}
-                    {isAdminReview && (
+                    {isAdminReview && user.role === 'admin' && (
                       <div className="w-full max-w-sm mx-auto bg-slate-50/90 border border-slate-200/60 rounded-xl p-2 shadow-xs mb-4 sm:mb-5">
                         <div className="text-[9px] font-extrabold text-[#0B3A60]/85 uppercase tracking-wider mb-2 text-center">
                           CÔNG CỤ NHANH QUẢN TRỊ VIÊN
@@ -900,14 +1238,14 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                           </button>
 
                           <button
-                            onClick={() => onBackToAdmin?.('add_images')}
-                            className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group"
+                            onClick={() => setActiveTab('ai_extract')}
+                            className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-705 font-sans cursor-pointer group"
                             title="Trích xuất Câu Hỏi AI (Hình Ảnh)"
                           >
                             <div className="h-7 w-7 rounded-lg bg-purple-50 border border-purple-100/60 flex items-center justify-center group-hover:bg-purple-100 transition-colors shrink-0">
                               <ImagePlus className="h-3.5 w-3.5 text-purple-600" />
                             </div>
-                            <span className="text-[8.5px] font-bold leading-tight truncate w-full text-center text-gray-700">Trích xuất AI</span>
+                            <span className="text-[8.5px] font-bold leading-tight truncate w-full text-center text-gray-700 font-sans">Trích xuất AI</span>
                           </button>
 
                           <button
@@ -933,13 +1271,15 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                           </button>
                         </div>
                         {/* Integrated exit button for mobile users where headers are hidden */}
-                        <button
-                          onClick={() => onBackToAdmin?.()}
-                          className="w-full mt-1.5 px-3 py-1 bg-red-50 hover:bg-red-100 border border-red-250 text-red-650 active:scale-95 transition-all rounded-lg text-[9px] font-extrabold tracking-wider flex items-center justify-center gap-1 cursor-pointer shadow-3xs"
-                        >
-                          <LogOut className="h-3 w-3 shrink-0" />
-                          <span>QUAY LẠI TRANG QUẢN TRỊ VIÊN</span>
-                        </button>
+                        {onBackToAdmin && (
+                          <button
+                            onClick={() => onBackToAdmin?.()}
+                            className="w-full mt-1.5 px-3 py-1 bg-red-50 hover:bg-red-100 border border-red-250 text-red-650 active:scale-95 transition-all rounded-lg text-[9px] font-extrabold tracking-wider flex items-center justify-center gap-1 cursor-pointer shadow-3xs"
+                          >
+                            <LogOut className="h-3 w-3 shrink-0" />
+                            <span>QUAY LẠI TRANG QUẢN TRỊ VIÊN</span>
+                          </button>
+                        )}
                       </div>
                     )}
 

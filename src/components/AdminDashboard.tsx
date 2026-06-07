@@ -81,6 +81,7 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
   const [selectedImages, setSelectedImages] = useState<{ file: File; compressedBase64: string }[]>([]);
   const [extractedQuestions, setExtractedQuestions] = useState<(Question & { isDuplicate: boolean; duplicateOriginal?: string })[]>([]);
   const [extracting, setExtracting] = useState(false);
+  const [customQrUrl, setCustomQrUrl] = useState('');
 
   const loadData = async () => {
     setLoading(true);
@@ -1432,33 +1433,70 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
 
               <div className="max-w-md mx-auto bg-white border border-gray-150 rounded-md p-8 text-center space-y-6 shadow-sm">
                 <div className="space-y-2">
-                <h3 className="text-lg font-bold text-gray-900"><span translate="no" className="notranslate">Mã QR Truy Cập Nhanh "Chiến Ngay"</span></h3>
-                <p className="text-xs text-gray-500 leading-relaxed">
-                  <span translate="no" className="notranslate">Lưu trữ hoặc in mã QR này treo ở bảng tin, phòng sản xuất hoặc cửa phòng làm việc để rèn luyện tinh thần 3T hàng ngày.</span>
-                </p>
-              </div>
+                  <h3 className="text-lg font-bold text-gray-900"><span translate="no" className="notranslate">Mã QR Truy Cập Nhanh "Chiến Ngay"</span></h3>
+                  <p className="text-xs text-gray-500 leading-relaxed">
+                    <span translate="no" className="notranslate">Lưu trữ hoặc in mã QR này treo ở bảng tin, phòng sản xuất hoặc cửa phòng làm việc để rèn luyện tinh thần 3T hàng ngày.</span>
+                  </p>
+                </div>
 
-              {/* Secure dyn QR generator (using standard open-source Google Charts API) */}
-              <div className="p-4 bg-gray-50 border border-gray-150 rounded-md flex justify-center items-center">
-                <img 
-                  src={`https://chart.googleapis.com/chart?chs=220x220&cht=qr&chl=${encodeURIComponent(window.location.origin)}&choe=UTF-8`} 
-                  alt="Văn Hóa 3T QR Code Portal" 
-                  className="bg-white border rounded-lg p-2 shadow-inner"
-                  referrerPolicy="no-referrer"
-                />
-              </div>
+                {/* Important notice regarding Google AI Studio iframe authentication boundary */}
+                <div className="bg-amber-50 border border-amber-200 text-left p-3.5 rounded-lg text-[11px] leading-relaxed text-amber-900 space-y-1">
+                  <strong className="text-amber-950 block">⚠️ Lưu ý Quan Trọng khi Quét Thử Nghiệm:</strong>
+                  <p>
+                    Đường dẫn hiện vật này <code className="bg-amber-100 px-1 py-0.2 rounded font-mono text-amber-950 font-bold">ais-dev-...</code> thuộc môi trường phát triển cục bộ và được <strong>bảo mật nghiêm ngặt bởi Google Cloud</strong>.
+                  </p>
+                  <p className="mt-1">
+                    • <strong>Yêu cầu:</strong> Trình duyệt trên điện thoại của bạn <strong>phải đăng nhập tài khoản Google</strong> đã tham gia dự án này (<code className="font-semibold text-amber-950 font-sans">club.nhuatanphu@gmail.com</code>). Nếu không, bạn sẽ gặp lỗi <strong>"Page not found"</strong> của Google AI Studio do bị chặn truy cập.
+                  </p>
+                  <p className="mt-1">
+                    • <strong>Khuyên dùng:</strong> Hãy thử mở trình duyệt Safari/Chrome trên điện thoại để đăng nhập tài khoản Google trước khi quét, hoặc dán đường dẫn bài viết/đường dẫn liên kết của ứng dụng khi chạy chính thức vào khung phía dưới.
+                  </p>
+                </div>
 
-              <div className="text-xs font-mono text-gray-500 bg-gray-100 p-2 rounded break-all border border-gray-200">
-                <span translate="no" className="notranslate">{window.location.origin}</span>
-              </div>
+                {/* Interactive custom link injector */}
+                <div className="text-left space-y-1.5 font-sans">
+                  <label className="text-[11px] font-black text-gray-650 uppercase tracking-wider block">Liên kết nhúng trong Mã QR:</label>
+                  <div className="flex gap-2">
+                    <input 
+                      type="text" 
+                      value={customQrUrl || window.location.origin} 
+                      onChange={(e) => setCustomQrUrl(e.target.value)}
+                      placeholder="Nhập đường dẫn URL mong muốn..."
+                      className="w-full px-3 py-2 text-xs border border-gray-250 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 bg-gray-50/50 font-mono text-gray-700"
+                    />
+                    {(customQrUrl && customQrUrl !== window.location.origin) && (
+                      <button 
+                        onClick={() => setCustomQrUrl('')} 
+                        className="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-650 rounded-lg text-xs font-bold transition-all whitespace-nowrap"
+                        title="Khôi phục mặc định"
+                      >
+                        Mặc định
+                      </button>
+                    )}
+                  </div>
+                </div>
 
-              <button
-                onClick={() => window.print()}
-                className="w-full flex items-center justify-center gap-2 bg-[#1971C2] hover:bg-opacity-95 text-white font-bold text-xs py-2 px-4 rounded-md shadow-sm"
-              >
-                <FileDown className="h-4 w-4" />
-                <span translate="no" className="notranslate">In / Xuất Bản Mã QR Bảng Tin</span>
-              </button>
+                {/* Secure dyn QR generator (using standard open-source QRServer API) */}
+                <div className="p-4 bg-gray-50 border border-gray-150 rounded-md flex justify-center items-center">
+                  <img 
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(customQrUrl || window.location.origin)}`} 
+                    alt="Văn Hóa 3T QR Code Portal" 
+                    className="bg-white border rounded-lg p-2.5 shadow-inner h-[250px] w-[250px]"
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+
+                <div className="text-xs font-mono text-gray-500 bg-gray-100 p-2.5 rounded break-all border border-gray-200">
+                  <span translate="no" className="notranslate">{customQrUrl || window.location.origin}</span>
+                </div>
+
+                <button
+                  onClick={() => window.print()}
+                  className="w-full flex items-center justify-center gap-2 bg-[#1971C2] hover:bg-opacity-95 text-white font-bold text-xs py-2.5 px-4 rounded-md shadow-sm"
+                >
+                  <FileDown className="h-4 w-4" />
+                  <span translate="no" className="notranslate">In / Xuất Bản Mã QR Bảng Tin</span>
+                </button>
               </div>
             </motion.div>
           )}
