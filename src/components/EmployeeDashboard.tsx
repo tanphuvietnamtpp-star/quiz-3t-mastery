@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { databaseService } from '../firebase';
 import { User, Question, QuizResult } from '../types';
 import { formatDate, formatTimeInSeconds } from '../utils/format';
-import { BookOpen, Trophy, Award, BarChart3, ChevronRight, CheckCircle2, XCircle, ArrowRight, RotateCcw, HelpCircle, GraduationCap, AlertCircle, Users, TrendingUp, Building2, LogOut, Home, Maximize2, Minimize2, UserCheck, ImagePlus, Lock, Sparkles } from 'lucide-react';
+import { BookOpen, Trophy, Award, BarChart3, ChevronRight, CheckCircle2, XCircle, ArrowRight, RotateCcw, HelpCircle, GraduationCap, AlertCircle, Users, TrendingUp, Building2, LogOut, Home, Maximize2, Minimize2, UserCheck, ImagePlus, Lock, Sparkles, X, Plus, Smartphone, Share, ArrowUp } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts';
 
@@ -107,6 +107,52 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
       }
     } catch (err) {
       console.warn("Fullscreen toggle error:", err);
+    }
+  };
+
+  const [pwaPrompt, setPwaPrompt] = useState<any>(null);
+  const [showPwaModal, setShowPwaModal] = useState(false);
+  const [pwaTab, setPwaTab] = useState<'android' | 'ios'>('android');
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault();
+      setPwaPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, []);
+
+  const handlePwaInstall = () => {
+    if (pwaPrompt) {
+      pwaPrompt.prompt();
+      pwaPrompt.userChoice.then((choiceResult: any) => {
+        if (choiceResult.outcome === 'accepted') {
+          console.log('User accepted the install prompt');
+        }
+        setPwaPrompt(null);
+      });
+    } else {
+      setShowPwaModal(true);
+    }
+  };
+
+  const innerViewportRef = useRef<HTMLDivElement>(null);
+  const [showScrollTop, setShowScrollTop] = useState(false);
+
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const scrollTop = e.currentTarget.scrollTop;
+    setShowScrollTop(scrollTop > 100);
+  };
+
+  const scrollToTop = () => {
+    if (innerViewportRef.current) {
+      innerViewportRef.current.scrollTo({
+        top: 0,
+        behavior: 'smooth'
+      });
     }
   };
 
@@ -630,8 +676,21 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
             <div className="w-8 h-0.5 bg-slate-900 rounded-full"></div>
           </div>
           
+          {/* Floating Fullscreen Toggle Button at Top-Right Corner */}
+          <button
+            onClick={toggleFullscreen}
+            className="absolute top-3.5 right-3.5 z-40 p-2 bg-white/80 hover:bg-white active:scale-95 text-[#0B3A60] hover:text-[#1971C2] rounded-full flex items-center justify-center shadow-md border border-gray-100/80 transition-all cursor-pointer group"
+            title={isFullscreen ? "Thoát toàn màn hình" : "Toàn màn hình"}
+          >
+            {isFullscreen ? (
+              <Minimize2 className="h-3.5 w-3.5 group-hover:scale-105 transition-transform" />
+            ) : (
+              <Maximize2 className="h-3.5 w-3.5 group-hover:scale-105 transition-transform" />
+            )}
+          </button>
+          
           {/* Screen Inner Viewport (Auto-co giãn, scrollable elegantly like a native application) */}
-          <div className="bg-white w-full h-full rounded-[24px] overflow-hidden flex flex-col shadow-inner relative border border-gray-150 p-3 sm:p-4 overflow-y-auto style-scrollbar flex-1">
+          <div ref={innerViewportRef} onScroll={handleScroll} className="bg-white w-full h-full rounded-[24px] overflow-hidden flex flex-col shadow-inner relative border border-gray-150 p-3 sm:p-4 overflow-y-auto style-scrollbar flex-1">
             
             {/* Dynamic Inner Panel Viewports */}
             <AnimatePresence mode="wait">
@@ -1382,6 +1441,17 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                     <p className="text-[10px] sm:text-xs text-gray-450 mt-1">Bộ phận: {user.department}</p>
                   </div>
 
+                  {/* Elegant PWA Quick Installation Action Button */}
+                  <div className="w-full flex justify-center shrink-0">
+                    <button
+                      onClick={handlePwaInstall}
+                      className="w-full max-w-sm flex items-center justify-center gap-2 py-2 px-4 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 hover:text-emerald-900 font-extrabold text-[11px] sm:text-xs rounded-xl shadow-3xs hover:scale-[1.01] active:scale-[0.99] transition-all cursor-pointer group"
+                    >
+                      <Sparkles className="h-3.5 w-3.5 text-amber-500 animate-pulse shrink-0" />
+                      <span>{pwaPrompt ? "CÀI ĐẶT APP 3T VỀ ĐIỆN THOẠI" : "HƯỚNG DẪN CÀI ĐẶT APP 3T"}</span>
+                    </button>
+                  </div>
+
                   {/* Big Primary Start Button */}
                   <div className="w-full flex justify-center shrink-0">
                     <button
@@ -1985,7 +2055,192 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Beautiful Interactive PWA Custom Installation Guide Modal */}
+        <AnimatePresence>
+          {showPwaModal && (
+            <div className="fixed inset-0 z-100 flex items-center justify-center p-4">
+              {/* Opacity Fade Backdrop */}
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setShowPwaModal(false)}
+                className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs"
+              />
+
+              {/* Slide Zoom Dialog box */}
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0, y: 15 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.95, opacity: 0, y: 15 }}
+                transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+                className="relative bg-white w-full max-w-sm rounded-[24px] shadow-2xl border border-slate-100 overflow-hidden flex flex-col z-10 max-h-[90vh]"
+              >
+                {/* Header */}
+                <div className="bg-[#0B3A60] text-white px-5 py-4 flex items-center justify-between relative shrink-0">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="h-4.5 w-4.5 text-amber-400 animate-pulse" />
+                    <h3 className="font-extrabold text-xs sm:text-sm uppercase tracking-wide">Cài đặt Ứng dụng Quiz 3T</h3>
+                  </div>
+                  <button
+                    onClick={() => setShowPwaModal(false)}
+                    className="p-1 px-1.5 hover:bg-white/10 active:scale-95 transition-all text-white/90 hover:text-white rounded-lg cursor-pointer"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                {/* Body Content */}
+                <div className="p-4 overflow-y-auto space-y-4 font-sans text-xs sm:text-sm text-gray-700 style-scrollbar">
+                  <p className="text-gray-500 font-medium leading-relaxed text-center px-1">
+                    Hệ thống chạy trên chuẩn <strong className="text-[#0B3A60]">PWA (Progressive Web App)</strong> siêu nhẹ, không cần tải qua App Store / CH Play mà vẫn cài được icon trực tiếp ra màn hình chính!
+                  </p>
+
+                  {/* Device Tab Switches */}
+                  <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-xl shrink-0">
+                    <button
+                      onClick={() => setPwaTab('android')}
+                      className={`flex items-center justify-center gap-1.5 py-1.5 sm:py-2 text-xs font-extrabold rounded-lg transition-all cursor-pointer ${
+                        pwaTab === 'android'
+                          ? 'bg-[#0B3A60] text-white shadow-xs'
+                          : 'text-gray-600 hover:bg-slate-200/50'
+                      }`}
+                    >
+                      <Smartphone className="h-3.5 w-3.5 shrink-0" />
+                      <span>ĐIỆN THOẠI ANDROID</span>
+                    </button>
+                    <button
+                      onClick={() => setPwaTab('ios')}
+                      className={`flex items-center justify-center gap-1.5 py-1.5 sm:py-2 text-xs font-extrabold rounded-lg transition-all cursor-pointer ${
+                        pwaTab === 'ios'
+                          ? 'bg-[#0B3A60] text-white shadow-xs'
+                          : 'text-gray-600 hover:bg-slate-200/50'
+                      }`}
+                    >
+                      <Smartphone className="h-3.5 w-3.5 shrink-0" />
+                      <span>ĐIỆN THOẠI IPHONE</span>
+                    </button>
+                  </div>
+
+                  {/* Step Guides based on Selected Tab */}
+                  {pwaTab === 'android' ? (
+                    <div className="space-y-3.5 pt-1">
+                      <div className="flex gap-2.5 items-start">
+                        <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 font-extrabold text-xs flex items-center justify-center shrink-0 mt-0.5">1</span>
+                        <div>
+                          <p className="font-bold text-gray-900">Bắt buộc dùng trình duyệt Google Chrome</p>
+                          <p className="text-[11px] text-gray-500 mt-0.5 leading-snug">Sao chép đường link ứng dụng và dán vào Google Chrome để mở.</p>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2.5 items-start">
+                        <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 font-extrabold text-xs flex items-center justify-center shrink-0 mt-0.5">2</span>
+                        <div>
+                          <p className="font-bold text-gray-900">Mở menu chức năng</p>
+                          <p className="text-[11px] text-gray-500 mt-0.5 leading-snug">Chạm vào biểu tượng dấu <strong className="text-gray-800">3 dấu chấm dọc (⋮)</strong> ở góc trên bên phải màn hình Chrome.</p>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2.5 items-start">
+                        <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 font-extrabold text-xs flex items-center justify-center shrink-0 mt-0.5">3</span>
+                        <div>
+                          <p className="font-bold text-gray-900">Chọn Thêm vào màn hình chính</p>
+                          <p className="text-[11px] text-gray-500 mt-0.5 leading-snug text-emerald-700 font-semibold">
+                            Tìm và click vào nút <strong className="underline">"Cài đặt ứng dụng"</strong> hoặc <strong className="underline">"Thêm vào Màn hình chính"</strong>. Điện thoại sẽ cài đặt một icon ứng dụng 3T độc lập cực xịn!
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-3.5 pt-1">
+                      <div className="flex gap-2.5 items-start">
+                        <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-800 font-extrabold text-xs flex items-center justify-center shrink-0 mt-0.5">1</span>
+                        <div>
+                          <p className="font-bold text-gray-900">Bắt buộc dùng Safari trên iPhone</p>
+                          <p className="text-[11px] text-gray-500 mt-0.5 leading-snug">Mở đường link ứng dụng bằng trình duyệt gốc <strong className="text-gray-850">Safari</strong> của Apple.</p>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2.5 items-start">
+                        <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-800 font-extrabold text-xs flex items-center justify-center shrink-0 mt-0.5">2</span>
+                        <div>
+                          <p className="font-bold text-gray-900">Bấm nút "Chia sẻ" (Share)</p>
+                          <p className="text-[11px] text-gray-500 mt-0.5 leading-snug flex items-center gap-1">
+                            Click vào biểu tượng nút Chia sẻ <Share className="h-3.5 w-3.5 text-indigo-600 inline shrink-0" /> (hình vuông có mũi tên trỏ lên) ở thanh công cụ dưới cùng.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2.5 items-start">
+                        <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-800 font-extrabold text-xs flex items-center justify-center shrink-0 mt-0.5">3</span>
+                        <div>
+                          <p className="font-bold text-gray-900">Chọn "Thêm vào MH chính"</p>
+                          <p className="text-[11px] text-gray-500 mt-0.5 leading-snug text-indigo-700 font-semibold flex items-center gap-1">
+                            Cuộn xuống dưới rồi ấn nút <strong className="underline">"Thêm vào MH chính"</strong> (hoặc <strong className="underline">"Add to Home Screen"</strong> <Plus className="h-3 w-3 inline shrink-0" />), sau đó nhấn <strong className="underline">"Thêm"</strong> ở góc trên bên phải để lưu.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Visual Indicator of Output */}
+                  <div className="bg-slate-50 border border-slate-150 rounded-xl p-3 text-[11px] text-slate-500 leading-snug font-medium text-center">
+                    Sau khi thực hiện, màn hình điện thoại của bạn sẽ xuất hiện một Icon ứng dụng tên <strong className="text-[#0B3A60]">"Quiz 3T"</strong> độc lập, mượt mà giống hệt ứng dụng cài từ App Store!
+                  </div>
+                </div>
+
+                {/* Footer close button */}
+                <div className="p-3 bg-slate-50 border-t border-slate-100 text-center shrink-0">
+                  <button
+                    onClick={() => setShowPwaModal(false)}
+                    className="w-full py-2 bg-[#0B3A60] hover:bg-[#0B3A60]/95 text-white font-bold text-xs rounded-xl shadow-xs transition-all active:scale-[0.98] cursor-pointer"
+                  >
+                    Đã hiểu, tôi tự làm được!
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
           </div>
+
+          {/* Floating Action Buttons for Ôn Tập Tab (Scroll To Top & Back to Home) */}
+          {activeTab === 'practice' && !quizStarted && (
+            <div className="absolute bottom-18 right-5 z-45 flex flex-col gap-2.5">
+              {/* Scroll to Top Button */}
+              <AnimatePresence>
+                {showScrollTop && (
+                  <motion.button
+                    initial={{ scale: 0, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0, opacity: 0 }}
+                    whileTap={{ scale: 0.9 }}
+                    onClick={scrollToTop}
+                    className="w-11 h-11 bg-[#0B3A60] hover:bg-[#1971C2] text-white rounded-full flex items-center justify-center shadow-lg hover:shadow-xl border border-white/20 transition-all cursor-pointer group shrink-0"
+                    title="Cuộn lên đầu trang"
+                  >
+                    <ArrowUp className="h-5.5 w-5.5 group-hover:-translate-y-0.5 transition-transform" />
+                  </motion.button>
+                )}
+              </AnimatePresence>
+
+              {/* Home Icon Button (Quay về Trang chủ) */}
+              <motion.button
+                initial={{ scale: 0, opacity: 0, y: 10 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={() => {
+                  setActiveTab('quiz');
+                  scrollToTop();
+                }}
+                className="w-11 h-11 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full flex items-center justify-center shadow-lg hover:shadow-xl border border-white/10 transition-all cursor-pointer group shrink-0 animate-pulse-slow"
+                title="Quay về Trang chủ"
+              >
+                <Home className="h-5 w-5 group-hover:scale-110 transition-transform" />
+              </motion.button>
+            </div>
+          )}
         </div>
       </main>
     </div>
