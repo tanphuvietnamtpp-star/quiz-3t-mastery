@@ -3,7 +3,7 @@
   "short_name": "Quiz 3T",
   "description": "Hệ thống trắc nghiệm thi đua kiến thức 3T - Công ty Tài chính Tân Phú.",
   "start_url": "/",
-  "display": "standalone",
+  "display": "fullscreen",
   "orientation": "portrait",
   "background_color": "#051C30",
   "theme_color": "#0B3A60",

@@ -760,10 +760,10 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
           <div className="flex items-center gap-2">
             <button
               onClick={onSimulateEmployee}
-              className="text-xs font-bold text-white bg-green-600 hover:bg-green-700 hover:shadow shadow-sm rounded-md py-2 px-3.5 transition-all flex items-center gap-1.5 border border-green-500 font-sans"
+              className="text-xs font-bold text-white bg-green-600 hover:bg-green-700 hover:shadow shadow-sm rounded-md py-2 px-3.5 transition-all flex items-center gap-1.5 border border-green-500 font-sans animate-pulse"
             >
               <Sparkles className="h-4 w-4 text-white" />
-              <span translate="no" className="notranslate">Trải nghiệm Học & Thi Thử (CBNV)</span>
+              <span translate="no" className="notranslate">VỀ TRANG CHỦ (ĐIỆN THOẠI)</span>
             </button>
             <button
               onClick={onLogout}
