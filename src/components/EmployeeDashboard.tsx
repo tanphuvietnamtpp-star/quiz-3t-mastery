@@ -425,9 +425,9 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
 
   return (
     <div className="h-[100dvh] min-h-[100dvh] max-h-[100dvh] overflow-hidden bg-gray-50 flex flex-col">
-      {/* Simulation preview banner */}
+      {/* Simulation preview banner - Hidden on mobile viewports so mock screen can occupy the top space (tràn lên trên) */}
       {isAdminReview && (
-        <div className="bg-amber-500 text-white px-6 py-2 flex flex-col sm:flex-row justify-between items-center text-xs md:text-sm font-bold shadow-md z-50 gap-1.5 shrink-0">
+        <div className="hidden sm:flex bg-amber-500 text-white px-6 py-2 flex-col sm:flex-row justify-between items-center text-xs md:text-sm font-bold shadow-md z-50 gap-1.5 shrink-0">
           <div className="flex items-center gap-2">
             <span translate="no" className="notranslate bg-amber-700 px-2 py-0.5 rounded text-[10px] text-white tracking-widest shrink-0 uppercase">Chế độ xem thử</span>
             <span translate="no" className="notranslate">Anh/Chị đang trải nghiệm giao diện CBNV để trực tiếp kiểm duyệt Thi thử, Học từ sai và Phân tích 3T!</span>
@@ -882,7 +882,7 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                         <div className="text-[9px] font-extrabold text-[#0B3A60]/85 uppercase tracking-wider mb-2 text-center">
                           CÔNG CỤ NHANH QUẢN TRỊ VIÊN
                         </div>
-                        <div className="grid grid-cols-4 gap-1 px-0.5">
+                        <div className="grid grid-cols-4 gap-1 px-0.5 mb-2">
                           <button
                             onClick={() => onBackToAdmin?.('users')}
                             className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group"
@@ -932,6 +932,14 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                             <span className="text-[8.5px] font-bold leading-tight truncate w-full text-center text-gray-700">Mã Hóa</span>
                           </button>
                         </div>
+                        {/* Integrated exit button for mobile users where headers are hidden */}
+                        <button
+                          onClick={() => onBackToAdmin?.()}
+                          className="w-full mt-1.5 px-3 py-1 bg-red-50 hover:bg-red-100 border border-red-250 text-red-650 active:scale-95 transition-all rounded-lg text-[9px] font-extrabold tracking-wider flex items-center justify-center gap-1 cursor-pointer shadow-3xs"
+                        >
+                          <LogOut className="h-3 w-3 shrink-0" />
+                          <span>QUAY LẠI TRANG QUẢN TRỊ VIÊN</span>
+                        </button>
                       </div>
                     )}
 
@@ -1349,10 +1357,24 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                               <div className="bg-orange-50 border-l-4 border-orange-400 p-3 rounded-r-xl text-xs text-orange-950 mt-3 leading-relaxed">
                                 <h5 className="font-bold text-orange-850 flex items-center gap-1 mb-0.5">
                                   <AlertCircle className="h-4 w-4 text-orange-500 shrink-0" />
-                                  <span>Dặn dỏi & Giải thích:</span>
+                                  <span>Dặn dò & Giải thích:</span>
                                 </h5>
-                                <p className="font-semibold italic text-[11px] sm:text-xs">
-                                  "Anh/Chị nhớ nhé: {currentQuizQuestions[reviewQuestionIndex].explanation}"
+                                <p className="font-semibold italic text-[11px] sm:text-xs text-orange-900">
+                                  {(() => {
+                                    let exp = (currentQuizQuestions[reviewQuestionIndex].explanation || "").trim();
+                                    // Remove existing quotes at the start/end if any
+                                    exp = exp.replace(/^["'“]+|["'”]+$/g, "").trim();
+                                    
+                                    // Pattern to match variations of "Anh/Chị nhớ nhé" or "Anh chị nhớ nhé" at the start, with optional colons/spaces
+                                    const pattern = /^(anh[\/\s]chị\s+nhớ\s+nhé\s*:?\s*)/i;
+                                    
+                                    if (pattern.test(exp)) {
+                                      // Strip the existing prefix
+                                      exp = exp.replace(pattern, "").trim();
+                                    }
+                                    
+                                    return `"Anh/Chị nhớ nhé: ${exp}"`;
+                                  })()}
                                 </p>
                               </div>
 
