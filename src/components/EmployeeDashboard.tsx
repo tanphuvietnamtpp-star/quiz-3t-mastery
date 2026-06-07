@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { databaseService } from '../firebase';
 import { User, Question, QuizResult } from '../types';
 import { formatDate, formatTimeInSeconds } from '../utils/format';
-import { BookOpen, Trophy, Award, BarChart3, ChevronRight, CheckCircle2, XCircle, ArrowRight, RotateCcw, HelpCircle, GraduationCap, AlertCircle, Users, TrendingUp, Building2, LogOut, Home, Maximize2, Minimize2, UserCheck, ImagePlus, Lock } from 'lucide-react';
+import { BookOpen, Trophy, Award, BarChart3, ChevronRight, CheckCircle2, XCircle, ArrowRight, RotateCcw, HelpCircle, GraduationCap, AlertCircle, Users, TrendingUp, Building2, LogOut, Home, Maximize2, Minimize2, UserCheck, ImagePlus, Lock, QrCode } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts';
 
@@ -10,7 +10,7 @@ interface EmployeeDashboardProps {
   user: User;
   onLogout: () => void;
   isAdminReview?: boolean;
-  onBackToAdmin?: (tab?: 'users' | 'add_images' | 'stats' | 'encoding') => void;
+  onBackToAdmin?: (tab?: 'users' | 'questions' | 'add_images' | 'qr' | 'stats' | 'encoding') => void;
   slogan?: string;
 }
 
@@ -862,16 +862,39 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                   {/* Centered Top & Mid content wrapper to keep them tight together */}
                   <div className="flex flex-col items-center justify-center text-center space-y-4.5 sm:space-y-5 flex-1 w-full shrink-0">
                     
+                    {/* Compact Fullscreen Toggle for General Employees (placed cleanly at top right if not Admin) */}
+                    {!isAdminReview && (
+                      <div className="w-full flex justify-end px-2 shrink-0">
+                        <button
+                          onClick={toggleFullscreen}
+                          className="flex items-center justify-center h-7 w-7 bg-white hover:bg-gray-150 border border-gray-200 text-[#1971C2] rounded-full cursor-pointer transition-all active:scale-95 shadow-3xs shrink-0"
+                          title={isFullscreen ? "Thoát toàn màn hình" : "Toàn màn hình / Ẩn địa chỉ bar"}
+                        >
+                          {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5 text-blue-600 animate-pulse" />}
+                        </button>
+                      </div>
+                    )}
+
                     {/* Admin rapid action buttons */}
                     {isAdminReview && (
-                      <div className="w-full max-w-sm mx-auto bg-slate-50/90 border border-slate-200/60 rounded-xl p-2 shadow-xs mb-4 sm:mb-5">
-                        <div className="text-[9px] font-extrabold text-[#0B3A60]/85 uppercase tracking-wider mb-2 text-center">
-                          CÔNG CỤ NHANH QUẢN TRỊ VIÊN
+                      <div className="w-full max-w-sm mx-auto bg-slate-50/90 border border-slate-200/60 rounded-xl p-2 shadow-xs mb-4 sm:mb-5 relative">
+                        <div className="flex items-center justify-between px-1 mb-2 relative">
+                          <div className="w-6 shrink-0" /> {/* Centering spacer to balance the right icon */}
+                          <div className="text-[9.5px] font-extrabold text-[#0B3A60]/85 uppercase tracking-wider text-center flex-1">
+                            CÔNG CỤ CỦA QUẢN TRỊ VIÊN
+                          </div>
+                          <button
+                            onClick={toggleFullscreen}
+                            className="flex items-center justify-center h-6 w-6 bg-white hover:bg-gray-150 border border-gray-300 text-[#1971C2] rounded-full cursor-pointer transition-all active:scale-95 shadow-3xs shrink-0"
+                            title={isFullscreen ? "Thoát toàn màn hình" : "Toàn màn hình / Ẩn địa chỉ bar"}
+                          >
+                            {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5 text-blue-600 animate-pulse" />}
+                          </button>
                         </div>
-                        <div className="grid grid-cols-4 gap-1 px-0.5">
+                        <div className="grid grid-cols-6 gap-0.5 px-0.5">
                           <button
                             onClick={() => onBackToAdmin?.('users')}
-                            className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group"
+                            className="flex flex-col items-center gap-1 p-0.5 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group"
                             title="Phê Duyệt & Phân Quyền"
                           >
                             <div className="h-7 w-7 rounded-lg bg-blue-50 border border-blue-100/60 flex items-center justify-center group-hover:bg-blue-100 transition-colors shrink-0 relative">
@@ -882,40 +905,62 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                                 </span>
                               )}
                             </div>
-                            <span className="text-[8.5px] font-bold leading-tight truncate w-full text-center text-gray-700">Phê Duyệt</span>
+                            <span className="text-[8px] font-bold leading-tight truncate w-full text-center text-gray-700">Duyệt & Quyen</span>
+                          </button>
+
+                          <button
+                            onClick={() => onBackToAdmin?.('questions')}
+                            className="flex flex-col items-center gap-1 p-0.5 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group"
+                            title="Học liệu Huấn luyện 3T"
+                          >
+                            <div className="h-7 w-7 rounded-lg bg-indigo-50 border border-indigo-100/60 flex items-center justify-center group-hover:bg-indigo-100 transition-colors shrink-0">
+                              <HelpCircle className="h-3.5 w-3.5 text-indigo-600" />
+                            </div>
+                            <span className="text-[8px] font-bold leading-tight truncate w-full text-center text-gray-700">Học liệu</span>
                           </button>
 
                           <button
                             onClick={() => onBackToAdmin?.('add_images')}
-                            className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group"
+                            className="flex flex-col items-center gap-1 p-0.5 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group"
                             title="Trích xuất Câu Hỏi AI (Hình Ảnh)"
                           >
                             <div className="h-7 w-7 rounded-lg bg-purple-50 border border-purple-100/60 flex items-center justify-center group-hover:bg-purple-100 transition-colors shrink-0">
                               <ImagePlus className="h-3.5 w-3.5 text-purple-600" />
                             </div>
-                            <span className="text-[8.5px] font-bold leading-tight truncate w-full text-center text-gray-700">Trích xuất AI</span>
+                            <span className="text-[8px] font-bold leading-tight truncate w-full text-center text-gray-700">Trích AI</span>
+                          </button>
+
+                          <button
+                            onClick={() => onBackToAdmin?.('qr')}
+                            className="flex flex-col items-center gap-1 p-0.5 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group"
+                            title="QR Code Vào Sảnh"
+                          >
+                            <div className="h-7 w-7 rounded-lg bg-red-50 border border-red-100/60 flex items-center justify-center group-hover:bg-red-100 transition-colors shrink-0">
+                              <QrCode className="h-3.5 w-3.5 text-red-600" />
+                            </div>
+                            <span className="text-[8px] font-bold leading-tight truncate w-full text-center text-gray-700">Sảnh QR</span>
                           </button>
 
                           <button
                             onClick={() => onBackToAdmin?.('stats')}
-                            className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group"
+                            className="flex flex-col items-center gap-1 p-0.5 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group"
                             title="Trang Thống Kê"
                           >
                             <div className="h-7 w-7 rounded-lg bg-emerald-50 border border-emerald-100/60 flex items-center justify-center group-hover:bg-emerald-100 transition-colors shrink-0">
                               <BarChart3 className="h-3.5 w-3.5 text-emerald-600" />
                             </div>
-                            <span className="text-[8.5px] font-bold leading-tight truncate w-full text-center text-gray-700">Thống Kê</span>
+                            <span className="text-[8px] font-bold leading-tight truncate w-full text-center text-gray-700">Thống Kê</span>
                           </button>
 
                           <button
                             onClick={() => onBackToAdmin?.('encoding')}
-                            className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group"
+                            className="flex flex-col items-center gap-1 p-0.5 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group"
                             title="Trang Mã Hóa"
                           >
                             <div className="h-7 w-7 rounded-lg bg-amber-50 border border-amber-100/60 flex items-center justify-center group-hover:bg-amber-100 transition-colors shrink-0">
                               <Lock className="h-3.5 w-3.5 text-amber-600" />
                             </div>
-                            <span className="text-[8.5px] font-bold leading-tight truncate w-full text-center text-gray-700">Mã Hóa</span>
+                            <span className="text-[8px] font-bold leading-tight truncate w-full text-center text-gray-700">Mã Hóa</span>
                           </button>
                         </div>
                       </div>
