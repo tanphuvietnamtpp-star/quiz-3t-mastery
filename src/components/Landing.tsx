@@ -462,7 +462,7 @@ export default function Landing({ onLoginSuccess, slogan }: LandingProps) {
                     {loading ? (
                       <span translate="no" className="notranslate">Đang đăng nhập...</span>
                     ) : (
-                      <span translate="no" className="notranslate">Vào lớp học</span>
+                      <span translate="no" className="notranslate">Vào Học Tập</span>
                     )}
                   </button>
                 </div>

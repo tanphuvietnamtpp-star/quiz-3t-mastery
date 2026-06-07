@@ -425,7 +425,21 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
 
   return (
     <div className="h-[100dvh] min-h-[100dvh] max-h-[100dvh] overflow-hidden bg-gray-50 flex flex-col">
-      {/* Simulation preview banner removed to maintain native standalone dashboard feel */}
+      {/* Simulation preview banner */}
+      {isAdminReview && (
+        <div className="bg-amber-500 text-white px-6 py-2 flex flex-col sm:flex-row justify-between items-center text-xs md:text-sm font-bold shadow-md z-50 gap-1.5 shrink-0">
+          <div className="flex items-center gap-2">
+            <span translate="no" className="notranslate bg-amber-700 px-2 py-0.5 rounded text-[10px] text-white tracking-widest shrink-0 uppercase">Chế độ xem thử</span>
+            <span translate="no" className="notranslate">Anh/Chị đang trải nghiệm giao diện CBNV để trực tiếp kiểm duyệt Thi thử, Học từ sai và Phân tích 3T!</span>
+          </div>
+          <button 
+            onClick={onBackToAdmin}
+            className="bg-white text-gray-900 hover:bg-gray-100 transition-all font-bold px-3 py-1 rounded shadow-sm font-sans shrink-0 text-xs"
+          >
+            <span translate="no" className="notranslate">Quay lại trang Quản trị</span>
+          </button>
+        </div>
+      )}
 
       {/* Main Area containing Structured Smartphone Mockup with Auto-Detection */}
       <main className="flex-1 flex items-center justify-center p-1.5 sm:p-6 bg-gradient-to-b from-gray-50 to-gray-100 min-h-0 h-0 overflow-hidden relative w-full">

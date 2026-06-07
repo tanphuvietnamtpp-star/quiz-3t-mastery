@@ -10,7 +10,7 @@ import { motion, AnimatePresence } from 'motion/react';
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [simulateEmployee, setSimulateEmployee] = useState(true);
+  const [simulateEmployee, setSimulateEmployee] = useState(false);
   const [slogan, setSlogan] = useState('3T Hội Tụ - Tân Phú Vươn Xa');
   const [adminInitialTab, setAdminInitialTab] = useState<'users' | 'questions' | 'add_images' | 'qr' | 'stats' | 'encoding'>('users');
 
@@ -112,9 +112,6 @@ export default function App() {
   const handleLoginSuccess = (user: User) => {
     setCurrentUser(user);
     localStorage.setItem('3t_active_user', JSON.stringify(user));
-    if (user.role === 'admin') {
-      setSimulateEmployee(true);
-    }
   };
 
   const handleLogout = () => {
