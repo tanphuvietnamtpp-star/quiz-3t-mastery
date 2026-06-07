@@ -65,8 +65,6 @@ export default function Landing({ onLoginSuccess, slogan }: LandingProps) {
     };
   }, []);
 
-
-
   const toggleFullscreen = () => {
     try {
       const docEl = document.documentElement as any;

@@ -47,7 +47,38 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
     };
   }, []);
 
+  // Tự động kiểm tra và ẩn thanh địa chỉ trình duyệt trên điện thoại khi có tương tác chạm đầu tiên
+  useEffect(() => {
+    const autoFullscreenOnInteraction = () => {
+      const isMobile = window.innerWidth < 640 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      if (isMobile && !document.fullscreenElement) {
+        const docEl = document.documentElement as any;
+        try {
+          if (docEl.requestFullscreen) {
+            docEl.requestFullscreen().catch(() => {});
+          } else if (docEl.webkitRequestFullscreen) {
+            docEl.webkitRequestFullscreen();
+          } else if (docEl.mozRequestFullScreen) {
+            docEl.mozRequestFullScreen();
+          } else if (docEl.msRequestFullscreen) {
+            docEl.msRequestFullscreen();
+          }
+        } catch (err) {
+          console.warn("Auto-fullscreen failed:", err);
+        }
+      }
+      // Dọn dẹp listener sau lần tương tác đầu tiên
+      window.removeEventListener('click', autoFullscreenOnInteraction);
+      window.removeEventListener('touchstart', autoFullscreenOnInteraction);
+    };
 
+    window.addEventListener('click', autoFullscreenOnInteraction);
+    window.addEventListener('touchstart', autoFullscreenOnInteraction);
+    return () => {
+      window.removeEventListener('click', autoFullscreenOnInteraction);
+      window.removeEventListener('touchstart', autoFullscreenOnInteraction);
+    };
+  }, []);
 
   const toggleFullscreen = () => {
     try {
@@ -400,10 +431,10 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
       <main className="flex-1 flex items-center justify-center p-1.5 sm:p-6 bg-gradient-to-b from-gray-50 to-gray-100 min-h-0 h-0 overflow-hidden relative w-full">
         
         {/* Smartphone Frame Outer Shell with mathematically concentric corner radius */}
-        <div className="w-full max-w-[415px] h-full max-h-[810px] bg-[#0F1C2E] rounded-[32px] p-1 border-4 sm:border-[6px] border-slate-800 shadow-2xl relative ring-2 ring-slate-900/10 transition-all text-gray-800 flex flex-col my-0.5 sm:my-1.5 shrink-0 overflow-hidden">
+        <div className="w-full sm:max-w-[415px] h-full sm:h-[810px] max-h-full sm:max-h-[810px] bg-[#0F1C2E] rounded-[32px] p-1 shadow-2xl relative border-4 border-slate-800 ring-2 ring-slate-900/5 transition-all text-gray-800 flex flex-col my-0.5 sm:my-1 shrink-0 overflow-hidden">
           
           {/* Physical Phone Top Notch / Speaker Deco element simulating phone layout */}
-          <div className="flex absolute -top-0.5 left-1/2 -translate-x-1/2 w-24 h-3.5 bg-slate-800 rounded-b-md z-20 items-center justify-center">
+          <div className="hidden sm:flex absolute -top-0.5 left-1/2 -translate-x-1/2 w-24 h-3.5 bg-slate-800 rounded-b-md z-20 items-center justify-center">
             <div className="w-8 h-0.5 bg-slate-900 rounded-full"></div>
           </div>
           
@@ -1349,14 +1380,10 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                               <div className="bg-orange-50 border-l-4 border-orange-400 p-3 rounded-r-xl text-xs text-orange-950 mt-3 leading-relaxed">
                                 <h5 className="font-bold text-orange-850 flex items-center gap-1 mb-0.5">
                                   <AlertCircle className="h-4 w-4 text-orange-500 shrink-0" />
-                                  <span>Dặn dò & Giải thích:</span>
+                                  <span>Dặn dỏi & Giải thích:</span>
                                 </h5>
                                 <p className="font-semibold italic text-[11px] sm:text-xs">
-                                  {(() => {
-                                    const exp = currentQuizQuestions[reviewQuestionIndex].explanation || "";
-                                    const hasPrefix = exp.trim().toLowerCase().startsWith("anh/chị nhớ nhé") || exp.trim().toLowerCase().startsWith("anh/chị nhớ nhe");
-                                    return hasPrefix ? `"${exp}"` : `"Anh/Chị nhớ nhé: ${exp}"`;
-                                  })()}
+                                  "Anh/Chị nhớ nhé: {currentQuizQuestions[reviewQuestionIndex].explanation}"
                                 </p>
                               </div>
 
