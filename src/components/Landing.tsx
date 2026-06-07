@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { databaseService } from '../firebase';
 import { User, CompanyMapping } from '../types';
-import { Sparkles, Shield, UserCheck, AlertCircle, Phone, Lock, User as UserIcon, Landmark, Briefcase, Building, Maximize2, Minimize2 } from 'lucide-react';
+import { Sparkles, Shield, UserCheck, AlertCircle, Phone, Lock, User as UserIcon, Landmark, Briefcase, Building } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface LandingProps {
@@ -46,54 +46,6 @@ export default function Landing({ onLoginSuccess, slogan }: LandingProps) {
   // Use a ref to capture the current state of phone/employeeId without stale closures or trigger deps
   const inputsRef = React.useRef({ employeeId, phone });
   inputsRef.current = { employeeId, phone };
-
-  const [isFullscreen, setIsFullscreen] = useState(false);
-
-  useEffect(() => {
-    const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-    };
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
-    document.addEventListener('mozfullscreenchange', handleFullscreenChange);
-    document.addEventListener('MSFullscreenChange', handleFullscreenChange);
-    return () => {
-      document.removeEventListener('fullscreenchange', handleFullscreenChange);
-      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
-      document.removeEventListener('mozfullscreenchange', handleFullscreenChange);
-      document.removeEventListener('MSFullscreenChange', handleFullscreenChange);
-    };
-  }, []);
-
-  const toggleFullscreen = () => {
-    try {
-      const docEl = document.documentElement as any;
-      if (!document.fullscreenElement) {
-        if (docEl.requestFullscreen) {
-          docEl.requestFullscreen().catch(() => {});
-        } else if (docEl.webkitRequestFullscreen) {
-          docEl.webkitRequestFullscreen();
-        } else if (docEl.mozRequestFullScreen) {
-          docEl.mozRequestFullScreen();
-        } else if (docEl.msRequestFullscreen) {
-          docEl.msRequestFullscreen();
-        }
-      } else {
-        const doc = document as any;
-        if (doc.exitFullscreen) {
-          doc.exitFullscreen().catch(() => {});
-        } else if (doc.webkitExitFullscreen) {
-          doc.webkitExitFullscreen();
-        } else if (doc.mozCancelFullScreen) {
-          doc.mozCancelFullScreen();
-        } else if (doc.msExitFullscreen) {
-          doc.msExitFullscreen();
-        }
-      }
-    } catch (err) {
-      console.warn("Fullscreen toggle error:", err);
-    }
-  };
 
   // Check the approval status of a previously registered employee
   useEffect(() => {
@@ -327,18 +279,7 @@ export default function Landing({ onLoginSuccess, slogan }: LandingProps) {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-12 sm:px-6 lg:px-8 relative">
-      {/* Nút Toàn Màn Hình nổi ở góc trên bên phải */}
-      <div className="absolute top-4 right-4 z-50">
-        <button
-          onClick={toggleFullscreen}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-gray-100 border border-gray-200 text-gray-700 rounded-full text-[11px] font-extrabold tracking-wide cursor-pointer shadow-sm transition-all active:scale-95 text-[#1971C2]"
-        >
-          {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5 text-blue-600 animate-pulse" />}
-          <span>{isFullscreen ? "THOÁT TOÀN MÀN HÌNH" : "BUNG TOÀN MÀN HÌNH (ẨN ĐỊA CHỈ)"}</span>
-        </button>
-      </div>
-
+    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-12 sm:px-6 lg:px-8">
       <div className="w-full max-w-md space-y-8 bg-white p-8 rounded-md shadow-sm border border-gray-100">
         <div className="text-center">
           {/* Logo container */}
