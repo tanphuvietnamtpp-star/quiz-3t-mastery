@@ -453,18 +453,18 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
       {/* Simulation preview banner removed to maintain native standalone dashboard feel */}
 
       {/* Main Area containing Structured Smartphone Mockup with Auto-Detection */}
-      <main className="flex-1 flex items-center justify-center p-0 sm:p-6 bg-gradient-to-b from-gray-50 to-gray-100 min-h-0 h-0 overflow-hidden relative w-full">
+      <main className="flex-1 flex items-center justify-center p-1.5 sm:p-6 bg-gradient-to-b from-gray-50 to-gray-100 min-h-0 h-0 overflow-hidden relative w-full">
         
         {/* Smartphone Frame Outer Shell with mathematically concentric corner radius */}
-        <div className="w-full sm:max-w-[415px] h-full sm:h-[810px] max-h-full sm:max-h-[810px] bg-white sm:bg-[#0F1C2E] rounded-none sm:rounded-[32px] p-0 sm:p-1 shadow-none sm:shadow-2xl relative border-0 sm:border-4 border-slate-800 ring-0 sm:ring-2 ring-slate-900/5 transition-all text-gray-800 flex flex-col my-0 sm:my-1 shrink-0 overflow-hidden">
+        <div className="w-full max-w-[415px] h-full max-h-[810px] bg-[#0F1C2E] rounded-[32px] p-1 border-4 sm:border-[6px] border-slate-800 shadow-2xl relative ring-2 ring-slate-900/10 transition-all text-gray-800 flex flex-col my-0.5 sm:my-1.5 shrink-0 overflow-hidden">
           
           {/* Physical Phone Top Notch / Speaker Deco element simulating phone layout */}
-          <div className="hidden sm:flex absolute -top-0.5 left-1/2 -translate-x-1/2 w-24 h-3.5 bg-slate-800 rounded-b-md z-20 items-center justify-center">
+          <div className="flex absolute -top-0.5 left-1/2 -translate-x-1/2 w-24 h-3.5 bg-slate-800 rounded-b-md z-20 items-center justify-center">
             <div className="w-8 h-0.5 bg-slate-900 rounded-full"></div>
           </div>
           
           {/* Screen Inner Viewport (Auto-co giãn, scrollable elegantly like a native application) */}
-          <div className="bg-white w-full h-full rounded-none sm:rounded-[24px] overflow-hidden flex flex-col shadow-inner relative border-0 sm:border border-gray-150 p-3 sm:p-4 overflow-y-auto style-scrollbar flex-1">
+          <div className="bg-white w-full h-full rounded-[24px] overflow-hidden flex flex-col shadow-inner relative border border-gray-150 p-3 sm:p-4 overflow-y-auto style-scrollbar flex-1">
             
             {/* Dynamic Inner Panel Viewports */}
             <AnimatePresence mode="wait">
