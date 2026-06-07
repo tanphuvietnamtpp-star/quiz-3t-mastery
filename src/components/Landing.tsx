@@ -65,6 +65,61 @@ export default function Landing({ onLoginSuccess, slogan }: LandingProps) {
     };
   }, []);
 
+  // Tự động kích hoạt toàn màn hình khi vừa tải trang hoặc khi có tương tác đầu tiên
+  useEffect(() => {
+    const docEl = document.documentElement as any;
+    try {
+      if (!document.fullscreenElement) {
+        if (docEl.requestFullscreen) {
+          docEl.requestFullscreen().catch(() => {});
+        } else if (docEl.webkitRequestFullscreen) {
+          docEl.webkitRequestFullscreen();
+        } else if (docEl.mozRequestFullScreen) {
+          docEl.mozRequestFullScreen();
+        } else if (docEl.msRequestFullscreen) {
+          docEl.msRequestFullscreen();
+        }
+      }
+    } catch (e) {
+      // Bỏ qua lỗi chặn bảo mật của trình duyệt
+    }
+
+    const autoFullscreenOnInteraction = () => {
+      if (!document.fullscreenElement) {
+        try {
+          if (docEl.requestFullscreen) {
+            docEl.requestFullscreen().catch(() => {});
+          } else if (docEl.webkitRequestFullscreen) {
+            docEl.webkitRequestFullscreen();
+          } else if (docEl.mozRequestFullScreen) {
+            docEl.mozRequestFullScreen();
+          } else if (docEl.msRequestFullscreen) {
+            docEl.msRequestFullscreen();
+          }
+        } catch (err) {
+          console.warn("Auto-fullscreen failed on user interaction:", err);
+        }
+      }
+      cleanupListeners();
+    };
+
+    const cleanupListeners = () => {
+      window.removeEventListener('click', autoFullscreenOnInteraction);
+      window.removeEventListener('touchstart', autoFullscreenOnInteraction);
+      window.removeEventListener('mousedown', autoFullscreenOnInteraction);
+      window.removeEventListener('keydown', autoFullscreenOnInteraction);
+    };
+
+    window.addEventListener('click', autoFullscreenOnInteraction);
+    window.addEventListener('touchstart', autoFullscreenOnInteraction);
+    window.addEventListener('mousedown', autoFullscreenOnInteraction);
+    window.addEventListener('keydown', autoFullscreenOnInteraction);
+
+    return () => {
+      cleanupListeners();
+    };
+  }, []);
+
   const toggleFullscreen = () => {
     try {
       const docEl = document.documentElement as any;

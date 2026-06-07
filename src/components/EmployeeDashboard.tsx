@@ -47,12 +47,29 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
     };
   }, []);
 
-  // Tự động kiểm tra và ẩn thanh địa chỉ trình duyệt trên điện thoại khi có tương tác chạm đầu tiên
+  // Tự động kích hoạt toàn màn hình khi mở app lên và khi có tương tác đầu tiên
   useEffect(() => {
+    // 1. Cố gắng chạy ngay lập tức khi component được mount (nếu môi trường cho phép)
+    const docEl = document.documentElement as any;
+    try {
+      if (!document.fullscreenElement) {
+        if (docEl.requestFullscreen) {
+          docEl.requestFullscreen().catch(() => {});
+        } else if (docEl.webkitRequestFullscreen) {
+          docEl.webkitRequestFullscreen();
+        } else if (docEl.mozRequestFullScreen) {
+          docEl.mozRequestFullScreen();
+        } else if (docEl.msRequestFullscreen) {
+          docEl.msRequestFullscreen();
+        }
+      }
+    } catch (e) {
+      // Chặn và bỏ qua lỗi nếu trình duyệt khóa quyền tự động khởi chạy
+    }
+
+    // 2. Chạy ngay khi có bất kỳ tương tác người dùng đầu tiên nào (hợp lệ để lách chính sách bảo mật trình duyệt)
     const autoFullscreenOnInteraction = () => {
-      const isMobile = window.innerWidth < 640 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-      if (isMobile && !document.fullscreenElement) {
-        const docEl = document.documentElement as any;
+      if (!document.fullscreenElement) {
         try {
           if (docEl.requestFullscreen) {
             docEl.requestFullscreen().catch(() => {});
@@ -64,19 +81,27 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
             docEl.msRequestFullscreen();
           }
         } catch (err) {
-          console.warn("Auto-fullscreen failed:", err);
+          console.warn("Auto-fullscreen failed on interaction:", err);
         }
       }
       // Dọn dẹp listener sau lần tương tác đầu tiên
+      cleanupListeners();
+    };
+
+    const cleanupListeners = () => {
       window.removeEventListener('click', autoFullscreenOnInteraction);
       window.removeEventListener('touchstart', autoFullscreenOnInteraction);
+      window.removeEventListener('mousedown', autoFullscreenOnInteraction);
+      window.removeEventListener('keydown', autoFullscreenOnInteraction);
     };
 
     window.addEventListener('click', autoFullscreenOnInteraction);
     window.addEventListener('touchstart', autoFullscreenOnInteraction);
+    window.addEventListener('mousedown', autoFullscreenOnInteraction);
+    window.addEventListener('keydown', autoFullscreenOnInteraction);
+
     return () => {
-      window.removeEventListener('click', autoFullscreenOnInteraction);
-      window.removeEventListener('touchstart', autoFullscreenOnInteraction);
+      cleanupListeners();
     };
   }, []);
 
@@ -1380,10 +1405,14 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                               <div className="bg-orange-50 border-l-4 border-orange-400 p-3 rounded-r-xl text-xs text-orange-950 mt-3 leading-relaxed">
                                 <h5 className="font-bold text-orange-850 flex items-center gap-1 mb-0.5">
                                   <AlertCircle className="h-4 w-4 text-orange-500 shrink-0" />
-                                  <span>Dặn dỏi & Giải thích:</span>
+                                  <span>Dặn dò & Giải thích:</span>
                                 </h5>
                                 <p className="font-semibold italic text-[11px] sm:text-xs">
-                                  "Anh/Chị nhớ nhé: {currentQuizQuestions[reviewQuestionIndex].explanation}"
+                                  {(() => {
+                                    const exp = currentQuizQuestions[reviewQuestionIndex].explanation || "";
+                                    const hasPrefix = exp.trim().toLowerCase().startsWith("anh/chị nhớ nhé") || exp.trim().toLowerCase().startsWith("anh/chị nhớ nhe");
+                                    return hasPrefix ? `"${exp}"` : `"Anh/Chị nhớ nhé: ${exp}"`;
+                                  })()}
                                 </p>
                               </div>
 
