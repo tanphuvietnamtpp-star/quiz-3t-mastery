@@ -481,16 +481,15 @@ export const databaseService = {
         usersList.push(doc.data() as User);
       });
 
-      const normInput = phoneTrim.replace(/\s+/g, '');
-      if (usersList.some(u => (u.phone || '').replace(/\s+/g, '') === normInput)) {
-        throw new Error('Số điện thoại này đã tồn tại trên hệ thống!');
+      if (usersList.some(u => u.phone?.trim() === phoneTrim)) {
+        throw new Error('Số điện thoại này đã được đăng ký!');
       }
 
       await setDoc(doc(db, 'user_profiles', newUser.id), newUser);
       incrementQuota('writes', 1);
       return newUser;
     } catch (err: any) {
-      if (err.message && (err.message.includes('tồn tại') || err.message.includes('trống'))) {
+      if (err.message && (err.message.includes('đăng ký') || err.message.includes('trống'))) {
         throw err;
       }
       handleFirestoreError(err, OperationType.WRITE, `user_profiles/${newUser.id}`);
@@ -507,9 +506,8 @@ export const databaseService = {
     
     try {
       const usersList = await this.getUsers();
-      const normInput = phoneTrim.replace(/\s+/g, '');
       const user = usersList.find(u => 
-        (u.phone || '').replace(/\s+/g, '') === normInput && 
+        u.phone === phoneTrim && 
         (!password || u.password === password) && 
         (!employeeId || !u.employeeId || u.employeeId.trim().toLowerCase() === employeeId.trim().toLowerCase())
       );

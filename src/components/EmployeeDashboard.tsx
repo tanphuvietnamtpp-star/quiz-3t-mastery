@@ -17,31 +17,19 @@ interface EmployeeDashboardProps {
 export default function EmployeeDashboard({ user, onLogout, isAdminReview = false, onBackToAdmin, slogan = '3T Hội Tụ - Tân Phú Vươn Xa' }: EmployeeDashboardProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [pendingUsersCount, setPendingUsersCount] = useState(0);
-  const [deptUsers, setDeptUsers] = useState<User[]>([]);
-  const [showApprovalPanel, setShowApprovalPanel] = useState(false);
-  const [approvalSearchTerm, setApprovalSearchTerm] = useState('');
 
   useEffect(() => {
-    if ((isAdminReview && user.role === 'admin') || user.role === 'approver') {
-      try {
-        const unsubscribe = databaseService.subscribeUsers((allUsers) => {
-          if (user.role === 'admin') {
-            const pending = allUsers.filter(u => u.status?.toLowerCase() === 'pending');
-            setPendingUsersCount(pending.length);
-          } else {
-            // Approver: Only users in the same branch & department
-            const filtered = allUsers.filter(u => u.branch === user.branch && u.department === user.department);
-            setDeptUsers(filtered);
-            const pending = filtered.filter(u => u.status?.toLowerCase() === 'pending');
-            setPendingUsersCount(pending.length);
-          }
-        });
-        return () => unsubscribe();
-      } catch (err) {
-        console.error("Lỗi khi tải dữ liệu người dùng bộ phận:", err);
-      }
+    if (!isAdminReview || user.role !== 'admin') return;
+    try {
+      const unsubscribe = databaseService.subscribeUsers((allUsers) => {
+        const pending = allUsers.filter(u => u.status?.toLowerCase() === 'pending');
+        setPendingUsersCount(pending.length);
+      });
+      return () => unsubscribe();
+    } catch (err) {
+      console.error("Lỗi khi tải thông báo số lượng phê duyệt:", err);
     }
-  }, [isAdminReview, user.role, user.branch, user.department]);
+  }, [isAdminReview, user.role]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -179,58 +167,6 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
   const [extracting, setExtracting] = useState(false);
   const [extractedQuestions, setExtractedQuestions] = useState<any[]>([]);
   const [aiNotice, setAiNotice] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
-
-  // Handle Approving a user
-  const handleApproveUser = async (userId: string) => {
-    try {
-      await databaseService.updateUser(userId, { status: 'approved' });
-      const freshRes = await databaseService.getQuizResults();
-      setAllResults(freshRes);
-    } catch (err) {
-      console.error("Lỗi khi duyệt nhân viên:", err);
-    }
-  };
-
-  // Handle Rejecting / Blocking a user
-  const handleRejectUser = async (userId: string) => {
-    try {
-      await databaseService.updateUser(userId, { status: 'rejected' });
-      const freshRes = await databaseService.getQuizResults();
-      setAllResults(freshRes);
-    } catch (err) {
-      console.error("Lỗi khi từ chối nhân viên:", err);
-    }
-  };
-
-  // Get Employee Stats for approvals / progress track
-  const getEmployeeStats = (empId: string) => {
-    const empQuizResults = allResults.filter(r => r.userId === empId);
-    const count = empQuizResults.length;
-    const avg = count > 0 
-      ? Math.round(empQuizResults.reduce((acc, curr) => acc + curr.score, 0) / count)
-      : 0;
-    
-    let evaluationClass = 'ĐẠT 90%';
-    let style = 'bg-gray-100 text-gray-750 border border-gray-200';
-
-    if (count >= 5 && avg >= 28) {
-      evaluationClass = 'ĐẠT 150%';
-      style = 'bg-blue-50 text-blue-700 border border-blue-100 font-bold';
-    } else if (count >= 3 && avg >= 25) {
-      evaluationClass = 'ĐẠT 120%';
-      style = 'bg-green-50 text-green-700 border border-green-100 font-bold';
-    } else if (count >= 1 && avg >= 20) {
-      evaluationClass = 'ĐẠT 100%';
-      style = 'bg-yellow-50 text-yellow-700 border border-yellow-105 font-bold';
-    }
-
-    return {
-      quizzesTaken: count,
-      average: avg,
-      evaluation: evaluationClass,
-      style
-    };
-  };
 
   const refreshQuestions = async () => {
     try {
@@ -758,164 +694,8 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
             
             {/* Dynamic Inner Panel Viewports */}
             <AnimatePresence mode="wait">
-              {/* Departmental Approval Viewport for Approvers */}
-              {showApprovalPanel && user.role === 'approver' && !quizStarted && (
-                <motion.div
-                  key="department_approvals"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  className="space-y-4"
-                >
-                  {/* Elegant top-back button bar */}
-                  <div className="flex items-center justify-between border-b border-purple-100 pb-2.5">
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        onClick={() => setShowApprovalPanel(false)}
-                        className="p-1 px-2 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-lg flex items-center justify-center cursor-pointer transition-colors"
-                        title="Quay lại"
-                      >
-                        <Home className="h-4.5 w-4.5" />
-                      </button>
-                      <span className="text-xs font-bold text-purple-700 uppercase tracking-wider">PHÊ DUYỆT 3T</span>
-                    </div>
-                    <span className="text-[9px] font-extrabold text-white bg-purple-600 px-2.5 py-1 rounded-full uppercase truncate max-w-[150px]">
-                      {user.department}
-                    </span>
-                  </div>
-
-                  {/* Intro card */}
-                  <div className="bg-purple-50 border border-purple-100 p-3 rounded-xl">
-                    <h3 className="text-xs font-bold text-purple-800 flex items-center gap-1.5">
-                      <UserCheck className="h-4 w-4 shrink-0" />
-                      <span translate="no" className="notranslate">Duyệt Thành Viên & Tiến Độ</span>
-                    </h3>
-                    <p className="text-[10px] sm:text-[11px] text-purple-750 mt-1 leading-relaxed">
-                      <span translate="no" className="notranslate">
-                        Là Trưởng Bộ Phận, Anh/Chị có quyền phê duyệt nhân viên mới và theo dõi tiến độ thi đua 3T của bộ phận mình.
-                      </span>
-                    </p>
-                  </div>
-
-                  {/* Pending Registrations Section */}
-                  <div className="space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                        YÊU CẦU CHỜ DUYỆT ({deptUsers.filter(u => u.status?.toLowerCase() === 'pending').length})
-                      </h3>
-                    </div>
-
-                    {deptUsers.filter(u => u.status?.toLowerCase() === 'pending').length === 0 ? (
-                      <div className="bg-slate-50 border border-slate-150 rounded-xl p-4 text-center text-xs font-medium text-gray-550">
-                        <CheckCircle2 className="h-6 w-6 text-green-500 mx-auto mb-1.5" />
-                        Không có yêu cầu phê duyệt mới!
-                      </div>
-                    ) : (
-                      <div className="space-y-2 max-h-[220px] overflow-y-auto pr-0.5 style-scrollbar">
-                        {deptUsers.filter(u => u.status?.toLowerCase() === 'pending').map((pendingUser) => (
-                          <div 
-                            key={pendingUser.id}
-                            className="bg-white border border-purple-100 rounded-xl p-3 shadow-3xs hover:border-purple-200 transition-all flex flex-col justify-between"
-                          >
-                            <div className="flex justify-between items-start">
-                              <div className="space-y-0.5">
-                                <h4 className="text-xs font-semibold text-gray-900">{pendingUser.name}</h4>
-                                <p className="text-[10px] text-gray-500 font-mono">MSNV: {pendingUser.employeeId}</p>
-                                <p className="text-[10px] text-gray-500">SĐT: {pendingUser.phone || 'Chưa cung cấp'}</p>
-                              </div>
-                              <span className="text-[9px] bg-amber-50 border border-amber-205 text-amber-700 px-1.5 py-0.5 rounded-md font-bold uppercase tracking-wider">
-                                Chờ duyệt
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-1.5 mt-2 pt-2 border-t border-gray-50">
-                              <button
-                                onClick={() => handleApproveUser(pendingUser.id)}
-                                className="flex-1 py-1 px-2.5 bg-green-600 hover:bg-green-700 active:scale-[0.98] text-white font-bold text-[10px] rounded-lg shadow-3xs transition-all flex items-center justify-center gap-1 cursor-pointer"
-                              >
-                                <CheckCircle2 className="h-3 w-3" />
-                                <span>DUYỆT</span>
-                              </button>
-                              <button
-                                onClick={() => handleRejectUser(pendingUser.id)}
-                                className="flex-1 py-1 px-2.5 bg-red-50 hover:bg-red-100 text-red-700 font-bold text-[10px] rounded-lg border border-red-200 transition-all flex items-center justify-center gap-1 cursor-pointer"
-                              >
-                                <XCircle className="h-3 w-3" />
-                                <span>TỪ CHỐI</span>
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Approved Employees List / Progress Track */}
-                  <div className="space-y-2.5 pt-1">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                        BẢNG THEO DÕI HỌC TẬP ({deptUsers.filter(u => u.status?.toLowerCase() === 'approved').length})
-                      </h3>
-                    </div>
-
-                    {/* Compact Search bar */}
-                    <div className="relative">
-                      <input
-                        type="text"
-                        placeholder="Tìm nhân viên bộ phận..."
-                        value={approvalSearchTerm}
-                        onChange={(e) => setApprovalSearchTerm(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-205 focus:border-[#1971C2] focus:bg-white rounded-lg pl-3 pr-8 py-1.5 text-xs font-sans text-gray-800 outline-hidden transition-all placeholder-gray-400 font-medium"
-                      />
-                      {approvalSearchTerm && (
-                        <button
-                          onClick={() => setApprovalSearchTerm('')}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 cursor-pointer"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      )}
-                    </div>
-
-                    {deptUsers.filter(u => u.status?.toLowerCase() === 'approved').length === 0 ? (
-                      <div className="bg-slate-50 border border-slate-150 rounded-xl p-4 text-center text-xs font-medium text-gray-550">
-                        Chưa có nhân sự nào được duyệt!
-                      </div>
-                    ) : (
-                      <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-0.5 style-scrollbar">
-                        {deptUsers
-                          .filter(u => u.status?.toLowerCase() === 'approved')
-                          .filter(u => !approvalSearchTerm || u.name.toLowerCase().includes(approvalSearchTerm.toLowerCase()) || u.employeeId.includes(approvalSearchTerm))
-                          .map((approvedUser) => {
-                            const stats = getEmployeeStats(approvedUser.id);
-                            return (
-                              <div 
-                                key={approvedUser.id}
-                                className="bg-slate-50/50 border border-slate-150 hover:bg-slate-50 transition-all rounded-lg p-2.5 flex items-center justify-between gap-2.5"
-                              >
-                                <div className="space-y-0.5 min-w-0">
-                                  <h4 className="text-xs font-bold text-gray-800 truncate">{approvedUser.name}</h4>
-                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span className="text-[9px] font-mono text-gray-450">{approvedUser.employeeId}</span>
-                                    <span className="text-[9px] text-gray-450">&bull;</span>
-                                    <span className="text-[9px] text-gray-500 font-bold">Lượt ôn: {stats.quizzesTaken}</span>
-                                    <span className="text-[9px] text-gray-450">&bull;</span>
-                                    <span className="text-[9px] text-gray-500 font-bold">Điểm TB: {stats.average}đ</span>
-                                  </div>
-                                </div>
-                                <span className={`text-[9px] px-1.5 py-0.5 rounded-md text-center font-bold tracking-tight shrink-0 ${stats.style}`}>
-                                  {stats.evaluation}
-                                </span>
-                              </div>
-                            );
-                          })}
-                      </div>
-                    )}
-                  </div>
-                </motion.div>
-              )}
-
               {/* Practice Tab Viewport */}
-              {activeTab === 'practice' && !quizStarted && !showApprovalPanel && (
+              {activeTab === 'practice' && !quizStarted && (
                 <motion.div
                   key="practice"
                   initial={{ opacity: 0, y: 10 }}
@@ -1013,7 +793,7 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
           )}
 
           {/* AI Extract Tab Viewport inside Smartphone Simulation for Administrators */}
-          {activeTab === 'ai_extract' && !quizStarted && !showApprovalPanel && (
+          {activeTab === 'ai_extract' && !quizStarted && (
             <motion.div
               key="ai_extract_viewport"
               initial={{ opacity: 0, y: 10 }}
@@ -1173,7 +953,7 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
           )}
 
           {/* History Tab Viewport */}
-          {activeTab === 'history' && !quizStarted && !showApprovalPanel && (
+          {activeTab === 'history' && !quizStarted && (
             <motion.div
               key="history"
               initial={{ opacity: 0, y: 10 }}
@@ -1479,7 +1259,7 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
           )}
 
           {/* Core Mock Interactive Quiz Section */}
-          {activeTab === 'quiz' && !showApprovalPanel && (
+          {activeTab === 'quiz' && (
             <motion.div
               key="quiz_portal"
               initial={{ opacity: 0, y: 10 }}
@@ -1651,38 +1431,6 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                       </li>
                     </ul>
                   </div>
-
-                  {/* Approver Department Action Card */}
-                  {user.role === 'approver' && (
-                    <div className="w-full max-w-sm bg-purple-50/70 border border-purple-200/60 p-3 rounded-xl text-left shrink-0 shadow-3xs relative overflow-hidden">
-                      <div className="absolute top-0 right-0 h-16 w-16 bg-purple-500/5 rounded-full -mr-4 -mt-4 animate-pulse-slow" />
-                      <div className="flex items-center justify-between">
-                        <div className="space-y-1">
-                          <span translate="no" className="notranslate bg-purple-200 text-purple-800 text-[9px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full">
-                            Trưởng Bộ Phận
-                          </span>
-                          <h4 className="text-xs sm:text-sm font-extrabold text-[#0B3A60] mt-1.5 leading-snug">
-                            Phê duyệt & Theo dõi d.sách
-                          </h4>
-                          <p className="text-[10px] sm:text-xs text-slate-500">
-                            Có <strong className="text-purple-700 font-extrabold">{pendingUsersCount}</strong> nhân viên đang chờ duyệt.
-                          </p>
-                        </div>
-                        <button
-                          onClick={() => setShowApprovalPanel(true)}
-                          className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-600 hover:bg-purple-700 active:scale-95 text-white transition-all cursor-pointer shadow-sm shrink-0 relative"
-                          title="Duyệt nhân viên"
-                        >
-                          <UserCheck className="h-4.5 w-4.5" />
-                          {pendingUsersCount > 0 && (
-                            <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[9px] font-extrabold h-4 w-4 rounded-full flex items-center justify-center border border-white">
-                              {pendingUsersCount}
-                            </span>
-                          )}
-                        </button>
-                      </div>
-                    </div>
-                  )}
 
                   {/* Welcome Greeting Box for Employee */}
                   <div className="w-full max-w-sm bg-blue-50/50 border border-blue-100 p-3 rounded-xl text-center shrink-0 shadow-3xs">

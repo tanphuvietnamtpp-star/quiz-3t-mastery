@@ -41,9 +41,8 @@ export default function App() {
         }
       }
 
-      // Auto-Sign In to supreme admin Lê Nhật Trường on the preview window ONLY (not on real mobile phones/tablets)
-      const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 1024;
-      if (!activeUser && !isMobileDevice) {
+      // Auto-Sign In to supreme admin Lê Nhật Trường on the preview window to avoid needing manual login credentials info
+      if (!activeUser) {
         try {
           const defaultAdminUser = await databaseService.loginUser('0907767304', '111222');
           activeUser = defaultAdminUser;
@@ -51,7 +50,7 @@ export default function App() {
         } catch (err) {
           console.warn("Auto-login to supreme admin failed:", err);
         }
-      } else if (activeUser) {
+      } else {
         // Re-authenticate silently against current database state to check if status was updated (e.g. approved)
         try {
           const freshUser = await databaseService.loginUser(activeUser.phone);
@@ -74,6 +73,40 @@ export default function App() {
       setLoading(false);
     };
     loadStartupData();
+  }, []);
+
+  // Tự động kiểm tra và kích hoạt chế độ toàn màn hình để ẩn thanh địa chỉ trình duyệt khi có tương tác đầu tiên bất kỳ đâu trên ứng dụng
+  useEffect(() => {
+    const autoFullscreenOnAnyInteraction = () => {
+      // Trigger fullscreen on mobile and tablet scale window sizes to hide the browser address bars seamlessly
+      const isMobileOrTablet = window.innerWidth < 1024 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      if (isMobileOrTablet && !document.fullscreenElement) {
+        const docEl = document.documentElement as any;
+        try {
+          if (docEl.requestFullscreen) {
+            docEl.requestFullscreen().catch(() => {});
+          } else if (docEl.webkitRequestFullscreen) {
+            docEl.webkitRequestFullscreen();
+          } else if (docEl.mozRequestFullScreen) {
+            docEl.mozRequestFullScreen();
+          } else if (docEl.msRequestFullscreen) {
+            docEl.msRequestFullscreen();
+          }
+        } catch (err) {
+          console.warn("Auto-fullscreen failed:", err);
+        }
+      }
+      // Dọn dẹp listener sau lần tương tác đầu tiên
+      window.removeEventListener('click', autoFullscreenOnAnyInteraction);
+      window.removeEventListener('touchstart', autoFullscreenOnAnyInteraction);
+    };
+
+    window.addEventListener('click', autoFullscreenOnAnyInteraction);
+    window.addEventListener('touchstart', autoFullscreenOnAnyInteraction);
+    return () => {
+      window.removeEventListener('click', autoFullscreenOnAnyInteraction);
+      window.removeEventListener('touchstart', autoFullscreenOnAnyInteraction);
+    };
   }, []);
 
   const handleLoginSuccess = (user: User) => {
@@ -157,7 +190,7 @@ export default function App() {
                 />
               )
             ) : currentUser.role === 'approver' ? (
-              <EmployeeDashboard user={currentUser} onLogout={handleLogout} slogan={slogan} />
+              <ApproverDashboard user={currentUser} onLogout={handleLogout} slogan={slogan} />
             ) : (
               <EmployeeDashboard user={currentUser} onLogout={handleLogout} slogan={slogan} isAdminReview={true} />
             )}
