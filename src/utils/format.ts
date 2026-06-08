@@ -14,3 +14,18 @@ export function formatTimeInSeconds(seconds: number): string {
   const secs = seconds % 60;
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
+
+export function cleanOptionText(text: string): string {
+  if (!text) return "";
+  let cleaned = text.trim();
+  
+  // Clean prefixes like "A. ", "B. ", "C/", "D - " up to 3 times to handle nests like "A. A. option text"
+  const pattern = /^[a-dA-D]\s*[\.\/\-:]\s*/;
+  for (let i = 0; i < 3; i++) {
+    const next = cleaned.replace(pattern, "");
+    if (next === cleaned) break;
+    cleaned = next;
+  }
+  return cleaned;
+}
+

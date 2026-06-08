@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { databaseService } from '../firebase';
 import { User, Question, QuizResult } from '../types';
-import { formatDate, formatTimeInSeconds } from '../utils/format';
+import { formatDate, formatTimeInSeconds, cleanOptionText } from '../utils/format';
 import { BookOpen, Trophy, Award, BarChart3, ChevronRight, CheckCircle2, XCircle, ArrowRight, RotateCcw, HelpCircle, GraduationCap, AlertCircle, Users, TrendingUp, Building2, LogOut, Home, Maximize2, Minimize2, UserCheck, ImagePlus, Lock, Sparkles, X, Plus, Smartphone, Share, ArrowUp } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts';
@@ -988,7 +988,7 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                                     : 'bg-gray-50 border-gray-100 text-gray-600'
                                   }`}
                                 >
-                                  <span translate="no" className="notranslate">{opt}</span>
+                                  <span translate="no" className="notranslate">{cleanOptionText(opt)}</span>
                                   {isCorrect && <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />}
                                 </div>
                               );
@@ -1154,7 +1154,7 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                                     : 'bg-white border-gray-150 text-gray-600'
                                 }`}
                               >
-                                <span>{String.fromCharCode(65 + oIdx)}. {opt}</span>
+                                <span>{String.fromCharCode(65 + oIdx)}. {cleanOptionText(opt)}</span>
                                 {isCorrect && <CheckCircle2 className="h-3 w-3 text-green-600 shrink-0" />}
                               </div>
                             );
@@ -2008,7 +2008,7 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                                         )}
                                       </div>
                                       <div className={`flex-1 text-xs font-semibold ${textStyle}`}>
-                                        {opt}
+                                        {cleanOptionText(opt)}
                                       </div>
                                     </div>
                                   );
@@ -2258,7 +2258,7 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                                       {String.fromCharCode(65 + oIdx)}
                                     </div>
                                     <div className="flex-1 text-xs sm:text-sm font-semibold">
-                                      <span translate="no" className="notranslate">{opt}</span>
+                                      <span translate="no" className="notranslate">{cleanOptionText(opt)}</span>
                                     </div>
                                   </button>
                                 );

@@ -102,10 +102,24 @@ async function startServer() {
       }
 
       // Format questions with ID & return to client
+      const cleanOption = (text: string) => {
+        if (!text) return "";
+        let cleaned = text.trim();
+        const pattern = /^[a-dA-D]\s*[\.\/\-:]\s*/;
+        for (let i = 0; i < 3; i++) {
+          const next = cleaned.replace(pattern, "");
+          if (next === cleaned) break;
+          cleaned = next;
+        }
+        return cleaned;
+      };
+
       const formattedQuestions = parsedQuestions.map((q: any) => ({
         id: 'q_gemini_' + Math.random().toString(36).substring(2, 9),
         text: q.text,
-        options: q.options && q.options.length === 4 ? q.options : ["A", "B", "C", "D"],
+        options: q.options && q.options.length === 4 
+          ? q.options.map((opt: string) => cleanOption(opt)) 
+          : ["A", "B", "C", "D"],
         correctAnswerIndex: typeof q.correctAnswerIndex === 'number' ? q.correctAnswerIndex : 0,
         explanation: q.explanation || "Anh/Chị nhớ nhé: Làm việc cẩn thận, đúng quy trình và an toàn là trên hết!"
       }));

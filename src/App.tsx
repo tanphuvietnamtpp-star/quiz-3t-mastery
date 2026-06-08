@@ -13,11 +13,33 @@ export default function App() {
   const [simulateEmployee, setSimulateEmployee] = useState(false);
   const [slogan, setSlogan] = useState('3T Hội Tụ - Tân Phú Vươn Xa');
   const [adminInitialTab, setAdminInitialTab] = useState<'users' | 'questions' | 'add_images' | 'qr' | 'stats' | 'encoding'>('users');
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
-  // Check saved session in LocalStorage on startup
+  // Detect mobile device
   useEffect(() => {
-    const savedUser = localStorage.getItem('3t_active_user');
+    const checkMobile = () => {
+      const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 1024;
+      setIsMobile(isMobileDevice);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Secure Startup Logic: Synchronously clear legacy sessions and check saved states sequentially
+  useEffect(() => {
     const loadStartupData = async () => {
+      // 1. Force a strict global nuclear reset clean up of ALL sessions to wipe previous auto-logins on scanning phones/tablets
+      const hasWiped = localStorage.getItem('3t_nuclear_wipe_v10');
+      if (!hasWiped) {
+        localStorage.clear();
+        localStorage.setItem('3t_nuclear_wipe_v10', 'true');
+        setCurrentUser(null);
+        setLoading(false);
+        return;
+      }
+
       try {
         await databaseService.initialize();
       } catch (err) {
@@ -31,44 +53,66 @@ export default function App() {
         console.warn("Failed to retrieve live slogan:", err);
       }
 
+      // Check Netlify host to strictly enforce showing the Landing/Login page under Netlify domain
+      const isNetlifyDomain = typeof window !== 'undefined' && (
+        window.location.hostname === 'quiz3t.netlify.app' || 
+        window.location.hostname.includes('netlify.app')
+      );
+
+      if (isNetlifyDomain) {
+        // Clear anything that bypasses login immediately on Netlify domain
+        localStorage.removeItem('3t_active_user');
+        localStorage.removeItem('3t_manual_login');
+        localStorage.removeItem('3t_is_auto_logged_in');
+      }
+
+      // 2. Read saved user AFTER the wipe check is settled, only if manually logged in explicitly
+      const savedUser = isNetlifyDomain ? null : localStorage.getItem('3t_active_user');
+      const isManual = isNetlifyDomain ? false : localStorage.getItem('3t_manual_login') === 'true';
       let activeUser: User | null = null;
-      if (savedUser) {
+      
+      if (savedUser && isManual) {
         try {
           const parsed = JSON.parse(savedUser) as User;
           activeUser = parsed;
         } catch {
           // Ignore
         }
+      } else {
+        // Clear anything parsed by accident if not explicitly manually logged in
+        localStorage.removeItem('3t_active_user');
+        localStorage.removeItem('3t_is_auto_logged_in');
+        localStorage.removeItem('3t_manual_login');
       }
 
-      // Auto-Sign In to supreme admin Lê Nhật Trường on the preview window to avoid needing manual login credentials info
-      if (!activeUser) {
+      if (activeUser) {
+        // Re-authenticate strictly using full credentials to check user's approval status
         try {
-          const defaultAdminUser = await databaseService.loginUser('0907767304', '111222');
-          activeUser = defaultAdminUser;
-          localStorage.setItem('3t_active_user', JSON.stringify(defaultAdminUser));
-        } catch (err) {
-          console.warn("Auto-login to supreme admin failed:", err);
-        }
-      } else {
-        // Re-authenticate silently against current database state to check if status was updated (e.g. approved)
-        try {
-          const freshUser = await databaseService.loginUser(activeUser.phone);
-          if (freshUser.status?.toLowerCase() === 'approved') {
-            activeUser = freshUser;
-            localStorage.setItem('3t_active_user', JSON.stringify(freshUser));
+          if (activeUser.phone && activeUser.password && activeUser.employeeId) {
+            const freshUser = await databaseService.loginUser(activeUser.phone, activeUser.password, activeUser.employeeId);
+            if (freshUser.status?.toLowerCase() === 'approved') {
+              activeUser = freshUser;
+              localStorage.setItem('3t_active_user', JSON.stringify(freshUser));
+            } else {
+              localStorage.removeItem('3t_active_user');
+              localStorage.removeItem('3t_manual_login');
+              activeUser = null;
+            }
           } else {
-            // Status changed to pending or rejected
+            // Missing credentials, force log out
             localStorage.removeItem('3t_active_user');
+            localStorage.removeItem('3t_manual_login');
             activeUser = null;
           }
         } catch {
-          // Offline fallback
+          // Offline/Network fail fallback - keep current session
         }
       }
 
       if (activeUser) {
         setCurrentUser(activeUser);
+      } else {
+        setCurrentUser(null);
       }
       setLoading(false);
     };
@@ -78,7 +122,6 @@ export default function App() {
   // Tự động kiểm tra và kích hoạt chế độ toàn màn hình để ẩn thanh địa chỉ trình duyệt khi có tương tác đầu tiên bất kỳ đâu trên ứng dụng
   useEffect(() => {
     const autoFullscreenOnAnyInteraction = () => {
-      // Trigger fullscreen on mobile and tablet scale window sizes to hide the browser address bars seamlessly
       const isMobileOrTablet = window.innerWidth < 1024 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
       if (isMobileOrTablet && !document.fullscreenElement) {
         const docEl = document.documentElement as any;
@@ -109,14 +152,68 @@ export default function App() {
     };
   }, []);
 
+  // Lắng nghe thay đổi trạng thái fullscreen để cập nhật UI đồng bộ
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    document.addEventListener('mozfullscreenchange', handleFullscreenChange);
+    document.addEventListener('MSFullscreenChange', handleFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('mozfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('MSFullscreenChange', handleFullscreenChange);
+    };
+  }, []);
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      const docEl = document.documentElement as any;
+      try {
+        if (docEl.requestFullscreen) {
+          docEl.requestFullscreen().catch(() => {});
+        } else if (docEl.webkitRequestFullscreen) {
+          docEl.webkitRequestFullscreen();
+        } else if (docEl.mozRequestFullScreen) {
+          docEl.mozRequestFullScreen();
+        } else if (docEl.msRequestFullscreen) {
+          docEl.msRequestFullscreen();
+        }
+      } catch (err) {
+        console.warn("Manual fullscreen failed:", err);
+      }
+    } else {
+      try {
+        if (document.exitFullscreen) {
+          document.exitFullscreen().catch(() => {});
+        } else if ((document as any).webkitExitFullscreen) {
+          (document as any).webkitExitFullscreen();
+        } else if ((document as any).mozCancelFullScreen) {
+          (document as any).mozCancelFullScreen();
+        } else if ((document as any).msExitFullscreen) {
+          (document as any).msExitFullscreen();
+        }
+      } catch (err) {
+        console.warn("Exit fullscreen failed:", err);
+      }
+    }
+  };
+
   const handleLoginSuccess = (user: User) => {
     setCurrentUser(user);
     localStorage.setItem('3t_active_user', JSON.stringify(user));
+    localStorage.removeItem('3t_is_auto_logged_in');
+    localStorage.setItem('3t_manual_login', 'true');
   };
 
   const handleLogout = () => {
     setCurrentUser(null);
     localStorage.removeItem('3t_active_user');
+    localStorage.removeItem('3t_is_auto_logged_in');
+    localStorage.removeItem('3t_manual_login');
   };
 
   const handleUpdateSlogan = async (newSlogan: string) => {
@@ -192,7 +289,7 @@ export default function App() {
             ) : currentUser.role === 'approver' ? (
               <EmployeeDashboard user={currentUser} onLogout={handleLogout} slogan={slogan} />
             ) : (
-              <EmployeeDashboard user={currentUser} onLogout={handleLogout} slogan={slogan} isAdminReview={true} />
+              <EmployeeDashboard user={currentUser} onLogout={handleLogout} slogan={slogan} isAdminReview={false} />
             )}
           </motion.div>
         )}

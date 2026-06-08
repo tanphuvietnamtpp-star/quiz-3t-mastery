@@ -82,23 +82,77 @@ export const INITIAL_COMPANY_MAPPINGS: CompanyMapping[] = [
     name: 'TÂN PHÚ VIỆT NAM',
     branches: [
       {
-        id: 'vpnamky',
-        name: 'Văn Phòng Nam Kỳ',
+        id: 'vpct',
+        name: 'Văn Phòng Công Ty (TPP-CTY)',
         departments: [
-          { id: 'pqlcl', name: 'Phòng Quản Lý Chất Lượng (P.QLCL)' },
-          { id: 'psx', name: 'Phòng Sản Xuất' },
-          { id: 'pns', name: 'Phòng Nhân Sự' },
-          { id: 'pkt', name: 'Phòng Kế Toán' },
-          { id: 'pkd', name: 'Phòng Kinh Doanh' }
+          { id: 'vp_btgd', name: 'Ban Tổng Giám Đốc' },
+          { id: 'vp_kbl', name: 'Kênh Bán lẻ' },
+          { id: 'vp_kda', name: 'Kênh Dự án' },
+          { id: 'vp_kgt', name: 'Kênh GT' },
+          { id: 'vp_kmt', name: 'Kênh MT' },
+          { id: 'vp_kqliccu', name: 'Khối quản lý chuỗi cung ứng' },
+          { id: 'vp_phcns', name: 'Phòng Hành chính nhân sự' },
+          { id: 'vp_pkhvdb', name: 'Phòng Kế hoạch và dự báo' },
+          { id: 'vp_pkdcn', name: 'Phòng kinh doanh công nghiệp' },
+          { id: 'vp_pkdqt', name: 'Phòng Kinh doanh quốc tế' },
+          { id: 'vp_pkdqt2', name: 'Phòng Kinh doanh quốc tế 2' },
+          { id: 'vp_pkdqtbbm', name: 'Phòng Kinh doanh quốc tế BBM' },
+          { id: 'vp_pmkt', name: 'Phòng Marketing - Truyền thông' },
+          { id: 'vp_pmh', name: 'Phòng Mua hàng' },
+          { id: 'vp_pncptsp', name: 'Phòng Nghiên cứu và phát triển sản phẩm' },
+          { id: 'vp_ppp', name: 'Phòng phân phối' },
+          { id: 'vp_pqcl', name: 'Phòng Quản lí chất lượng' },
+          { id: 'vp_ptckt', name: 'Phòng Tài chính Kế toán' },
+          { id: 'vp_ptkkt', name: 'Phòng Thiết kế kỹ thuật' },
+          { id: 'vp_btrl', name: 'Ban trợ lý + KSTC' }
         ]
       },
       {
-        id: 'vpbacninh',
-        name: 'Văn Phòng Bắc Ninh',
+        id: 'cnbn',
+        name: 'Chi Nhánh Bắc Ninh (TPP-BNI)',
         departments: [
-          { id: 'vpbacninh-bgd', name: 'Ban Giám Đốc' },
-          { id: 'vpbacninh-psx', name: 'Phòng Sản Xuất' },
-          { id: 'vpbacninh-pns', name: 'Phòng Nhân Sự' }
+          { id: 'bn_bgd', name: 'Ban Giám đốc' },
+          { id: 'bn_bqd', name: 'Ban Quản đốc' },
+          { id: 'bn_dcn', name: 'Dây chuyền nước' },
+          { id: 'bn_phcns', name: 'Phòng Hành chính nhân sự' },
+          { id: 'bn_pkhsx', name: 'Phòng Kế hoạch sản xuất' },
+          { id: 'bn_pkv', name: 'Phòng Kho vận' },
+          { id: 'bn_pkt', name: 'Phòng Kỹ Thuật' },
+          { id: 'bn_pqcl', name: 'Phòng Quản Lý Chất Lượng' },
+          { id: 'bn_ptckt', name: 'Phòng Tài chính Kế toán' },
+          { id: 'bn_sx', name: 'Sản xuất' },
+          { id: 'bn_tbx', name: 'Tổ bốc xếp' },
+          { id: 'bn_tlxt', name: 'Tổ lái xe tải' },
+          { id: 'bn_txt', name: 'Tổ Xay trộn' },
+          { id: 'bn_xgmp', name: 'Xưởng GMP' },
+          { id: 'bn_xpet', name: 'Xưởng Pet' }
+        ]
+      },
+      {
+        id: 'cnla',
+        name: 'Chi Nhánh Long An (TPP-LAN)',
+        departments: [
+          { id: 'la_bgd', name: 'Ban Giám đốc' },
+          { id: 'la_bqd', name: 'Ban Quản đốc' },
+          { id: 'la_px1', name: 'Phân Xưởng 1' },
+          { id: 'la_px2', name: 'Phân xưởng 2' },
+          { id: 'la_phcns', name: 'Phòng Hành chính nhân sự' },
+          { id: 'la_pkhvt', name: 'Phòng Kế hoạch vật tư' },
+          { id: 'la_pkv', name: 'Phòng Kho vận' },
+          { id: 'la_pkt', name: 'Phòng Kỹ Thuật' },
+          { id: 'la_pqcl', name: 'Phòng Quản Lý Chất Lượng' },
+          { id: 'la_ptckt', name: 'Phòng Tài chính Kế toán' },
+          { id: 'la_tht', name: 'Tổ hoàn tất' },
+          { id: 'la_txt', name: 'Tổ Xay trộn' },
+          { id: 'la_xck', name: 'Xưởng Cơ khí' }
+        ]
+      },
+      {
+        id: 'nm314',
+        name: 'Nhà máy 314 (TPP-314)',
+        departments: [
+          { id: 'nm_pxsx', name: 'Phân xưởng sản xuất' },
+          { id: 'nm_ptckt', name: 'Phòng Tài chính Kế toán' }
         ]
       }
     ]
@@ -108,8 +162,8 @@ export const INITIAL_COMPANY_MAPPINGS: CompanyMapping[] = [
     name: 'BAO BÌ TÂN PHÚ',
     branches: [
       {
-        id: 'cnlongan',
-        name: 'Chi nhánh Long An',
+        id: 'cnlongan_old',
+        name: 'Chi nhánh Long An (Cũ)',
         departments: [
           { id: 'cnla-tcd', name: 'Tổ Cơ Điện' },
           { id: 'cnla-pdbcl', name: 'Phòng Đảm Bảo Chất Lượng' },
@@ -150,8 +204,8 @@ const defaultAdmin: User = {
   password: '111222',
   role: 'admin',
   company: 'TÂN PHÚ VIỆT NAM',
-  department: 'Phòng Quản Lý Chất Lượng (P.QLCL)',
-  branch: 'Văn Phòng Nam Kỳ',
+  department: 'Phòng Quản lí chất lượng',
+  branch: 'Văn Phòng Công Ty (TPP-CTY)',
   status: 'approved',
   createdAt: '2026-06-06T08:30:36Z',
   employeeId: '2018.00281'
@@ -171,8 +225,8 @@ const forceSeedSupremeAdmin = async () => {
         role: 'admin',
         status: 'approved',
         company: 'TÂN PHÚ VIỆT NAM',
-        department: 'Phòng Quản Lý Chất Lượng (P.QLCL)',
-        branch: 'Văn Phòng Nam Kỳ',
+        department: 'Phòng Quản lí chất lượng',
+        branch: 'Văn Phòng Công Ty (TPP-CTY)',
         employeeId: '2018.00281',
         createdAt: adminSnap && adminSnap.exists() ? (adminSnap.data()?.createdAt || new Date().toISOString()) : new Date().toISOString()
       };
@@ -181,6 +235,37 @@ const forceSeedSupremeAdmin = async () => {
       console.log("Supreme Admin Lê Nhật Trường emergency seed successfully completed on Firebase!");
     } catch (seedErr) {
       console.error("Emergency admin seed to cloud failed:", seedErr);
+    }
+  }
+};
+
+const forceSeedCompanyMappings = async () => {
+  if (isFirebaseConfigured && db) {
+    try {
+      const configRef = doc(db, 'config', 'company_mappings');
+      const configSnap = await getDocFromServer(configRef).catch(() => null);
+      
+      let needsSeed = true;
+      if (configSnap && configSnap.exists()) {
+        const extMappings = configSnap.data()?.mappings || [];
+        // Check if new branches exist in the firestore config
+        const hasNewBN = extMappings.some((co: any) => 
+          co.branches?.some((br: any) => br.name.includes('TPP-BNI') || br.name === 'Chi Nhánh Bắc Ninh (TPP-BNI)')
+        );
+        const hasNewLA = extMappings.some((co: any) => 
+          co.branches?.some((br: any) => br.name.includes('TPP-LAN') || br.name === 'Chi Nhánh Long An (TPP-LAN)')
+        );
+        if (hasNewBN && hasNewLA) {
+          needsSeed = false;
+        }
+      }
+      
+      if (needsSeed) {
+        await setDoc(configRef, { mappings: INITIAL_COMPANY_MAPPINGS }, { merge: true });
+        console.log("[SUCCESS] Tự động cập nhật / Khởi tạo cấu trúc Chi nhánh mới TPP-BNI, TPP-LAN, TPP-CTY, TPP-314 lên Cloud Firestore.");
+      }
+    } catch (err) {
+      console.error("Automatic seeding of company mappings failed:", err);
     }
   }
 };
@@ -247,6 +332,7 @@ export const initializeDatabase = async (): Promise<void> => {
         }
         console.log("[SUCCESS] ĐÃ KẾT NỐI ĐÚNG VÀO DỰ ÁN: quiz-3t-mastery");
         await forceSeedSupremeAdmin();
+        await forceSeedCompanyMappings();
       } catch (err) {
         console.error("Error setting up Firestore:", err);
       }
@@ -345,7 +431,8 @@ if (!localStorage.getItem('3t_questions')) {
   setLocalData('3t_questions', INITIAL_QUESTIONS);
 }
 
-if (!localStorage.getItem('3t_company_mappings')) {
+const storedMappings = localStorage.getItem('3t_company_mappings');
+if (!storedMappings || !storedMappings.includes('TPP-BNI')) {
   setLocalData('3t_company_mappings', INITIAL_COMPANY_MAPPINGS);
 }
 
@@ -504,13 +591,16 @@ export const databaseService = {
     }
 
     const phoneTrim = phone.trim();
+    if (!phoneTrim || !password) {
+      throw new Error('Số điện thoại và mật khẩu không được để trống!');
+    }
     
     try {
       const usersList = await this.getUsers();
       const normInput = phoneTrim.replace(/\s+/g, '');
       const user = usersList.find(u => 
         (u.phone || '').replace(/\s+/g, '') === normInput && 
-        (!password || u.password === password) && 
+        u.password === password && 
         (!employeeId || !u.employeeId || u.employeeId.trim().toLowerCase() === employeeId.trim().toLowerCase())
       );
       if (!user) {

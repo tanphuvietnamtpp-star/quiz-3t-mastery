@@ -6,10 +6,11 @@ import {
   Users, HelpCircle, ImagePlus, QrCode, AlertTriangle, 
   Trash2, Plus, Sparkles, LogOut, CheckCircle2, UserCheck, 
   RefreshCcw, UserMinus, FileDown, Pencil, Lock, BarChart3,
-  Database, Building, Briefcase, Landmark, Home
+  Database, Building, Briefcase, Landmark, Home, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import StatsDashboard from './StatsDashboard';
+import { cleanOptionText } from '../utils/format';
 
 interface AdminDashboardProps {
   user: User;
@@ -81,7 +82,9 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
   const [selectedImages, setSelectedImages] = useState<{ file: File; compressedBase64: string }[]>([]);
   const [extractedQuestions, setExtractedQuestions] = useState<(Question & { isDuplicate: boolean; duplicateOriginal?: string })[]>([]);
   const [extracting, setExtracting] = useState(false);
-  const [customQrUrl, setCustomQrUrl] = useState('');
+  const [customQrUrl, setCustomQrUrl] = useState('https://quiz3t.netlify.app');
+  const [showQrNotice, setShowQrNotice] = useState(false);
+  const [showManualForm, setShowManualForm] = useState(false);
 
   const loadData = async () => {
     setLoading(true);
@@ -533,7 +536,7 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
     const newQ: Question = {
       id: 'q_admin_' + Math.random().toString(36).substring(2, 9),
       text: manualText.trim(),
-      options: manualOptions.map(o => o.trim()),
+      options: manualOptions.map(o => cleanOptionText(o.trim())),
       correctAnswerIndex: manualCorrect,
       explanation: manualExp.trim()
     };
@@ -695,7 +698,7 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
       const cleanQ: Question = {
         id: q.id,
         text: q.text,
-        options: q.options,
+        options: q.options.map(o => cleanOptionText(o)),
         correctAnswerIndex: q.correctAnswerIndex,
         explanation: q.explanation
       };
@@ -848,7 +851,7 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
             }`}
           >
             <HelpCircle className="h-4 w-4" />
-            <span translate="no" className="notranslate">Ngân Hàng Đề Thủ Công</span>
+            <span translate="no" className="notranslate">Ngân Hàng Câu Hỏi</span>
           </button>
           <button
             onClick={() => { setActiveTab('add_images'); setNotice(null); }}
@@ -1107,7 +1110,7 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
                 <div>
                   <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest flex items-center gap-1.5">
                     <HelpCircle className="h-4 w-4 text-blue-600" />
-                    <span>Ngân Hàng Đề Thủ Công</span>
+                    <span>Ngân Hàng Câu Hỏi</span>
                   </h3>
                   <p className="text-xs text-gray-400 mt-0.5">Quản lý và điều chỉnh danh sách câu hỏi trắc nghiệm 3T.</p>
                 </div>
@@ -1138,78 +1141,92 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
 
               {/* Form add manual question */}
               <div className="bg-white border border-gray-150 rounded-md p-6 shadow-sm">
-                <h3 className="text-sm font-bold text-gray-900 uppercase tracking-widest border-b border-gray-100 pb-2 mb-4">
+                <button
+                  type="button"
+                  onClick={() => setShowManualForm(!showManualForm)}
+                  className="w-full flex items-center justify-between text-sm font-bold text-gray-900 uppercase tracking-widest focus:outline-none cursor-pointer"
+                >
                   <span translate="no" className="notranslate">Nhập câu hỏi thủ công mới</span>
-                </h3>
-                <form onSubmit={handleAddManualQuestion} className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1"><span translate="no" className="notranslate">Nội dung câu hỏi 3T</span></label>
-                    <input 
-                      type="text" 
-                      value={manualText}
-                      onChange={(e) => setManualText(e.target.value)}
-                      placeholder="Nhập câu tự giác/tuân thủ an toàn..."
-                      className="w-full text-xs rounded-md border border-gray-250 py-2 px-3 outline-none focus:border-blue-500"
-                      required
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {manualOptions.map((opt, oIdx) => (
-                      <div key={oIdx}>
-                        <label className="block text-xs font-semibold text-gray-500 mb-1"><span translate="no" className="notranslate">Lựa chọn {String.fromCharCode(65 + oIdx)}</span></label>
+                  {showManualForm ? (
+                    <ChevronUp className="h-4 w-4 text-gray-500 shrink-0 transition-transform" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-gray-500 shrink-0 transition-transform" />
+                  )}
+                </button>
+                
+                {showManualForm && (
+                  <div className="mt-4 border-t border-gray-100 pt-4">
+                    <form onSubmit={handleAddManualQuestion} className="space-y-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1"><span translate="no" className="notranslate">Nội dung câu hỏi 3T</span></label>
                         <input 
                           type="text" 
-                          value={opt}
-                          onChange={(e) => {
-                            const updated = [...manualOptions];
-                            updated[oIdx] = e.target.value;
-                            setManualOptions(updated);
-                          }}
-                          placeholder={`Đáp án ${String.fromCharCode(65 + oIdx)}...`}
+                          value={manualText}
+                          onChange={(e) => setManualText(e.target.value)}
+                          placeholder="Nhập câu tự giác/tuân thủ an toàn..."
                           className="w-full text-xs rounded-md border border-gray-250 py-2 px-3 outline-none focus:border-blue-500"
                           required
                         />
                       </div>
-                    ))}
-                  </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-500 mb-1"><span translate="no" className="notranslate">Đáp án đúng chính xác</span></label>
-                      <select
-                        value={manualCorrect}
-                        onChange={(e) => setManualCorrect(Number(e.target.value))}
-                        className="w-full text-xs rounded-md border border-gray-250 py-2 px-3 bg-white outline-none focus:border-blue-500"
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {manualOptions.map((opt, oIdx) => (
+                          <div key={oIdx}>
+                            <label className="block text-xs font-semibold text-gray-500 mb-1"><span translate="no" className="notranslate">Lựa chọn {String.fromCharCode(65 + oIdx)}</span></label>
+                            <input 
+                              type="text" 
+                              value={opt}
+                              onChange={(e) => {
+                                const updated = [...manualOptions];
+                                updated[oIdx] = e.target.value;
+                                setManualOptions(updated);
+                              }}
+                              placeholder={`Đáp án ${String.fromCharCode(65 + oIdx)}...`}
+                              className="w-full text-xs rounded-md border border-gray-250 py-2 px-3 outline-none focus:border-blue-500"
+                              required
+                            />
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-500 mb-1"><span translate="no" className="notranslate">Đáp án đúng chính xác</span></label>
+                          <select
+                            value={manualCorrect}
+                            onChange={(e) => setManualCorrect(Number(e.target.value))}
+                            className="w-full text-xs rounded-md border border-gray-250 py-2 px-3 bg-white outline-none focus:border-blue-500"
+                          >
+                            <option value={0} translate="no" className="notranslate">Lựa chọn A</option>
+                            <option value={1} translate="no" className="notranslate">Lựa chọn B</option>
+                            <option value={2} translate="no" className="notranslate">Lựa chọn C</option>
+                            <option value={3} translate="no" className="notranslate">Lựa chọn D</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-500 mb-1"><span translate="no" className="notranslate">Lời giải của sếp / cảnh báo ghi nhớ</span></label>
+                          <input 
+                            type="text" 
+                            value={manualExp}
+                            onChange={(e) => setManualExp(e.target.value)}
+                            placeholder="Nên dặn: Làm đúng cam kết, không lơ là..."
+                            className="w-full text-xs rounded-md border border-gray-250 py-2 px-3 outline-none focus:border-blue-500"
+                            required
+                          />
+                        </div>
+                      </div>
+
+                      <button
+                        type="submit"
+                        className="flex items-center gap-1.5 bg-[#1971C2] hover:bg-opacity-95 text-white font-bold text-xs py-2 px-4 rounded-md shadow-sm"
                       >
-                        <option value={0} translate="no" className="notranslate">Lựa chọn A</option>
-                        <option value={1} translate="no" className="notranslate">Lựa chọn B</option>
-                        <option value={2} translate="no" className="notranslate">Lựa chọn C</option>
-                        <option value={3} translate="no" className="notranslate">Lựa chọn D</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-500 mb-1"><span translate="no" className="notranslate">Lời giải của sếp / cảnh báo ghi nhớ</span></label>
-                      <input 
-                        type="text" 
-                        value={manualExp}
-                        onChange={(e) => setManualExp(e.target.value)}
-                        placeholder="Nên dặn: Làm đúng cam kết, không lơ là..."
-                        className="w-full text-xs rounded-md border border-gray-250 py-2 px-3 outline-none focus:border-blue-500"
-                        required
-                      />
-                    </div>
+                        <Plus className="h-4 w-4" />
+                        <span translate="no" className="notranslate">Thêm câu hỏi mới</span>
+                      </button>
+                    </form>
                   </div>
-
-                  <button
-                    type="submit"
-                    className="flex items-center gap-1.5 bg-[#1971C2] hover:bg-opacity-95 text-white font-bold text-xs py-2 px-4 rounded-md shadow-sm"
-                  >
-                    <Plus className="h-4 w-4" />
-                    <span translate="no" className="notranslate">Thêm câu hỏi mới</span>
-                  </button>
-                </form>
+                )}
               </div>
 
               {/* Active list table */}
@@ -1238,7 +1255,7 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
                                 <div key={oIdx} className={`rounded p-2 border ${
                                   oIdx === q.correctAnswerIndex ? 'bg-green-50/50 border-green-200 text-green-900 font-semibold' : 'bg-gray-50/50 border-gray-100 text-gray-500'
                                 }`}>
-                                  {String.fromCharCode(65 + oIdx)}. {opt}
+                                  {String.fromCharCode(65 + oIdx)}. {cleanOptionText(opt)}
                                 </div>
                               ))}
                             </div>
@@ -1382,7 +1399,7 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
                               <div key={oIdx} className={`p-2 rounded text-xs text-gray-600 ${
                                 oIdx === eq.correctAnswerIndex ? 'bg-green-50/50 text-green-900 border border-green-200 font-semibold' : 'bg-white border border-gray-150'
                               }`}>
-                                {String.fromCharCode(65 + oIdx)}. {opt}
+                                {String.fromCharCode(65 + oIdx)}. {cleanOptionText(opt)}
                               </div>
                             ))}
                           </div>
@@ -1440,17 +1457,28 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
                 </div>
 
                 {/* Important notice regarding Google AI Studio iframe authentication boundary */}
-                <div className="bg-amber-50 border border-amber-200 text-left p-3.5 rounded-lg text-[11px] leading-relaxed text-amber-900 space-y-1">
-                  <strong className="text-amber-950 block">⚠️ Lưu ý Quan Trọng khi Quét Thử Nghiệm:</strong>
-                  <p>
-                    Đường dẫn hiện vật này <code className="bg-amber-100 px-1 py-0.2 rounded font-mono text-amber-950 font-bold">ais-dev-...</code> thuộc môi trường phát triển cục bộ và được <strong>bảo mật nghiêm ngặt bởi Google Cloud</strong>.
-                  </p>
-                  <p className="mt-1">
-                    • <strong>Yêu cầu:</strong> Trình duyệt trên điện thoại của bạn <strong>phải đăng nhập tài khoản Google</strong> đã tham gia dự án này (<code className="font-semibold text-amber-950 font-sans">club.nhuatanphu@gmail.com</code>). Nếu không, bạn sẽ gặp lỗi <strong>"Page not found"</strong> của Google AI Studio do bị chặn truy cập.
-                  </p>
-                  <p className="mt-1">
-                    • <strong>Khuyên dùng:</strong> Hãy thử mở trình duyệt Safari/Chrome trên điện thoại để đăng nhập tài khoản Google trước khi quét, hoặc dán đường dẫn bài viết/đường dẫn liên kết của ứng dụng khi chạy chính thức vào khung phía dưới.
-                  </p>
+                <div className="bg-amber-50 border border-amber-200 text-left p-3.5 rounded-lg text-[11px] leading-relaxed text-amber-900">
+                  <button 
+                    type="button"
+                    onClick={() => setShowQrNotice(!showQrNotice)}
+                    className="w-full flex items-center justify-between font-bold text-amber-950 focus:outline-none cursor-pointer"
+                  >
+                    <span>⚠️ Lưu ý Quan Trọng khi Quét Thử Nghiệm:</span>
+                    {showQrNotice ? <ChevronUp className="h-4 w-4 shrink-0 transition-transform" /> : <ChevronDown className="h-4 w-4 shrink-0 transition-transform" />}
+                  </button>
+                  {showQrNotice && (
+                    <div className="mt-2 space-y-1 border-t border-amber-200 pt-2">
+                      <p>
+                        Đường dẫn hiện vật này <code className="bg-amber-100 px-1 py-0.2 rounded font-mono text-amber-950 font-bold">ais-dev-...</code> thuộc môi trường phát triển cục bộ và được <strong>bảo mật nghiêm ngặt bởi Google Cloud</strong>.
+                      </p>
+                      <p className="mt-1">
+                        • <strong>Yêu cầu:</strong> Trình duyệt trên điện thoại của bạn <strong>phải đăng nhập tài khoản Google</strong> đã tham gia dự án này (<code className="font-semibold text-amber-950 font-sans">club.nhuatanphu@gmail.com</code>). Nếu không, bạn sẽ gặp lỗi <strong>"Page not found"</strong> của Google AI Studio do bị chặn truy cập.
+                      </p>
+                      <p className="mt-1">
+                        • <strong>Khuyên dùng:</strong> Hãy thử mở trình duyệt Safari/Chrome trên điện thoại để đăng nhập tài khoản Google trước khi quét, hoặc dán đường dẫn bài viết/đường dẫn liên kết của ứng dụng khi chạy chính thức vào khung phía dưới.
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Interactive custom link injector */}
@@ -1459,14 +1487,14 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
                   <div className="flex gap-2">
                     <input 
                       type="text" 
-                      value={customQrUrl || window.location.origin} 
+                      value={customQrUrl} 
                       onChange={(e) => setCustomQrUrl(e.target.value)}
                       placeholder="Nhập đường dẫn URL mong muốn..."
                       className="w-full px-3 py-2 text-xs border border-gray-250 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 bg-gray-50/50 font-mono text-gray-700"
                     />
-                    {(customQrUrl && customQrUrl !== window.location.origin) && (
+                    {customQrUrl !== 'https://quiz3t.netlify.app' && (
                       <button 
-                        onClick={() => setCustomQrUrl('')} 
+                        onClick={() => setCustomQrUrl('https://quiz3t.netlify.app')} 
                         className="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-650 rounded-lg text-xs font-bold transition-all whitespace-nowrap"
                         title="Khôi phục mặc định"
                       >
@@ -1479,7 +1507,7 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
                 {/* Secure dyn QR generator (using standard open-source QRServer API) */}
                 <div className="p-4 bg-gray-50 border border-gray-150 rounded-md flex justify-center items-center">
                   <img 
-                    src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(customQrUrl || window.location.origin)}`} 
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(customQrUrl || 'https://quiz3t.netlify.app')}`} 
                     alt="Văn Hóa 3T QR Code Portal" 
                     className="bg-white border rounded-lg p-2.5 shadow-inner h-[250px] w-[250px]"
                     referrerPolicy="no-referrer"
@@ -1487,7 +1515,7 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
                 </div>
 
                 <div className="text-xs font-mono text-gray-500 bg-gray-100 p-2.5 rounded break-all border border-gray-200">
-                  <span translate="no" className="notranslate">{customQrUrl || window.location.origin}</span>
+                  <span translate="no" className="notranslate">{customQrUrl || 'https://quiz3t.netlify.app'}</span>
                 </div>
 
                 <button
@@ -1515,6 +1543,7 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
                 results={results} 
                 onRefresh={loadData} 
                 onBackToHome={onSimulateEmployee}
+                companyMappings={companyMappings}
               />
             </motion.div>
           )}

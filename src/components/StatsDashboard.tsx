@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, QuizResult, BRANCHES, DEPARTMENTS } from '../types';
+import { User, QuizResult, BRANCHES, DEPARTMENTS, CompanyMapping } from '../types';
 import { getQuotaStats, databaseService } from '../firebase';
 import { 
   Database, Users, Trophy, Award, BarChart3, Clock, 
@@ -13,14 +13,40 @@ interface StatsDashboardProps {
   results: QuizResult[];
   onRefresh: () => Promise<void>;
   onBackToHome?: () => void;
+  companyMappings?: CompanyMapping[];
 }
 
-export default function StatsDashboard({ users, results, onRefresh, onBackToHome }: StatsDashboardProps) {
+export default function StatsDashboard({ users, results, onRefresh, onBackToHome, companyMappings }: StatsDashboardProps) {
   const [quota, setQuota] = useState(getQuotaStats());
   const [rankingPeriod, setRankingPeriod] = useState<'day' | 'week' | 'month'>('day');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [listPeriod, setListPeriod] = useState<'day' | 'week' | 'month' | 'year'>('day');
   const [searchQuery, setSearchQuery] = useState('');
+  const [mappings, setMappings] = useState<CompanyMapping[]>(companyMappings || []);
+
+  useEffect(() => {
+    if (companyMappings && companyMappings.length > 0) {
+      setMappings(companyMappings);
+    } else {
+      databaseService.getCompanyMappings().then(m => {
+        if (m && m.length > 0) {
+          setMappings(m);
+        }
+      }).catch(err => {
+        console.error("Failed to load company mappings in StatsDashboard:", err);
+      });
+    }
+  }, [companyMappings]);
+
+  // Extract unique branches from mappings dynamically, fallback to static if empty
+  const activeBranchesList = mappings.length > 0 
+    ? Array.from(new Set(mappings.flatMap(co => co.branches.map(b => b.name.trim()))))
+    : Array.from(BRANCHES);
+
+  // Extract unique departments from mappings dynamically, fallback to static if empty
+  const activeDepartmentsList = mappings.length > 0
+    ? Array.from(new Set(mappings.flatMap(co => co.branches.flatMap(b => b.departments.map(d => d.name.trim())))))
+    : Array.from(DEPARTMENTS);
 
   // States for active quota optimization and cleanup
   const [oldResultCount, setOldResultCount] = useState<number | null>(null);
@@ -204,14 +230,14 @@ export default function StatsDashboard({ users, results, onRefresh, onBackToHome
            p.branch.toLowerCase().includes(q);
   });
 
-  const branchStats = BRANCHES.map(branchName => {
+  const branchStats = activeBranchesList.map(branchName => {
     const count = activeUsers.filter(u => u.branch === branchName).length;
     const percentage = totalActiveUsers > 0 ? Math.round((count / totalActiveUsers) * 100) : 0;
     return { name: branchName, count, percentage };
   }).sort((a, b) => b.count - a.count);
 
   // 3. Department Visitor Statistics
-  const departmentStats = DEPARTMENTS.map(deptName => {
+  const departmentStats = activeDepartmentsList.map(deptName => {
     const count = activeUsers.filter(u => u.department === deptName).length;
     const percentage = totalActiveUsers > 0 ? Math.round((count / totalActiveUsers) * 100) : 0;
     return { name: deptName, count, percentage };
@@ -610,8 +636,8 @@ export default function StatsDashboard({ users, results, onRefresh, onBackToHome
               <Users className="h-5 w-5 text-emerald-500" />
               <span>CBNV Đã phê duyệt theo Phòng Ban</span>
             </h4>
-            <span className="px-2.5 py-0.5 bg-emerald-50 border border-emerald-100 text-emerald-700 text-xs font-extrabold rounded-full">
-              {DEPARTMENTS.length} phòng ban
+            <span className="px-2.5 py-0.5 bg-emerald-50 border border-emerald-100 text-emerald-700 text-xs font-extrabold rounded-full font-sans animate-pulse">
+              {activeDepartmentsList.length} phòng ban
             </span>
           </div>
 
