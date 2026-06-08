@@ -1,16 +1,17 @@
 import React, { useState, useEffect } from 'react';
+import * as XLSX from 'xlsx';
 import { databaseService } from '../firebase';
 import { User, Question, QuizResult, BRANCHES, DEPARTMENTS, CompanyMapping } from '../types';
 import { INITIAL_QUESTIONS } from '../data/mockQuestions';
 import { 
   Users, HelpCircle, ImagePlus, QrCode, AlertTriangle, 
   Trash2, Plus, Sparkles, LogOut, CheckCircle2, UserCheck, 
-  RefreshCcw, UserMinus, FileDown, Pencil, Lock, BarChart3,
+  RefreshCcw, UserMinus, FileDown, Upload, Pencil, Lock, BarChart3,
   Database, Building, Briefcase, Landmark, Home, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import StatsDashboard from './StatsDashboard';
-import { cleanOptionText } from '../utils/format';
+import { cleanOptionText, formatDate } from '../utils/format';
 
 interface AdminDashboardProps {
   user: User;
@@ -19,9 +20,20 @@ interface AdminDashboardProps {
   slogan: string;
   onUpdateSlogan: (slogan: string) => void;
   initialTab?: 'users' | 'questions' | 'add_images' | 'qr' | 'stats' | 'encoding';
+  maintenanceObj: { isMaintenance: boolean; message: string };
+  onUpdateMaintenance: (isMaintenance: boolean, message: string) => void;
 }
 
-export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slogan, onUpdateSlogan, initialTab }: AdminDashboardProps) {
+export default function AdminDashboard({ 
+  user, 
+  onLogout, 
+  onSimulateEmployee, 
+  slogan, 
+  onUpdateSlogan, 
+  initialTab,
+  maintenanceObj,
+  onUpdateMaintenance
+}: AdminDashboardProps) {
   const [users, setUsers] = useState<User[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [results, setResults] = useState<QuizResult[]>([]);
@@ -82,7 +94,7 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
   const [selectedImages, setSelectedImages] = useState<{ file: File; compressedBase64: string }[]>([]);
   const [extractedQuestions, setExtractedQuestions] = useState<(Question & { isDuplicate: boolean; duplicateOriginal?: string })[]>([]);
   const [extracting, setExtracting] = useState(false);
-  const [customQrUrl, setCustomQrUrl] = useState('https://quiz3t.netlify.app');
+  const [customQrUrl, setCustomQrUrl] = useState('https://quiz3t.vercel.app');
   const [showQrNotice, setShowQrNotice] = useState(false);
   const [showManualForm, setShowManualForm] = useState(false);
 
@@ -214,8 +226,9 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
 
     try {
       setLoading(true);
+      const finalName = editName.trim().toUpperCase();
       await databaseService.updateUser(editingUser.id, {
-        name: editName.trim(),
+        name: finalName,
         phone: editPhone.trim(),
         employeeId: editEmployeeId.trim(),
         company: editCompany,
@@ -225,7 +238,7 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
         status: editStatus,
         password: editPassword
       });
-      setNotice({ type: 'success', msg: `Đã cập nhật thông tin CBNV "${editName}" thành công!` });
+      setNotice({ type: 'success', msg: `Đã cập nhật thông tin CBNV "${finalName}" thành công!` });
       setEditingUser(null);
       await loadData();
     } catch (err) {
@@ -742,6 +755,166 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
     });
   };
 
+  // Notifications and badge calculations
+  const pendingUsersCount = users.filter(u => u.status?.toLowerCase() === 'pending').length;
+  const totalQuestionsCount = questions.length;
+  const todayStr = formatDate(new Date());
+  const todayResults = results.filter(r => r.date === todayStr);
+  const participantsTodayCount = new Set(todayResults.map(r => r.userId)).size;
+
+  const handleExportUsers = () => {
+    try {
+      const seenKeys = new Set<string>();
+      const dedupedRaw = users.filter((item) => {
+        if (!item || !item.id || !item.name || !item.phone) return false;
+        const nameTrim = item.name.trim();
+        const phoneTrim = item.phone.trim();
+        if (!nameTrim || !phoneTrim) return false;
+
+        const uniqueKey = `${nameTrim}_${phoneTrim}`;
+        if (seenKeys.has(uniqueKey)) return false;
+        seenKeys.add(uniqueKey);
+        return true;
+      });
+
+      const sortedUsers = [...dedupedRaw].sort((a, b) => {
+        const isALNT = (a.name || '').trim().normalize('NFC').toLowerCase().includes('lê nhật trường') || a.phone?.trim() === '0907767304';
+        const isBLNT = (b.name || '').trim().normalize('NFC').toLowerCase().includes('lê nhật trường') || b.phone?.trim() === '0907767304';
+        
+        if (isALNT && !isBLNT) return -1;
+        if (!isALNT && isBLNT) return 1;
+
+        const aPending = a.status?.toLowerCase() === 'pending';
+        const bPending = b.status?.toLowerCase() === 'pending';
+        if (aPending && !bPending) return -1;
+        if (!aPending && bPending) return 1;
+        return 0;
+      });
+
+      const exportRows = sortedUsers.map(u => ({
+        'Họ và Tên': u.name,
+        'SĐT': u.phone,
+        'Mã NS': u.employeeId || '',
+        'Thuộc Bộ Phận': u.department || '',
+        'Chi nhánh': u.branch || '',
+        'Vai trò phân cấp': u.role === 'admin' ? 'Chủ Admin' : u.role === 'approver' ? 'Duyệt viên (Trưởng BP)' : 'CBNV',
+        'Trạng thái': u.status?.toLowerCase() === 'approved' ? 'Đã hoạt động' : u.status?.toLowerCase() === 'pending' ? 'Chờ duyệt (PENDING)' : 'Tạm khóa',
+        'Mật khẩu': u.password || '123456',
+        'Mã ID Hệ Thống': u.id,
+        'Ngày tạo': u.createdAt || new Date().toISOString()
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(exportRows);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Danh sach CBNV");
+
+      // Auto fit column widths
+      const maxLens = Object.keys(exportRows[0] || {}).map((key) => {
+        const keyLen = key.length;
+        const maxValLen = exportRows.reduce((max, row: any) => {
+          const val = row[key] ? row[key].toString() : '';
+          return Math.max(max, val.length);
+        }, 0);
+        return { wch: Math.max(keyLen, maxValLen) + 3 };
+      });
+      worksheet['!cols'] = maxLens;
+
+      XLSX.writeFile(workbook, `Danh_Sach_CBNV_3T_Mastery_${new Date().toISOString().split('T')[0]}.xlsx`);
+      setNotice({ type: 'success', msg: 'Xuất danh sách file Excel thành công!' });
+    } catch (err: any) {
+      console.error(err);
+      setNotice({ type: 'error', msg: `Lỗi xuất excel: ${err.message || 'vui lòng thử lại.'}` });
+    }
+  };
+
+  const handleImportUsers = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const data = new Uint8Array(event.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        const rawRows: any[] = XLSX.utils.sheet_to_json(worksheet);
+
+        if (rawRows.length === 0) {
+          setNotice({ type: 'error', msg: 'File không chứa bất kỳ dữ liệu nào để nhập!' });
+          return;
+        }
+
+        let importCount = 0;
+        let skippedCount = 0;
+
+        for (const row of rawRows) {
+          const name = (row['Họ và Tên'] || row['Name'] || row['name'] || '').toString().trim().toUpperCase();
+          const phone = (row['SĐT'] || row['Sđt'] || row['Phone'] || row['phone'] || '').toString().trim();
+          
+          if (!name || !phone) {
+            skippedCount++;
+            continue;
+          }
+
+          const employeeId = (row['Mã NS'] || row['EmployeeID'] || row['employeeId'] || row['mã ns'] || '').toString().trim();
+          const department = (row['Thuộc Bộ Phận'] || row['Bộ Phận'] || row['Department'] || row['department'] || '').toString().trim();
+          const branch = (row['Chi nhánh'] || row['Branch'] || row['branch'] || '').toString().trim();
+          
+          const rawRole = (row['Vai trò phân cấp'] || row['Role'] || row['role'] || '').toString().trim().toLowerCase();
+          let role: 'employee' | 'approver' | 'admin' = 'employee';
+          if (rawRole.includes('admin') || rawRole.includes('chủ') || rawRole === 'admin') {
+            role = 'admin';
+          } else if (rawRole.includes('duyệt') || rawRole.includes('trưởng') || rawRole.includes('approver') || rawRole === 'approver') {
+            role = 'approver';
+          }
+
+          const rawStatus = (row['Trạng thái'] || row['Status'] || row['status'] || '').toString().trim().toLowerCase();
+          let status: 'approved' | 'pending' | 'rejected' | 'APPROVED' | 'PENDING' | 'REJECTED' = 'PENDING';
+          if (rawStatus.includes('hoạt động') || rawStatus.includes('approved') || rawStatus.includes('đã') || rawStatus === 'approved') {
+            status = 'APPROVED';
+          } else if (rawStatus.includes('khóa') || rawStatus.includes('từ chối') || rawStatus.includes('rejected') || rawStatus === 'rejected') {
+            status = 'REJECTED';
+          }
+
+          const password = (row['Mật khẩu'] || row['Password'] || row['password'] || '123456').toString().trim();
+          const idCol = (row['Mã ID Hệ Thống'] || row['Id'] || row['id'] || '').toString().trim();
+          const id = idCol || ('usr_' + Math.random().toString(36).substring(2, 9));
+          const createdAt = (row['Ngày tạo'] || row['CreatedAt'] || row['createdAt'] || new Date().toISOString()).toString().trim();
+
+          const importedUser: User = {
+            id,
+            name,
+            phone,
+            password,
+            role,
+            company: 'TÂN PHÚ VIỆT NAM',
+            department: department || 'Phòng Quản Lý Chất Lượng (QLCL)',
+            branch: branch || 'Hội sở chính',
+            status,
+            createdAt,
+            employeeId: employeeId || undefined
+          };
+
+          await databaseService.saveUser(importedUser.id, importedUser);
+          importCount++;
+        }
+
+        setNotice({ 
+          type: 'success', 
+          msg: `Đã nhập và đồng bộ thành công ${importCount} tài khoản CBNV.` + (skippedCount > 0 ? ` (Bỏ qua ${skippedCount} dòng do thiếu Tên hoặc SĐT)` : '') 
+        });
+        
+        loadData();
+      } catch (err: any) {
+        console.error(err);
+        setNotice({ type: 'error', msg: `Lỗi đọc file Excel: ${err.message || 'định dạng sai, vui lòng kiểm tra lại.'}` });
+      }
+    };
+    reader.readAsArrayBuffer(file);
+    e.target.value = '';
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Navigation Bar */}
@@ -767,7 +940,7 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
               className="text-xs font-bold text-white bg-green-600 hover:bg-green-700 hover:shadow shadow-sm rounded-md py-2 px-3.5 transition-all flex items-center gap-1.5 border border-green-500 font-sans"
             >
               <Sparkles className="h-4 w-4 text-white" />
-              <span translate="no" className="notranslate">Trải nghiệm Học & Thi Thử (CBNV)</span>
+              <span translate="no" className="notranslate">GIẢ LẬP CBNV</span>
             </button>
             <button
               onClick={onLogout}
@@ -822,6 +995,57 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
             </button>
           </div>
         </div>
+
+        {/* Compact Dynamic Maintenance Admin Customizer Widget */}
+        <div className="bg-slate-900 border border-slate-800 rounded-lg p-3 shadow-md text-white">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2.5">
+              <span className="font-bold text-amber-400 uppercase tracking-wider text-[9px] border border-amber-500/30 px-1.5 py-0.5 rounded bg-amber-500/10">Bảo trì / Quota</span>
+              <div className="flex items-center gap-1.5">
+                <span className={`h-2 w-2 rounded-full ${maintenanceObj.isMaintenance ? 'bg-red-500 animate-pulse' : 'bg-green-500'}`}></span>
+                <span className="font-semibold text-slate-200">
+                  {maintenanceObj.isMaintenance ? '🔴 Đang Khóa App' : '🟢 Bình Thường'}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                id="maintenance-msg-input"
+                type="text"
+                className="px-2 py-1 text-xs border border-slate-700 rounded bg-slate-800 text-slate-200 focus:border-amber-500 outline-none w-52 sm:w-64 max-w-full font-medium"
+                placeholder="Nội dung hiển thị..."
+                defaultValue={maintenanceObj.message || 'Hệ thống đang tạm khóa để bảo trì phần cứng và đồng bộ cấu trúc mới. Vui lòng quay lại sau ít phút!'}
+              />
+              <button
+                onClick={() => {
+                  const msgInput = document.getElementById('maintenance-msg-input') as HTMLInputElement;
+                  const finalMsg = msgInput?.value.trim() || 'Hệ thống đang tạm khóa để bảo trì phần cứng và đồng bộ cấu trúc mới. Vui lòng quay lại sau ít phút!';
+                  onUpdateMaintenance(maintenanceObj.isMaintenance, finalMsg);
+                  alert("Đã lưu nội dung thông báo bảo trì.");
+                }}
+                className="px-2 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 rounded text-[10px] font-bold transition-all active:scale-95"
+              >
+                Lưu nội dung
+              </button>
+              <button
+                onClick={() => {
+                  const msgInput = document.getElementById('maintenance-msg-input') as HTMLInputElement;
+                  const finalMsg = msgInput?.value.trim() || 'Hệ thống đang tạm khóa để bảo trì phần cứng và đồng bộ cấu trúc mới. Vui lòng quay lại sau ít phút!';
+                  onUpdateMaintenance(!maintenanceObj.isMaintenance, finalMsg);
+                  alert(maintenanceObj.isMaintenance ? "Đã dỡ bỏ trạng thái tạm khóa bảo trì thành công!" : "Đã kích hoạt tạm khóa bảo trì toàn hệ thống!");
+                }}
+                className={`px-3 py-1 text-[10px] font-bold rounded transition-all active:scale-95 uppercase tracking-wider text-white ${
+                  maintenanceObj.isMaintenance 
+                    ? 'bg-green-600 hover:bg-green-500' 
+                    : 'bg-red-600 hover:bg-red-500'
+                }`}
+              >
+                {maintenanceObj.isMaintenance ? 'Mở khóa' : 'Tạm khóa app'}
+              </button>
+            </div>
+          </div>
+        </div>
         
         {/* Dynamic Alerts */}
         {notice && (
@@ -841,8 +1065,15 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
               activeTab === 'users' ? 'border-[#1971C2] text-[#1971C2] font-bold' : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
-            <Users className="h-4 w-4" />
-            <span translate="no" className="notranslate">Phê Duyệt & Phân Quyền</span>
+            <div className="relative flex items-center justify-center p-0.5">
+              <Users className="h-[26px] w-[26px] text-current" />
+              {pendingUsersCount > 0 && (
+                <span className="absolute -top-2 -left-3.5 text-[11px] font-black leading-none bg-rose-500 text-white rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 animate-pulse shadow-xs ring-1.5 ring-white">
+                  {pendingUsersCount}
+                </span>
+              )}
+            </div>
+            <span translate="no" className="notranslate">PHÊ DUYỆT</span>
           </button>
           <button
             onClick={() => { setActiveTab('questions'); setNotice(null); }}
@@ -850,8 +1081,15 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
               activeTab === 'questions' ? 'border-[#1971C2] text-[#1971C2] font-bold' : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
-            <HelpCircle className="h-4 w-4" />
-            <span translate="no" className="notranslate">Ngân Hàng Câu Hỏi</span>
+            <div className="relative flex items-center justify-center p-0.5">
+              <HelpCircle className="h-[26px] w-[26px] text-current" />
+              {totalQuestionsCount > 0 && (
+                <span className="absolute -top-2 -left-3.5 text-[11px] font-black leading-none bg-[#1971C2] text-white rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 shadow-xs ring-1.5 ring-white">
+                  {totalQuestionsCount}
+                </span>
+              )}
+            </div>
+            <span translate="no" className="notranslate">CÂU HỎI</span>
           </button>
           <button
             onClick={() => { setActiveTab('add_images'); setNotice(null); }}
@@ -859,8 +1097,10 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
               activeTab === 'add_images' ? 'border-[#1971C2] text-[#1971C2] font-bold' : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
-            <ImagePlus className="h-4 w-4" />
-            <span translate="no" className="notranslate">Trích xuất Câu Hỏi AI (Hình Ảnh)</span>
+            <div className="relative flex items-center justify-center p-0.5">
+              <ImagePlus className="h-[26px] w-[26px] text-current" />
+            </div>
+            <span translate="no" className="notranslate">THÊM PIC</span>
           </button>
           <button
             onClick={() => { setActiveTab('qr'); setNotice(null); }}
@@ -868,8 +1108,10 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
               activeTab === 'qr' ? 'border-[#1971C2] text-[#1971C2] font-bold' : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
-            <QrCode className="h-4 w-4" />
-            <span translate="no" className="notranslate">Mã QR "Chiến" Ngay</span>
+            <div className="relative flex items-center justify-center p-0.5">
+              <QrCode className="h-[26px] w-[26px] text-current" />
+            </div>
+            <span translate="no" className="notranslate">MÃ QR</span>
           </button>
           <button
             onClick={() => { setActiveTab('stats'); setNotice(null); }}
@@ -877,8 +1119,17 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
               activeTab === 'stats' ? 'border-[#1971C2] text-[#1971C2] font-bold' : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
-            <BarChart3 className="h-4 w-4" />
-            <span translate="no" className="notranslate">Trang Thống Kê</span>
+            <div className="relative flex items-center justify-center p-0.5">
+              <BarChart3 className="h-[26px] w-[26px] text-current" />
+              <span className={`absolute -top-2 -left-3.5 text-[11px] font-black leading-none rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 shadow-xs ring-1.5 ring-white ${
+                participantsTodayCount > 0 
+                  ? 'bg-emerald-500 text-white' 
+                  : 'bg-slate-400 text-white'
+              }`}>
+                {participantsTodayCount}
+              </span>
+            </div>
+            <span translate="no" className="notranslate">THỐNG KÊ</span>
           </button>
           <button
             onClick={() => { setActiveTab('encoding'); setNotice(null); }}
@@ -886,8 +1137,10 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
               activeTab === 'encoding' ? 'border-[#1971C2] text-[#1971C2] font-bold' : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
-            <Database className="h-4 w-4" />
-            <span translate="no" className="notranslate">Trang Mã Hóa</span>
+            <div className="relative flex items-center justify-center p-0.5">
+              <Database className="h-[26px] w-[26px] text-current" />
+            </div>
+            <span translate="no" className="notranslate">MÃ HÓA</span>
           </button>
         </div>
 
@@ -909,17 +1162,40 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
                     <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest"><span translate="no" className="notranslate">Danh sách CBNV đăng ký hệ thống</span></h3>
                     <p className="text-xs text-gray-400 mt-0.5"><span translate="no" className="notranslate">Với tư cách Admin tối cao, bạn có thể phê duyệt quyền vào sảnh học tập cho CBNV quốc gia.</span></p>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <button
                       onClick={onSimulateEmployee}
                       className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-green-600 hover:bg-green-700 rounded-md shadow-xs transition-all cursor-pointer active:scale-95"
                     >
                       <Home className="h-3.5 w-3.5" />
-                      <span>VỀ TRANG CHỦ 3T (ĐIỆN THOẠI)</span>
+                      <span>MOBILE</span>
                     </button>
+                    
+                    {/* Export / Import Excel action controls */}
+                    <button
+                      onClick={handleExportUsers}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-250 hover:bg-emerald-100 rounded-md shadow-xs transition-all cursor-pointer active:scale-95"
+                      title="Xuất danh sách ra file Excel"
+                    >
+                      <FileDown className="h-3.5 w-3.5" />
+                      <span>XUẤT EXCEL</span>
+                    </button>
+
+                    <label className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-blue-700 bg-blue-50 border border-blue-250 hover:bg-blue-100 rounded-md shadow-xs transition-all cursor-pointer active:scale-95">
+                      <Upload className="h-3.5 w-3.5" />
+                      <span>NHẬP EXCEL</span>
+                      <input
+                        type="file"
+                        accept=".xlsx, .xls, .csv"
+                        onChange={handleImportUsers}
+                        className="hidden"
+                      />
+                    </label>
+
                     <button 
                       onClick={loadData}
                       className="p-1.5 border border-gray-200 hover:bg-gray-100 rounded-md text-gray-500 transition-all"
+                      title="Tải lại danh sách"
                     >
                       <RefreshCcw className="h-4 w-4" />
                     </button>
@@ -1119,7 +1395,7 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-green-600 hover:bg-green-700 rounded-md shadow-xs transition-all cursor-pointer active:scale-95 whitespace-nowrap"
                 >
                   <Home className="h-3.5 w-3.5" />
-                  <span>VỀ TRANG CHỦ 3T (ĐIỆN THOẠI)</span>
+                  <span>MOBILE</span>
                 </button>
               </div>
 
@@ -1294,7 +1570,7 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-green-600 hover:bg-green-700 rounded-md shadow-xs transition-all cursor-pointer active:scale-95 whitespace-nowrap"
                 >
                   <Home className="h-3.5 w-3.5" />
-                  <span>VỀ TRANG CHỦ 3T (ĐIỆN THOẠI)</span>
+                  <span>MOBILE</span>
                 </button>
               </div>
 
@@ -1444,7 +1720,7 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-green-600 hover:bg-green-700 rounded-md shadow-xs transition-all cursor-pointer active:scale-95 whitespace-nowrap"
                 >
                   <Home className="h-3.5 w-3.5" />
-                  <span>VỀ TRANG CHỦ 3T (ĐIỆN THOẠI)</span>
+                  <span>MOBILE</span>
                 </button>
               </div>
 
@@ -1492,9 +1768,9 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
                       placeholder="Nhập đường dẫn URL mong muốn..."
                       className="w-full px-3 py-2 text-xs border border-gray-250 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 bg-gray-50/50 font-mono text-gray-700"
                     />
-                    {customQrUrl !== 'https://quiz3t.netlify.app' && (
+                    {customQrUrl !== 'https://quiz3t.vercel.app' && (
                       <button 
-                        onClick={() => setCustomQrUrl('https://quiz3t.netlify.app')} 
+                        onClick={() => setCustomQrUrl('https://quiz3t.vercel.app')} 
                         className="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-650 rounded-lg text-xs font-bold transition-all whitespace-nowrap"
                         title="Khôi phục mặc định"
                       >
@@ -1507,7 +1783,7 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
                 {/* Secure dyn QR generator (using standard open-source QRServer API) */}
                 <div className="p-4 bg-gray-50 border border-gray-150 rounded-md flex justify-center items-center">
                   <img 
-                    src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(customQrUrl || 'https://quiz3t.netlify.app')}`} 
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(customQrUrl || 'https://quiz3t.vercel.app')}`} 
                     alt="Văn Hóa 3T QR Code Portal" 
                     className="bg-white border rounded-lg p-2.5 shadow-inner h-[250px] w-[250px]"
                     referrerPolicy="no-referrer"
@@ -1515,7 +1791,7 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
                 </div>
 
                 <div className="text-xs font-mono text-gray-500 bg-gray-100 p-2.5 rounded break-all border border-gray-200">
-                  <span translate="no" className="notranslate">{customQrUrl || 'https://quiz3t.netlify.app'}</span>
+                  <span translate="no" className="notranslate">{customQrUrl || 'https://quiz3t.vercel.app'}</span>
                 </div>
 
                 <button
@@ -1570,7 +1846,7 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-green-600 hover:bg-green-700 rounded-md shadow-xs transition-all cursor-pointer active:scale-95 whitespace-nowrap"
                 >
                   <Home className="h-3.5 w-3.5" />
-                  <span>VỀ TRANG CHỦ 3T (ĐIỆN THOẠI)</span>
+                  <span>MOBILE</span>
                 </button>
               </div>
 
@@ -1984,7 +2260,7 @@ export default function AdminDashboard({ user, onLogout, onSimulateEmployee, slo
                 <input
                   type="text"
                   value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
+                  onChange={(e) => setEditName(e.target.value.toUpperCase())}
                   className="w-full border border-gray-200 rounded px-3 py-2 text-xs outline-none focus:border-[#1971C2]"
                   required
                 />

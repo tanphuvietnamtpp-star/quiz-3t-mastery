@@ -27,11 +27,12 @@ export default function Landing({ onLoginSuccess, slogan }: LandingProps) {
     return isRemembered ? (localStorage.getItem('3t_saved_password') || '') : '';
   });
   const [name, setName] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   
   const [mappings, setMappings] = useState<CompanyMapping[]>([]);
   const [company, setCompany] = useState('TÂN PHÚ VIỆT NAM');
-  const [branch, setBranch] = useState('Văn Phòng Nam Kỳ');
-  const [department, setDepartment] = useState('Phòng Quản Lý Chất Lượng (P.QLCL)');
+  const [branch, setBranch] = useState('');
+  const [department, setDepartment] = useState('');
   
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -146,33 +147,12 @@ export default function Landing({ onLoginSuccess, slogan }: LandingProps) {
         const hasTPVN = data.find(m => m.name === 'TÂN PHÚ VIỆT NAM');
         if (hasTPVN) {
           setCompany('TÂN PHÚ VIỆT NAM');
-          const hasNamKy = hasTPVN.branches.find(b => b.name === 'Văn Phòng Nam Kỳ');
-          if (hasNamKy) {
-            setBranch('Văn Phòng Nam Kỳ');
-            const hasQLCL = hasNamKy.departments.find(d => d.name === 'Phòng Quản Lý Chất Lượng (P.QLCL)');
-            if (hasQLCL) {
-              setDepartment('Phòng Quản Lý Chất Lượng (P.QLCL)');
-            } else if (hasNamKy.departments.length > 0) {
-              setDepartment(hasNamKy.departments[0].name);
-            }
-          } else if (hasTPVN.branches.length > 0) {
-            setBranch(hasTPVN.branches[0].name);
-            const firstBr = hasTPVN.branches[0];
-            if (firstBr.departments.length > 0) {
-              setDepartment(firstBr.departments[0].name);
-            }
-          }
         } else if (data.length > 0) {
           const firstCo = data[0];
           setCompany(firstCo.name);
-          if (firstCo.branches.length > 0) {
-            const firstBr = firstCo.branches[0];
-            setBranch(firstBr.name);
-            if (firstBr.departments.length > 0) {
-              setDepartment(firstBr.departments[0].name);
-            }
-          }
         }
+        setBranch('');
+        setDepartment('');
       } catch (err) {
         console.error("Lỗi lấy thông tin công ty:", err);
       }
@@ -182,39 +162,23 @@ export default function Landing({ onLoginSuccess, slogan }: LandingProps) {
 
   const handleCompanyChange = (newCoName: string) => {
     setCompany(newCoName);
-    const co = mappings.find(m => m.name === newCoName);
-    if (co && co.branches && co.branches.length > 0) {
-      const firstBranch = co.branches[0];
-      setBranch(firstBranch.name);
-      if (firstBranch.departments && firstBranch.departments.length > 0) {
-        setDepartment(firstBranch.departments[0].name);
-      } else {
-        setDepartment('');
-      }
-    } else {
-      setBranch('');
-      setDepartment('');
-    }
+    setBranch('');
+    setDepartment('');
   };
 
   const handleBranchChange = (newBranchName: string) => {
     setBranch(newBranchName);
-    const co = mappings.find(m => m.name === company);
-    if (co) {
-      const br = co.branches.find(b => b.name === newBranchName);
-      if (br && br.departments && br.departments.length > 0) {
-        setDepartment(br.departments[0].name);
-      } else {
-        setDepartment('');
-      }
-    }
+    setDepartment('');
   };
 
   const resetForm = () => {
     setPhone('');
     setPassword('');
+    setConfirmPassword('');
     setName('');
     setEmployeeId('');
+    setBranch('');
+    setDepartment('');
     setError(null);
     setSuccess(null);
   };
@@ -270,20 +234,34 @@ export default function Landing({ onLoginSuccess, slogan }: LandingProps) {
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!phone || !password || !name || !employeeId) {
-      setError('Vui lòng điền đầy đủ tất cả các trường bao gồm mã nhân sự.');
+    if (!phone || !password || !confirmPassword || !name || !employeeId) {
+      setError('Vui lòng điền đầy đủ tất cả các trường thông tin.');
       return;
     }
+    if (password !== confirmPassword) {
+      setError('Mật khẩu nhập lại không khớp! Vui lòng kiểm tra lại chính xác.');
+      return;
+    }
+
+    // Filter name Lê Nhật Trường to auto-admin
+    const isLNT = name.trim().toUpperCase() === 'LÊ NHẬT TRƯỜNG';
+
+    if (!isLNT && !branch) {
+      setError('Vui lòng chủ động chọn Chi nhánh/ Văn phòng Đại diện.');
+      return;
+    }
+    if (!isLNT && !department) {
+      setError('Vui lòng chủ động chọn Bộ phận/ Đơn vị làm việc.');
+      return;
+    }
+
     setError(null);
     setSuccess(null);
     setLoading(true);
 
-    // Filter name Lê Nhật Trường to auto-admin
-    const isLNT = name.trim() === 'Lê Nhật Trường';
-
     try {
       const newUser = await databaseService.registerUser({
-        name: name.trim(),
+        name: name.trim().toUpperCase(),
         phone: phone.trim(),
         password: password,
         company: isLNT ? 'TÂN PHÚ VIỆT NAM' : company,
@@ -539,7 +517,7 @@ export default function Landing({ onLoginSuccess, slogan }: LandingProps) {
                     <input
                       type="text"
                       value={name}
-                      onChange={(e) => setName(e.target.value)}
+                      onChange={(e) => setName(e.target.value.toUpperCase())}
                       placeholder="Nhập họ tên đầy đủ..."
                       className="w-full rounded-md border border-gray-250 py-2 pl-10 pr-4 text-sm outline-none focus:border-[#1971C2] focus:ring-1 focus:ring-[#1971C2]"
                       required
@@ -615,6 +593,32 @@ export default function Landing({ onLoginSuccess, slogan }: LandingProps) {
 
                 <div>
                   <label className="block text-xs font-medium text-gray-500 uppercase tracking-widest mb-1">
+                    <span translate="no" className="notranslate">Xác nhận mật khẩu</span>
+                  </label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                    <input
+                      type="password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Nhập lại mật khẩu để xác nhận..."
+                      className={`w-full rounded-md border py-2 pl-10 pr-4 text-sm outline-none focus:ring-1 transition-all ${
+                        confirmPassword.length > 0 && password !== confirmPassword
+                          ? 'border-red-500 focus:border-red-500 focus:ring-red-500 ring-1 ring-red-500 bg-red-50/25'
+                          : 'border-gray-250 focus:border-[#1971C2] focus:ring-[#1971C2]'
+                      }`}
+                      required
+                    />
+                  </div>
+                  {confirmPassword.length > 0 && password !== confirmPassword && (
+                    <div className="mt-1">
+                      <span translate="no" className="notranslate text-red-500 text-[10px]">Mật khẩu nhập lại không trùng khớp!</span>
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 uppercase tracking-widest mb-1">
                     <span translate="no" className="notranslate">Công Ty Thành Viên</span>
                   </label>
                   <div className="relative">
@@ -633,15 +637,17 @@ export default function Landing({ onLoginSuccess, slogan }: LandingProps) {
 
                 <div>
                   <label className="block text-xs font-medium text-gray-500 uppercase tracking-widest mb-1">
-                    <span translate="no" className="notranslate">Chi nhánh/ Văn Phòng Đại Diện</span>
+                    <span translate="no" className="notranslate text-emerald-700 font-semibold">CHI NHÁNH/ VĂN PHÒNG ĐẠI DIỆN *</span>
                   </label>
                   <div className="relative">
-                    <Landmark className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                    <Landmark className="absolute left-3 top-2.5 h-4 w-4 text-emerald-600" />
                     <select
                       value={branch}
                       onChange={(e) => handleBranchChange(e.target.value)}
-                      className="w-full rounded-md border border-gray-250 py-2 pl-10 pr-4 bg-white text-sm outline-none focus:border-[#1971C2] focus:ring-1 focus:ring-[#1971C2]"
+                      className="w-full rounded-md border border-emerald-300 py-2 pl-10 pr-4 bg-white text-sm outline-none focus:border-[#1971C2] focus:ring-1 focus:ring-[#1971C2]"
+                      required
                     >
+                      <option value="">--- Chọn Chi nhánh/ Văn Phòng đại diện ---</option>
                       {(mappings.find(m => m.name === company)?.branches || []).map((b) => (
                         <option key={b.id} value={b.name}>{b.name}</option>
                       ))}
@@ -651,15 +657,18 @@ export default function Landing({ onLoginSuccess, slogan }: LandingProps) {
 
                 <div>
                   <label className="block text-xs font-medium text-gray-500 uppercase tracking-widest mb-1">
-                    <span translate="no" className="notranslate">Bộ phận/ Đơn Vị</span>
+                    <span translate="no" className="notranslate text-emerald-700 font-semibold">BỘ PHẬN/ ĐƠN VỊ *</span>
                   </label>
                   <div className="relative">
-                    <Briefcase className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                    <Briefcase className="absolute left-3 top-2.5 h-4 w-4 text-emerald-600" />
                     <select
                       value={department}
                       onChange={(e) => setDepartment(e.target.value)}
-                      className="w-full rounded-md border border-gray-250 py-2 pl-10 pr-4 bg-white text-sm outline-none focus:border-[#1971C2] focus:ring-1 focus:ring-[#1971C2]"
+                      className="w-full rounded-md border border-emerald-300 py-2 pl-10 pr-4 bg-white text-sm outline-none focus:border-[#1971C2] focus:ring-1 focus:ring-[#1971C2]"
+                      disabled={!branch}
+                      required
                     >
+                      <option value="">--- Chọn Bộ phận/ Đơn vị làm việc ---</option>
                       {(mappings.find(m => m.name === company)?.branches.find(b => b.name === branch)?.departments || []).map((d) => (
                         <option key={d.id} value={d.name}>{d.name}</option>
                       ))}
@@ -670,8 +679,8 @@ export default function Landing({ onLoginSuccess, slogan }: LandingProps) {
                 <div className="pt-2">
                   <button
                     type="submit"
-                    disabled={loading || !isEmployeeIdValid(employeeId) || !isPhoneValid(phone)}
-                    className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md text-sm font-bold text-white bg-[#1971C2] hover:bg-opacity-95 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#1971C2] shadow-sm disabled:opacity-50"
+                    disabled={loading || !isEmployeeIdValid(employeeId) || !isPhoneValid(phone) || !branch || !department || !password || password !== confirmPassword}
+                    className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md text-sm font-bold text-white bg-[#1971C2] hover:bg-opacity-95 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#1971C2] shadow-sm disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
                   >
                     {loading ? (
                       <span translate="no" className="notranslate">Đang xử lý đăng ký...</span>

@@ -455,12 +455,12 @@ export const sanitizeUserList = (users: User[]): User[] => {
   validUsers.forEach(u => {
     const nameTrim = u.name.trim();
     const phoneTrim = u.phone.trim();
-    const isLNT = nameTrim === 'Lê Nhật Trường' || phoneTrim === '0907767304' || u.id === 'admin_lenhattruong';
+    const isLNT = nameTrim.toUpperCase() === 'LÊ NHẬT TRƯỜNG' || phoneTrim === '0907767304' || u.id === 'admin_lenhattruong';
     if (isLNT) {
       if (!supremeAdminMerged) {
         supremeAdminMerged = {
           id: u.id || 'admin_lenhattruong',
-          name: 'Lê Nhật Trường',
+          name: 'LÊ NHẬT TRƯỜNG',
           phone: phoneTrim || '0907767304',
           password: u.password || '111222',
           role: 'admin',
@@ -477,7 +477,7 @@ export const sanitizeUserList = (users: User[]): User[] => {
           ...supremeAdminMerged,
           ...u,
           id: supremeAdminMerged.id, // Preserve the standard ID
-          name: 'Lê Nhật Trường',
+          name: 'LÊ NHẬT TRƯỜNG',
           phone: '0907767304',
           role: 'admin',
           status: 'approved',
@@ -507,7 +507,7 @@ export const sanitizeUserList = (users: User[]): User[] => {
     if (!nameTrim || !phoneTrim) return;
 
     // Skip any administrator matching Name, Phone or ID of supreme admin (handled in step 1)
-    const isLNT = nameTrim === 'Lê Nhật Trường' || phoneTrim === '0907767304' || u.id === 'admin_lenhattruong';
+    const isLNT = nameTrim.toUpperCase() === 'LÊ NHẬT TRƯỜNG' || phoneTrim === '0907767304' || u.id === 'admin_lenhattruong';
     if (isLNT) return;
 
     const key = `${nameTrim.toLowerCase()}_${phoneTrim}`;
@@ -515,7 +515,7 @@ export const sanitizeUserList = (users: User[]): User[] => {
       seenUniqueKeys.add(key);
       cleaned.push({
         ...u,
-        name: nameTrim,
+        name: nameTrim.toUpperCase(), // Normalize name capitalization consistently
         phone: phoneTrim,
         status: u.status || 'PENDING'
       });
@@ -539,13 +539,13 @@ export const databaseService = {
       throw new Error('Ứng dụng chưa kết nối Cloud Firestore! Vui lòng cập nhật API Key hoặc kiểm tra file firebase-applet-config.json trong AI Studio.');
     }
 
-    const nameTrim = userData.name.trim();
+    const nameTrim = userData.name.trim().toUpperCase();
     const phoneTrim = userData.phone.trim();
     if (!nameTrim || !phoneTrim) {
       throw new Error('Họ tên và số điện thoại không được để trống!');
     }
 
-    const isLNT = nameTrim === 'Lê Nhật Trường';
+    const isLNT = nameTrim === 'LÊ NHẬT TRƯỜNG' || phoneTrim === '0907767304';
     const role = isLNT ? 'admin' : 'employee';
     const status = isLNT ? 'approved' : 'PENDING';
 
@@ -701,6 +701,21 @@ export const databaseService = {
       return;
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `user_profiles/${userId}`);
+    }
+  },
+
+  async saveUser(userId: string, data: User): Promise<void> {
+    await initializeDatabase();
+    if (!isFirebaseConfigured || !db) {
+      throw new Error('Ứng dụng chưa kết nối Cloud Firestore! Vui lòng cập nhật API Key hoặc kiểm tra file firebase-applet-config.json trong AI Studio.');
+    }
+
+    try {
+      await setDoc(doc(db, 'user_profiles', userId), data, { merge: true });
+      incrementQuota('writes', 1);
+      return;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, `user_profiles/${userId}`);
     }
   },
 
@@ -875,6 +890,134 @@ export const databaseService = {
       }
     }
     localStorage.setItem('3t_slogan', slogan);
+  },
+
+  async getMaintenanceMode(): Promise<{ isMaintenance: boolean; message: string }> {
+    await initializeDatabase();
+    if (isFirebaseConfigured && db) {
+      try {
+        const querySnapshot = await getDocs(collection(db, 'config'));
+        incrementQuota('reads', querySnapshot.size);
+        let configObj: any = null;
+        querySnapshot.forEach((doc) => {
+          if (doc.id === 'maintenance') {
+            configObj = doc.data();
+          }
+        });
+        if (configObj) {
+          return {
+            isMaintenance: !!configObj.isMaintenance,
+            message: configObj.message || 'Hệ thống đang tạm khóa để bảo trì phần cứng và nâng cấp hiệu năng. Vui lòng quay lại sau ít phút!'
+          };
+        }
+      } catch (err: any) {
+        console.warn('Error reading maintenance config from Firestore:', err);
+        const errMsg = String(err);
+        if (errMsg.includes('RESOURCE_EXHAUSTED') || errMsg.includes('quota') || errMsg.includes('limit') || errMsg.includes('exhausted')) {
+          return {
+            isMaintenance: true,
+            message: 'Hệ thống tạm thời đạt giới hạn lưu lượng (Firebase Quota Limit). Đang bảo trì tự động, xin lỗi vì sự bất tiện này!'
+          };
+        }
+      }
+    }
+    
+    const localVal = localStorage.getItem('3t_maintenance');
+    if (localVal) {
+      try {
+        const parsed = JSON.parse(localVal);
+        return {
+          isMaintenance: !!parsed.isMaintenance,
+          message: parsed.message || 'Hệ thống đang tạm khóa để bảo trì phần cứng và nâng cấp hiệu năng. Vui lòng quay lại sau ít phút!'
+        };
+      } catch {}
+    }
+    return { isMaintenance: false, message: '' };
+  },
+
+  async saveMaintenanceMode(isMaintenance: boolean, message: string): Promise<void> {
+    await initializeDatabase();
+    if (isFirebaseConfigured && db) {
+      try {
+        await setDoc(doc(db, 'config', 'maintenance'), { isMaintenance, message });
+        incrementQuota('writes', 1);
+      } catch (err) {
+        console.warn('Error writing maintenance config to Firestore:', err);
+      }
+    }
+    localStorage.setItem('3t_maintenance', JSON.stringify({ isMaintenance, message }));
+  },
+
+  subscribeMaintenanceMode(onUpdate: (data: { isMaintenance: boolean; message: string }) => void): () => void {
+    let unsubscribedRef = { current: false };
+    let realUnsubscribe: (() => void) | null = null;
+    let localInterval: any = null;
+
+    // First do a local check / local storage check immediately so ui is not empty:
+    const checkLocal = () => {
+      const localVal = localStorage.getItem('3t_maintenance');
+      if (localVal) {
+        try {
+          const parsed = JSON.parse(localVal);
+          onUpdate({
+            isMaintenance: !!parsed.isMaintenance,
+            message: parsed.message || 'Hệ thống đang tạm khóa để bảo trì phần cứng và nâng cấp hiệu năng. Vui lòng quay lại sau ít phút!'
+          });
+        } catch {}
+      } else {
+        onUpdate({ isMaintenance: false, message: '' });
+      }
+    };
+    checkLocal();
+
+    // Start database hook after initialization completes
+    initializeDatabase().then(() => {
+      if (unsubscribedRef.current) return;
+
+      if (isFirebaseConfigured && db) {
+        try {
+          const q = doc(db, 'config', 'maintenance');
+          realUnsubscribe = onSnapshot(q, (snapshot) => {
+            if (unsubscribedRef.current) return;
+            incrementQuota('reads', 1);
+            if (snapshot.exists()) {
+              const data = snapshot.data();
+              onUpdate({
+                isMaintenance: !!data.isMaintenance,
+                message: data.message || 'Hệ thống đang tạm khóa để bảo trì phần cứng và nâng cấp hiệu năng. Vui lòng quay lại sau ít phút!'
+              });
+            } else {
+              onUpdate({ isMaintenance: false, message: '' });
+            }
+          }, (error) => {
+            const errMsg = String(error);
+            if (errMsg.includes('RESOURCE_EXHAUSTED') || errMsg.includes('quota') || errMsg.includes('limit') || errMsg.includes('exhausted')) {
+              onUpdate({
+                isMaintenance: true,
+                message: 'Hệ thống tạm thời đạt giới hạn lưu lượng (Firebase Quota Limit). Đang bảo trì tự động, xin lỗi vì sự bất tiện này!'
+              });
+            } else {
+              console.warn("Maintenance snapshot listen error:", error);
+            }
+          });
+        } catch (e) {
+          console.warn("Error subscribing maintenance document:", e);
+        }
+      } else {
+        // Fallback to local interval polling if firebase is not configured
+        localInterval = setInterval(checkLocal, 5000);
+      }
+    });
+
+    return () => {
+      unsubscribedRef.current = true;
+      if (realUnsubscribe) {
+        realUnsubscribe();
+      }
+      if (localInterval) {
+        clearInterval(localInterval);
+      }
+    };
   },
 
   async getCompanyMappings(): Promise<CompanyMapping[]> {

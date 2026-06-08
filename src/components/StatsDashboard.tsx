@@ -43,9 +43,30 @@ export default function StatsDashboard({ users, results, onRefresh, onBackToHome
     ? Array.from(new Set(mappings.flatMap(co => co.branches.map(b => b.name.trim()))))
     : Array.from(BRANCHES);
 
+  // Helper to extract branch abbreviation
+  const getBranchAbbr = (branchName: string): string => {
+    if (!branchName) return '';
+    const match = branchName.match(/\(([^)]+)\)/);
+    if (match) {
+      return `(${match[1]})`;
+    }
+    const shortName = branchName
+      .replace(/Chi nhánh/gi, '')
+      .replace(/Văn phòng/gi, '')
+      .replace(/Văn Phòng/gi, '')
+      .replace(/Nhà máy/gi, '')
+      .trim();
+    return `(${shortName})`;
+  };
+
+  const getFullDeptName = (deptName: string, branchName: string): string => {
+    const abbr = getBranchAbbr(branchName);
+    return abbr ? `${deptName} ${abbr}` : deptName;
+  };
+
   // Extract unique departments from mappings dynamically, fallback to static if empty
-  const activeDepartmentsList = mappings.length > 0
-    ? Array.from(new Set(mappings.flatMap(co => co.branches.flatMap(b => b.departments.map(d => d.name.trim())))))
+  const activeDepartmentsList: string[] = mappings.length > 0
+    ? Array.from(new Set(mappings.flatMap(co => co.branches.flatMap(b => b.departments.map(d => getFullDeptName(d.name.trim(), b.name.trim()))))))
     : Array.from(DEPARTMENTS);
 
   // States for active quota optimization and cleanup
@@ -196,7 +217,7 @@ export default function StatsDashboard({ users, results, onRefresh, onBackToHome
         const matchedUser = users.find(u => u.id === res.userId || u.name === res.userName);
         grouped[key] = {
           userId: res.userId,
-          userName: res.userName || matchedUser?.name || 'Thành viên ẩn danh',
+          userName: (res.userName || matchedUser?.name || 'Thành viên ẩn danh').toUpperCase(),
           phone: matchedUser?.phone || 'Lưu trữ cũ',
           employeeId: matchedUser?.employeeId || 'Không rõ',
           department: res.department || matchedUser?.department || 'Hội sở',
@@ -237,11 +258,17 @@ export default function StatsDashboard({ users, results, onRefresh, onBackToHome
   }).sort((a, b) => b.count - a.count);
 
   // 3. Department Visitor Statistics
-  const departmentStats = activeDepartmentsList.map(deptName => {
-    const count = activeUsers.filter(u => u.department === deptName).length;
+  const departmentStats = activeDepartmentsList.map(fullDeptName => {
+    const count = activeUsers.filter(u => {
+      if (mappings.length > 0) {
+        return getFullDeptName(u.department || '', u.branch || '') === fullDeptName;
+      } else {
+        return (u.department || '') === fullDeptName;
+      }
+    }).length;
     const percentage = totalActiveUsers > 0 ? Math.round((count / totalActiveUsers) * 100) : 0;
-    return { name: deptName, count, percentage };
-  }).sort((a, b) => b.count - a.count);
+    return { name: fullDeptName, count, percentage };
+  }).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
 
   // 4. Rankings Filter Helpers
   const getRankings = () => {
@@ -277,7 +304,7 @@ export default function StatsDashboard({ users, results, onRefresh, onBackToHome
         const isLNT = uid === 'admin_lenhattruong' || (res.userName && res.userName.trim() === 'Lê Nhật Trường');
         if (!counts[uid]) {
           counts[uid] = {
-            name: res.userName || 'Thành viên ẩn danh',
+            name: (res.userName || 'Thành viên ẩn danh').toUpperCase(),
             dept: isLNT ? 'Phòng Quản Lý Chất Lượng (QLCL)' : (res.department || 'Bộ phận khác'),
             branch: res.branch || 'Hội sở',
             attempts: 0,
@@ -320,7 +347,7 @@ export default function StatsDashboard({ users, results, onRefresh, onBackToHome
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-green-600 hover:bg-green-700 rounded-md shadow-xs transition-all cursor-pointer active:scale-95"
             >
               <Home className="h-3.5 w-3.5" />
-              <span>VỀ TRANG CHỦ 3T (ĐIỆN THOẠI)</span>
+              <span>MOBILE</span>
             </button>
           )}
           <button 

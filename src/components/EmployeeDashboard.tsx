@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { databaseService } from '../firebase';
-import { User, Question, QuizResult } from '../types';
+import { User, Question, QuizResult, CompanyMapping } from '../types';
 import { formatDate, formatTimeInSeconds, cleanOptionText } from '../utils/format';
-import { BookOpen, Trophy, Award, BarChart3, ChevronRight, CheckCircle2, XCircle, ArrowRight, RotateCcw, HelpCircle, GraduationCap, AlertCircle, Users, TrendingUp, Building2, LogOut, Home, Maximize2, Minimize2, UserCheck, ImagePlus, Lock, Sparkles, X, Plus, Smartphone, Share, ArrowUp } from 'lucide-react';
+import { BookOpen, Trophy, Award, BarChart3, ChevronRight, CheckCircle2, XCircle, ArrowRight, RotateCcw, HelpCircle, GraduationCap, AlertCircle, Users, TrendingUp, Building2, LogOut, Home, Maximize2, Minimize2, UserCheck, ImagePlus, Lock, Sparkles, X, Plus, Smartphone, Share, ArrowUp, ArrowLeft, Pencil, Trash2, Building, Landmark, Briefcase, Search, Database, RefreshCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts';
+import StatsDashboard from './StatsDashboard';
 
 interface EmployeeDashboardProps {
   user: User;
@@ -26,6 +27,7 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
       try {
         const unsubscribe = databaseService.subscribeUsers((allUsers) => {
           if (user.role === 'admin') {
+            setDeptUsers(allUsers);
             const pending = allUsers.filter(u => u.status?.toLowerCase() === 'pending');
             setPendingUsersCount(pending.length);
           } else {
@@ -169,6 +171,293 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
   };
 
   const [activeTab, setActiveTab] = useState<'practice' | 'quiz' | 'history' | 'ai_extract'>('quiz');
+  
+  // Admin mobile action states
+  const [adminMobileTab, setAdminMobileTab] = useState<'home' | 'users' | 'stats' | 'encoding'>('home');
+  const [adminMobileNotice, setAdminMobileNotice] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
+  
+  // States for user management panel
+  const [userStatusFilter, setUserStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+  const [userRoleFilter, setUserRoleFilter] = useState<'all' | 'employee' | 'approver' | 'admin'>('all');
+
+  // States for company mappings / encoding config
+  const [companyMappings, setCompanyMappings] = useState<CompanyMapping[]>([]);
+  const [selectedCoId, setSelectedCoId] = useState('');
+  const [selectedBrId, setSelectedBrId] = useState('');
+  const [newCompanyName, setNewCompanyName] = useState('');
+  const [newBranchName, setNewBranchName] = useState('');
+  const [newDepartmentName, setNewDepartmentName] = useState('');
+  
+  // Segmented sub-tab for encoding panel to easily navigate Company -> Branch -> Department on small space
+  const [encodingStep, setEncodingStep] = useState<'company' | 'branch' | 'department'>('company');
+  const [editingMapping, setEditingMapping] = useState<{
+    type: 'company' | 'branch' | 'department';
+    coId?: string;
+    brId?: string;
+    deptId?: string;
+    oldName: string;
+    newName: string;
+  } | null>(null);
+
+  // Auto clear banners after delay
+  useEffect(() => {
+    if (adminMobileNotice) {
+      const t = setTimeout(() => setAdminMobileNotice(null), 3000);
+      return () => clearTimeout(t);
+    }
+  }, [adminMobileNotice]);
+
+  // Load company mappings for stats & encoding
+  const loadMappings = async () => {
+    try {
+      const mappings = await databaseService.getCompanyMappings();
+      setCompanyMappings(mappings);
+    } catch (err) {
+      console.error("Lỗi khi tải danh mục mã hóa ở mobile:", err);
+    }
+  };
+
+  useEffect(() => {
+    if (isAdminReview && user.role === 'admin') {
+      loadMappings();
+    }
+  }, [isAdminReview]);
+
+  const handleMobileAddCompany = async () => {
+    if (!newCompanyName.trim()) return;
+    const newCo: CompanyMapping = {
+      id: 'co_' + Math.random().toString(36).substring(2, 9),
+      name: newCompanyName.trim(),
+      branches: []
+    };
+    const updated = [...companyMappings, newCo];
+    try {
+      await databaseService.saveCompanyMappings(updated);
+      setCompanyMappings(updated);
+      setNewCompanyName('');
+      setSelectedCoId(newCo.id);
+      setAdminMobileNotice({ type: 'success', msg: `Đã thêm Công Ty "${newCo.name}"` });
+    } catch (err) {
+      setAdminMobileNotice({ type: 'error', msg: 'Có lỗi xảy ra khi thêm Công Ty.' });
+    }
+  };
+
+  const handleMobileAddBranch = async () => {
+    if (!newBranchName.trim() || !selectedCoId) return;
+    const updated = companyMappings.map(co => {
+      if (co.id === selectedCoId) {
+        return {
+          ...co,
+          branches: [
+            ...co.branches,
+            {
+              id: 'br_' + Math.random().toString(36).substring(2, 9),
+              name: newBranchName.trim(),
+              departments: []
+            }
+          ]
+        };
+      }
+      return co;
+    });
+    try {
+      await databaseService.saveCompanyMappings(updated);
+      setCompanyMappings(updated);
+      setNewBranchName('');
+      setAdminMobileNotice({ type: 'success', msg: `Đã thêm Chi nhánh mới` });
+    } catch (err) {
+      setAdminMobileNotice({ type: 'error', msg: 'Lỗi xảy ra khi thêm chi nhánh.' });
+    }
+  };
+
+  const handleMobileAddDepartment = async () => {
+    if (!newDepartmentName.trim() || !selectedCoId || !selectedBrId) return;
+    const updated = companyMappings.map(co => {
+      if (co.id === selectedCoId) {
+        return {
+          ...co,
+          branches: co.branches.map(br => {
+            if (br.id === selectedBrId) {
+              return {
+                ...br,
+                departments: [
+                  ...br.departments,
+                  {
+                    id: 'dept_' + Math.random().toString(36).substring(2, 9),
+                    name: newDepartmentName.trim()
+                  }
+                ]
+              };
+            }
+            return br;
+          })
+        };
+      }
+      return co;
+    });
+    try {
+      await databaseService.saveCompanyMappings(updated);
+      setCompanyMappings(updated);
+      setNewDepartmentName('');
+      setAdminMobileNotice({ type: 'success', msg: `Đã thêm Bộ phận mới` });
+    } catch (err) {
+      setAdminMobileNotice({ type: 'error', msg: 'Lỗi xảy ra khi thêm bộ phận.' });
+    }
+  };
+
+  const handleMobileDeleteCompany = async (coId: string) => {
+    const co = companyMappings.find(c => c.id === coId);
+    if (!co) return;
+    if (!window.confirm(`Bạn muốn xóa Công ty "${co.name}" và toàn bộ Chi nhánh, Bộ phận trực thuộc?`)) return;
+    const updated = companyMappings.filter(c => c.id !== coId);
+    try {
+      await databaseService.saveCompanyMappings(updated);
+      setCompanyMappings(updated);
+      if (selectedCoId === coId) {
+        setSelectedCoId('');
+        setSelectedBrId('');
+      }
+      setAdminMobileNotice({ type: 'success', msg: `Đã xóa Công ty "${co.name}".` });
+    } catch (err) {
+      setAdminMobileNotice({ type: 'error', msg: 'Lỗi xảy ra khi xóa.' });
+    }
+  };
+
+  const handleMobileDeleteBranch = async (coId: string, brId: string) => {
+    const co = companyMappings.find(c => c.id === coId);
+    const br = co?.branches.find(b => b.id === brId);
+    if (!co || !br) return;
+    if (!window.confirm(`Bạn muốn xóa Chi nhánh "${br.name}"?`)) return;
+    const updated = companyMappings.map(c => {
+      if (c.id === coId) {
+        return {
+          ...c,
+          branches: c.branches.filter(b => b.id !== brId)
+        };
+      }
+      return c;
+    });
+    try {
+      await databaseService.saveCompanyMappings(updated);
+      setCompanyMappings(updated);
+      if (selectedBrId === brId) {
+        setSelectedBrId('');
+      }
+      setAdminMobileNotice({ type: 'success', msg: `Đã xóa Chi nhánh "${br.name}".` });
+    } catch (err) {
+      setAdminMobileNotice({ type: 'error', msg: 'Lỗi xảy ra khi xóa.' });
+    }
+  };
+
+  const handleMobileDeleteDepartment = async (coId: string, brId: string, deptId: string) => {
+    const co = companyMappings.find(c => c.id === coId);
+    const br = co?.branches.find(b => b.id === brId);
+    const dept = br?.departments.find(d => d.id === deptId);
+    if (!co || !br || !dept) return;
+    if (!window.confirm(`Bạn muốn xóa Bộ phận "${dept.name}"?`)) return;
+    const updated = companyMappings.map(c => {
+      if (c.id === coId) {
+        return {
+          ...c,
+          branches: c.branches.map(b => {
+            if (b.id === brId) {
+              return {
+                ...b,
+                departments: b.departments.filter(d => d.id !== deptId)
+              };
+            }
+            return b;
+          })
+        };
+      }
+      return c;
+    });
+    try {
+      await databaseService.saveCompanyMappings(updated);
+      setCompanyMappings(updated);
+      setAdminMobileNotice({ type: 'success', msg: `Đã xóa Bộ phận "${dept.name}".` });
+    } catch (err) {
+      setAdminMobileNotice({ type: 'error', msg: 'Lỗi xảy ra khi xóa.' });
+    }
+  };
+
+  const handleMobileEditMappingDirectly = async (
+    type: 'company' | 'branch' | 'department',
+    coId: string | undefined,
+    brId: string | undefined,
+    deptId: string | undefined,
+    oldName: string,
+    newName: string
+  ) => {
+    const trimmedNewName = newName.trim();
+    if (!trimmedNewName || trimmedNewName === oldName) return;
+
+    try {
+      const updated = companyMappings.map(co => {
+        if (type === 'company' && co.id === coId) {
+          return { ...co, name: trimmedNewName };
+        }
+        if (co.id === coId) {
+          return {
+            ...co,
+            branches: co.branches.map(br => {
+              if (type === 'branch' && br.id === brId) {
+                return { ...br, name: trimmedNewName };
+              }
+              if (br.id === brId) {
+                return {
+                  ...br,
+                  departments: br.departments.map(dept => {
+                    if (type === 'department' && dept.id === deptId) {
+                      return { ...dept, name: trimmedNewName };
+                    }
+                    return dept;
+                  })
+                };
+              }
+              return br;
+            })
+          };
+        }
+        return co;
+      });
+
+      await databaseService.saveCompanyMappings(updated);
+      setCompanyMappings(updated);
+
+      const currentCo = companyMappings.find(c => c.id === coId);
+      const currentBr = currentCo?.branches.find(b => b.id === brId);
+      const extra = {
+        companyName: currentCo?.name || '',
+        branchName: currentBr?.name || ''
+      };
+
+      await databaseService.syncMappingNames(type, oldName, trimmedNewName, extra);
+      setAdminMobileNotice({ type: 'success', msg: `Cập nhật thành công từ "${oldName}" thành "${trimmedNewName}"` });
+    } catch (err) {
+      setAdminMobileNotice({ type: 'error', msg: 'Lỗi xảy ra khi sửa đổi danh mục.' });
+    }
+  };
+
+  const handleMobileDeleteUser = async (userId: string) => {
+    if (!window.confirm("Bạn có chắc chắn muốn xóa tài khoản CBNV này?")) return;
+    try {
+      await databaseService.deleteUser(userId);
+      setAdminMobileNotice({ type: 'success', msg: 'Đã xóa tài khoản thành công.' });
+    } catch (err) {
+      setAdminMobileNotice({ type: 'error', msg: 'Lỗi khi xóa tài khoản.' });
+    }
+  };
+
+  const handleMobileToggleRole = async (userId: string, currentRole: 'employee' | 'approver' | 'admin') => {
+    const newRole = currentRole === 'employee' ? 'approver' : 'employee';
+    try {
+      await databaseService.updateUser(userId, { role: newRole });
+      setAdminMobileNotice({ type: 'success', msg: 'Đã cập nhật vai trò.' });
+    } catch (err) {
+      setAdminMobileNotice({ type: 'error', msg: 'Lỗi khi cập nhật vai trò.' });
+    }
+  };
   const [questions, setQuestions] = useState<Question[]>([]);
   const [results, setResults] = useState<QuizResult[]>([]);
   const [allResults, setAllResults] = useState<QuizResult[]>([]);
@@ -239,6 +528,541 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
     } catch (err) {
       console.error("Lỗi khi đồng bộ câu hỏi mới:", err);
     }
+  };
+
+  const refreshData = async () => {
+    try {
+      const qs = await databaseService.getQuestions();
+      setQuestions(qs);
+      
+      const allRes = await databaseService.getQuizResults();
+      setAllResults(allRes);
+
+      await loadMappings();
+      setAdminMobileNotice({ type: 'success', msg: 'Đồng bộ dữ liệu thành công!' });
+    } catch (err) {
+      console.error("Lỗi khi đồng bộ dữ liệu quản trị viên (mobile):", err);
+    }
+  };
+
+  const renderMobileUsersPanel = () => {
+    const filteredUsers = deptUsers.filter((u) => {
+      const s = approvalSearchTerm.toLowerCase();
+      const matchesSearch = 
+        u.name?.toLowerCase().includes(s) || 
+        u.phone?.includes(s) || 
+        u.employeeId?.toLowerCase().includes(s) ||
+        u.department?.toLowerCase().includes(s) ||
+        u.branch?.toLowerCase().includes(s);
+
+      const matchesStatus = 
+        userStatusFilter === 'all' || 
+        u.status?.toLowerCase() === userStatusFilter.toLowerCase();
+
+      const matchesRole =
+        userRoleFilter === 'all' ||
+        u.role?.toLowerCase() === userRoleFilter.toLowerCase();
+
+      return matchesSearch && matchesStatus && matchesRole;
+    });
+
+    return (
+      <div className="flex flex-col flex-1 h-full font-sans pb-4">
+        {/* Header */}
+        <div className="flex items-center justify-between py-2 border-b border-gray-200 mb-3 sticky top-0 bg-white z-10 shrink-0">
+          <button 
+            onClick={() => setAdminMobileTab('home')}
+            className="flex items-center gap-1 text-xs font-bold text-gray-500 hover:text-gray-700 p-1 rounded-lg hover:bg-gray-100"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span>Sảnh chính</span>
+          </button>
+          <span className="text-[13px] font-extrabold text-[#0B3A60] uppercase tracking-wide">
+            PHÊ DUYỆT & PHÂN QUYỀN
+          </span>
+          <div className="w-6" />
+        </div>
+
+        {/* Search */}
+        <div className="relative mb-3 shrink-0">
+          <input
+            type="text"
+            placeholder="Tìm theo tên, SĐT, mã nhân viên..."
+            value={approvalSearchTerm}
+            onChange={(e) => setApprovalSearchTerm(e.target.value)}
+            className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg outline-none focus:border-[#1971C2] shadow-3xs"
+          />
+          <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-gray-400" />
+          {approvalSearchTerm && (
+            <button 
+              onClick={() => setApprovalSearchTerm('')}
+              className="absolute right-2.5 top-2 h-5 w-5 bg-gray-105 rounded-full flex items-center justify-center text-gray-500 hover:bg-gray-200 text-[10px]"
+            >
+              ×
+            </button>
+          )}
+        </div>
+
+        {/* Segmented Filter bar */}
+        <div className="flex flex-wrap gap-1 mb-3 shrink-0">
+          {(['all', 'pending', 'approved', 'rejected'] as const).map((st) => (
+            <button
+              key={st}
+              onClick={() => setUserStatusFilter(st)}
+              className={`px-2 py-1 text-[10px] font-bold rounded-md border transition-all ${
+                userStatusFilter === st
+                  ? 'bg-blue-600 border-blue-600 text-white shadow-3xs'
+                  : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              {st === 'all' && 'TẤT CẢ'}
+              {st === 'pending' && `CHỜ DUYỆT (${deptUsers.filter(u => u.status === 'pending').length})`}
+              {st === 'approved' && 'ĐÃ DUYỆT'}
+              {st === 'rejected' && 'ĐÃ CHẶN'}
+            </button>
+          ))}
+        </div>
+
+        {/* Status notification */}
+        {adminMobileNotice && (
+          <div className={`p-2.5 mb-3 rounded-lg text-xs font-bold border transition-all duration-300 ${
+            adminMobileNotice.type === 'success' 
+              ? 'bg-green-50 border-green-200 text-green-800' 
+              : 'bg-red-50 border-red-200 text-red-800'
+          }`}>
+            {adminMobileNotice.msg}
+          </div>
+        )}
+
+        {/* User list */}
+        <div className="space-y-2.5 pr-0.5 pb-24">
+          {filteredUsers.map((item) => {
+            const stats = getEmployeeStats(item.id);
+            return (
+              <div 
+                key={item.id} 
+                className="bg-white border border-gray-155 rounded-xl p-3 shadow-3xs space-y-2 flex flex-col hover:border-gray-350 transition-all"
+              >
+                {/* Header card row */}
+                <div className="flex items-start justify-between gap-1">
+                  <div>
+                    <h4 className="text-xs font-extrabold text-[#0B3A60] flex items-center gap-1.5">
+                      {item.name}
+                      {item.role === 'admin' ? (
+                        <span className="bg-purple-105 text-purple-800 text-[8px] font-bold px-1.5 py-0.5 rounded-full uppercase">Admin</span>
+                      ) : item.role === 'approver' ? (
+                        <span className="bg-orange-105 text-orange-800 text-[8px] font-bold px-1.5 py-0.5 rounded-full uppercase">Duyệt viên</span>
+                      ) : null}
+                    </h4>
+                    <p className="text-[10px] text-gray-500 font-bold mt-0.5">{item.phone} {item.employeeId ? `| MNV: ${item.employeeId}` : ''}</p>
+                  </div>
+
+                  {/* Status label badge */}
+                  <div>
+                    {item.status === 'approved' ? (
+                      <span className="bg-green-50 text-green-700 text-[8.5px] font-extrabold px-2 py-0.5 rounded-full border border-green-100 uppercase">Hoạt động</span>
+                    ) : item.status === 'rejected' ? (
+                      <span className="bg-red-50 text-red-700 text-[8.5px] font-extrabold px-2 py-0.5 rounded-full border border-red-100 uppercase">Bị chặn</span>
+                    ) : (
+                      <span className="bg-amber-50 text-amber-700 text-[8.5px] font-extrabold px-2 py-0.5 rounded-full border border-amber-100 uppercase animate-pulse">Chờ duyệt</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Structure / Org specs */}
+                <div className="text-[9.5px] text-slate-500 bg-slate-50 border border-slate-100 p-2 rounded-lg leading-relaxed">
+                  <div className="flex items-center gap-1">
+                    <Building className="h-3 w-3 text-slate-400 shrink-0" />
+                    <span className="font-bold truncate">{item.company || 'TÂN PHÚ VIỆT NAM'}</span>
+                  </div>
+                  <div className="flex items-center gap-1 mt-0.5 font-medium">
+                    <Landmark className="h-3 w-3 text-slate-400 shrink-0" />
+                    <span className="truncate">{item.branch || 'Sở Tại'}</span> &rarr; <span className="font-semibold truncate">{item.department || 'Đơn vị'}</span>
+                  </div>
+                </div>
+
+                {/* Performance specs of the quiz user */}
+                <div className="flex items-center justify-between text-[9px] text-gray-450 border-t border-gray-100 pt-2">
+                  <span>Số lượt làm: <strong className="text-gray-750 font-bold">{stats.quizzesTaken} lượt</strong></span>
+                  <span>Điểm trung bình: <strong className="text-gray-755 font-bold">{stats.average}/30đ</strong></span>
+                  <span className={`px-1.5 py-0.5 rounded-md text-[8.5px] uppercase ${stats.style}`}>
+                    {stats.evaluation}
+                  </span>
+                </div>
+
+                {/* Actions row footer */}
+                <div className="flex items-center justify-between gap-1 border-t border-slate-100 pt-2 mt-1">
+                  <div className="flex items-center gap-1.5 flex-1Wrap w-full">
+                    {item.status !== 'approved' && (
+                      <button
+                        onClick={() => handleApproveUser(item.id)}
+                        className="py-1 px-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-[9.5px] font-extrabold shadow-3xs active:scale-95 transition-all outline-none cursor-pointer"
+                      >
+                        DUYỆT ĐĂNG KÝ
+                      </button>
+                    )}
+                    {item.status !== 'rejected' && (
+                      <button
+                        onClick={() => handleRejectUser(item.id)}
+                        className="py-1 px-2.5 bg-red-100 hover:bg-red-200 border border-red-200 text-red-700 rounded-lg text-[9.5px] font-extrabold active:scale-95 transition-all outline-none cursor-pointer"
+                      >
+                        CHẶN/TỪ CHỐI
+                      </button>
+                    )}
+                    
+                    {/* Promoting Role buttons */}
+                    {item.role !== 'admin' && (
+                      <button
+                        onClick={() => handleMobileToggleRole(item.id, item.role || 'employee')}
+                        className={`py-1 px-2 border rounded-lg text-[9.5px] font-semibold active:scale-95 transition-all outline-none cursor-pointer ${
+                          item.role === 'approver'
+                            ? 'bg-orange-50 border-orange-200 text-orange-700'
+                            : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                        }`}
+                        title={item.role === 'approver' ? "Hạ cấp xuống Nhân viên" : "Thăng cấp lên Duyệt viên"}
+                      >
+                        {item.role === 'approver' ? 'HẠ CẤP THOÁT KHỎI DUYỆT VIÊN' : 'SÉT LÀM DUYỆT VIÊN'}
+                      </button>
+                    )}
+                  </div>
+
+                  {item.role !== 'admin' && (
+                    <button
+                      onClick={() => handleMobileDeleteUser(item.id)}
+                      className="p-1 px-1.5 bg-red-50 hover:bg-red-100 text-red-650 rounded-lg border border-red-200/50 hover:border-red-300 transition-all active:scale-95 cursor-pointer ml-1 inline-flex items-center justify-center"
+                      title="Xóa tài khoản"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+          {filteredUsers.length === 0 && (
+            <p className="text-center text-xs text-gray-400 italic py-8">Không tìm thấy tài khoản CBNV nào phù hợp.</p>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const renderMobileStatsPanel = () => {
+    return (
+      <div className="flex flex-col flex-1 h-full pb-4 font-sans">
+        {/* Header bar */}
+        <div className="flex items-center justify-between py-2 border-b border-gray-200 mb-2 sticky top-0 bg-white z-10 shrink-0">
+          <button 
+            onClick={() => setAdminMobileTab('home')}
+            className="flex items-center gap-1 text-xs font-bold text-gray-500 hover:text-gray-700 p-1 rounded-lg hover:bg-gray-100"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span>Sảnh chính</span>
+          </button>
+          <span className="text-[13px] font-extrabold text-[#0B3A60] uppercase tracking-wide">
+            THỐNG KÊ HOẠT ĐỘNG
+          </span>
+          <button 
+            onClick={refreshData}
+            className="p-1 border border-gray-200 hover:bg-gray-50 rounded-lg text-gray-500 transition-all cursor-pointer"
+            title="Đồng bộ"
+          >
+            <RefreshCcw className="h-3.5 w-3.5" />
+          </button>
+        </div>
+
+        {/* Stats content area */}
+        <div className="-mx-4 px-4 pb-24 text-left">
+          <StatsDashboard 
+            users={deptUsers} 
+            results={allResults} 
+            onRefresh={refreshData} 
+            onBackToHome={() => setAdminMobileTab('home')}
+            companyMappings={companyMappings}
+          />
+        </div>
+      </div>
+    );
+  };
+
+  const renderMobileEncodingPanel = () => {
+    const activeCo = companyMappings.find(c => c.id === selectedCoId);
+    const activeBr = activeCo?.branches.find(b => b.id === selectedBrId);
+
+    return (
+      <div className="flex flex-col flex-1 h-full font-sans pb-4">
+        {/* Header */}
+        <div className="flex items-center justify-between py-2 border-b border-gray-200 mb-3 sticky top-0 bg-white z-10 shrink-0">
+          <button 
+            onClick={() => setAdminMobileTab('home')}
+            className="flex items-center gap-1 text-xs font-bold text-gray-500 hover:text-gray-700 p-1 rounded-lg hover:bg-gray-100"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span>Sảnh chính</span>
+          </button>
+          <span className="text-[13px] font-extrabold text-[#0B3A60] uppercase tracking-wide">
+            MÃ HÓA DANH MỤC
+          </span>
+          <div className="w-6" />
+        </div>
+
+        {/* Step tab switcher */}
+        <div className="grid grid-cols-3 gap-1 bg-gray-100 p-1 rounded-xl mb-3 shrink-0">
+          {(['company', 'branch', 'department'] as const).map((step) => (
+            <button
+              key={step}
+              onClick={() => setEncodingStep(step)}
+              className={`py-1.5 rounded-lg text-[9.5px] font-extrabold uppercase transition-all tracking-tight ${
+                encodingStep === step
+                  ? 'bg-white text-blue-900 shadow-2xs border border-gray-200 font-extrabold'
+                  : 'text-gray-500 hover:text-gray-800'
+              }`}
+            >
+              {step === 'company' && '1. Công ty'}
+              {step === 'branch' && '2. Chi nhánh'}
+              {step === 'department' && '3. Bộ phận'}
+            </button>
+          ))}
+        </div>
+
+        {/* Notification Alert Banner */}
+        {adminMobileNotice && (
+          <div className={`p-2 mb-3 rounded-lg text-xs font-bold border transition-all duration-300 ${
+            adminMobileNotice.type === 'success' 
+              ? 'bg-green-50 border-green-200 text-green-800' 
+              : 'bg-red-50 border-red-200 text-red-800'
+          }`}>
+            {adminMobileNotice.msg}
+          </div>
+        )}
+
+        {/* Dynamic Panel content depending on Step */}
+
+        {/* 1. COMPANY STEP */}
+        {encodingStep === 'company' && (
+          <div className="flex-1 flex flex-col space-y-3">
+            <div className="flex gap-1.5 shrink-0">
+              <input
+                type="text"
+                placeholder="Thêm Công ty mới..."
+                value={newCompanyName}
+                onChange={(e) => setNewCompanyName(e.target.value)}
+                className="flex-1 border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-blue-600 shadow-3xs text-left"
+              />
+              <button
+                onClick={handleMobileAddCompany}
+                className="bg-blue-600 text-white rounded-lg px-3 py-1.5 text-xs font-bold flex items-center justify-center active:scale-95 transition-all cursor-pointer"
+              >
+                <Plus className="h-4 w-4 animate-none" />
+              </button>
+            </div>
+
+            <div className="text-[10px] uppercase tracking-wider text-gray-400 font-bold shrink-0 text-left">Danh sách Công ty:</div>
+            <div className="space-y-1.5 pr-1 pb-24">
+              {companyMappings.map((co) => (
+                <div
+                  key={co.id}
+                  onClick={() => {
+                    setSelectedCoId(co.id);
+                    if (co.branches.length > 0) {
+                      setSelectedBrId(co.branches[0].id);
+                    } else {
+                      setSelectedBrId('');
+                    }
+                  }}
+                  className={`p-3 rounded-xl border text-xs flex justify-between items-center cursor-pointer transition-all ${
+                    selectedCoId === co.id
+                      ? 'bg-blue-50/70 border-blue-300 text-blue-900 font-bold shadow-3xs font-sans'
+                      : 'bg-white border-gray-150 text-gray-700 hover:bg-gray-50 font-sans'
+                  }`}
+                >
+                  <span className="truncate pr-2">{co.name}</span>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const name = window.prompt("Nhập tên Công ty mới:", co.name);
+                        if (name && name.trim()) {
+                          handleMobileEditMappingDirectly('company', co.id, undefined, undefined, co.name, name);
+                        }
+                      }}
+                      className="text-blue-600 hover:bg-blue-50 p-1 rounded-lg cursor-pointer inline-flex items-center justify-center"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleMobileDeleteCompany(co.id);
+                      }}
+                      className="text-red-500 hover:bg-red-50 p-1 rounded-lg cursor-pointer inline-flex items-center justify-center"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {companyMappings.length === 0 && (
+                <p className="text-center text-xs text-gray-400 italic py-6">Chưa có công ty thành viên nào.</p>
+              )}
+            </div>
+            {selectedCoId && (
+              <div className="bg-slate-50 border border-slate-150 p-2.5 rounded-lg text-[9.5px] text-slate-500 shrink-0 text-left">
+                Đang chọn: <strong className="text-blue-900 font-extrabold">{activeCo?.name}</strong>. Bấm sang mục Chi nhánh/Bộ phận để cấu hình chi tiết!
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 2. BRANCH STEP */}
+        {encodingStep === 'branch' && (
+          <div className="flex-1 flex flex-col space-y-3">
+            {!selectedCoId ? (
+              <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-lg p-4 text-xs font-semibold text-center mt-4">
+                Vui lòng chọn một <strong>Công ty thành viên</strong> ở Tab "1. Công ty" trước.
+              </div>
+            ) : (
+              <>
+                <div className="text-[10px] text-gray-400 uppercase font-bold shrink-0 text-left">
+                  Công ty đang chọn: <span className="text-[#0B3A60] font-black">{activeCo?.name}</span>
+                </div>
+                
+                <div className="flex gap-1.5 shrink-0">
+                  <input
+                    type="text"
+                    placeholder="Thêm Chi nhánh mới..."
+                    value={newBranchName}
+                    onChange={(e) => setNewBranchName(e.target.value)}
+                    className="flex-1 border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-blue-600 shadow-3xs text-left"
+                  />
+                  <button
+                    onClick={handleMobileAddBranch}
+                    className="bg-blue-600 text-white rounded-lg px-3 py-1.5 text-xs font-bold flex items-center justify-center active:scale-95 transition-all cursor-pointer"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <div className="text-[10px] uppercase tracking-wider text-gray-400 font-bold shrink-0 text-left">Danh sách Chi nhánh:</div>
+                <div className="space-y-1.5 pr-1 pb-24">
+                  {activeCo?.branches.map((br) => (
+                    <div
+                      key={br.id}
+                      onClick={() => setSelectedBrId(br.id)}
+                      className={`p-3 rounded-xl border text-xs flex justify-between items-center cursor-pointer transition-all ${
+                        selectedBrId === br.id
+                          ? 'bg-blue-50/70 border-blue-300 text-blue-900 font-bold shadow-3xs'
+                          : 'bg-white border-gray-150 text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      <span className="truncate pr-2">{br.name}</span>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const name = window.prompt("Nhập tên Chi nhánh mới:", br.name);
+                            if (name && name.trim()) {
+                              handleMobileEditMappingDirectly('branch', selectedCoId, br.id, undefined, br.name, name);
+                            }
+                          }}
+                          className="text-blue-600 hover:bg-blue-50 p-1 rounded-lg cursor-pointer inline-flex items-center justify-center"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleMobileDeleteBranch(selectedCoId, br.id);
+                          }}
+                          className="text-red-500 hover:bg-red-50 p-1 rounded-lg cursor-pointer inline-flex items-center justify-center"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  {(activeCo?.branches || []).length === 0 && (
+                    <p className="text-center text-xs text-gray-400 italic py-6">Chưa có chi nhánh nào thuộc công ty này.</p>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* 3. DEPARTMENT STEP */}
+        {encodingStep === 'department' && (
+          <div className="flex-1 flex flex-col space-y-3">
+            {!selectedCoId || !selectedBrId ? (
+              <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-lg p-4 text-xs font-semibold text-center mt-4">
+                Vui lòng chọn <strong>Công ty</strong> và <strong>Chi nhánh</strong> trực thuộc ở Tab 1 & Tab 2 trước.
+              </div>
+            ) : (
+              <>
+                <div className="text-[10px] text-gray-400 uppercase font-bold shrink-0 space-y-0.5 text-left">
+                  <div>Cty: <span className="text-slate-700 truncate font-semibold">{activeCo?.name}</span></div>
+                  <div>Chi nhánh: <span className="text-blue-900 font-extrabold truncate">{activeBr?.name}</span></div>
+                </div>
+
+                <div className="flex gap-1.5 shrink-0">
+                  <input
+                    type="text"
+                    placeholder="Thêm Bộ phận mới..."
+                    value={newDepartmentName}
+                    onChange={(e) => setNewDepartmentName(e.target.value)}
+                    className="flex-1 border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-blue-600 shadow-3xs text-left"
+                  />
+                  <button
+                    onClick={handleMobileAddDepartment}
+                    className="bg-blue-600 text-white rounded-lg px-3 py-1.5 text-xs font-bold flex items-center justify-center active:scale-95 transition-all cursor-pointer animate-none"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <div className="text-[10px] uppercase tracking-wider text-gray-455 font-bold shrink-0 text-left">Danh sách Bộ phận:</div>
+                <div className="space-y-1.5 pr-1 pb-24">
+                  {activeBr?.departments.map((dept) => (
+                    <div
+                      key={dept.id}
+                      className="p-3 bg-white border border-gray-150 rounded-xl text-xs flex justify-between items-center transition-all"
+                    >
+                      <span className="truncate pr-2 font-sans">{dept.name}</span>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const name = window.prompt("Nhập tên Bộ phận mới:", dept.name);
+                            if (name && name.trim()) {
+                              handleMobileEditMappingDirectly('department', selectedCoId, selectedBrId, dept.id, dept.name, name);
+                            }
+                          }}
+                          className="text-blue-600 hover:bg-blue-50 p-1 rounded-lg cursor-pointer inline-flex items-center justify-center"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleMobileDeleteDepartment(selectedCoId, selectedBrId, dept.id);
+                          }}
+                          className="text-red-500 hover:bg-red-50 p-1 rounded-lg cursor-pointer inline-flex items-center justify-center"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  {(activeBr?.departments || []).length === 0 && (
+                    <p className="text-center text-xs text-gray-400 italic py-6">Chưa có bộ phận nào dưới chi nhánh này.</p>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    );
   };
 
   // Compression helper (Canvas-based Resizer & quality compressor to maintain quotas)
@@ -1488,8 +2312,15 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
               className="flex-1 flex flex-col h-full"
             >
               {!quizStarted ? (
-                // Landing Screen for Practice Exams
-                <div className="flex flex-col items-center justify-between text-center flex-1 h-full pt-1 pb-0.5 sm:pt-1.5 sm:pb-1 relative">
+                adminMobileTab !== 'home' ? (
+                  <div className="flex flex-col flex-1 min-h-0 w-full max-w-sm mx-auto px-0 pt-1">
+                    {adminMobileTab === 'users' && renderMobileUsersPanel()}
+                    {adminMobileTab === 'stats' && renderMobileStatsPanel()}
+                    {adminMobileTab === 'encoding' && renderMobileEncodingPanel()}
+                  </div>
+                ) : (
+                  // Landing Screen for Practice Exams
+                  <div className="flex flex-col items-center justify-between text-center flex-1 h-full pt-1 pb-0.5 sm:pt-1.5 sm:pb-1 relative">
                   {/* Centered Top & Mid content wrapper to keep them tight together */}
                   <div className="flex flex-col items-center justify-center text-center space-y-4.5 sm:space-y-5 flex-1 w-full shrink-0">
                     
@@ -1501,7 +2332,7 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                         </div>
                         <div className="grid grid-cols-4 gap-1 px-0.5 mb-2">
                           <button
-                            onClick={() => onBackToAdmin?.('users')}
+                            onClick={() => setAdminMobileTab('users')}
                             className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group"
                             title="Phê Duyệt & Phân Quyền"
                           >
@@ -1528,7 +2359,7 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                           </button>
 
                           <button
-                            onClick={() => onBackToAdmin?.('stats')}
+                            onClick={() => setAdminMobileTab('stats')}
                             className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group"
                             title="Trang Thống Kê"
                           >
@@ -1539,7 +2370,7 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                           </button>
 
                           <button
-                            onClick={() => onBackToAdmin?.('encoding')}
+                            onClick={() => setAdminMobileTab('encoding')}
                             className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group"
                             title="Trang Mã Hóa"
                           >
@@ -1749,7 +2580,8 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                     </button>
                   </div>
                 </div>
-              ) : (
+              )
+            ) : (
                 // Active Quiz Form
                 <div className="w-full flex-1 flex flex-col h-full max-w-sm mx-auto justify-between">
                   {showResultsReview && lastQuizResult ? (
@@ -2488,6 +3320,43 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                 }}
                 className="w-11 h-11 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full flex items-center justify-center shadow-lg hover:shadow-xl border border-white/10 transition-all cursor-pointer group shrink-0 animate-pulse-slow"
                 title="Quay về Trang chủ"
+              >
+                <Home className="h-5 w-5 group-hover:scale-110 transition-transform" />
+              </motion.button>
+            </div>
+          )}
+
+          {/* Floating Action Buttons for Admin Mobile Tabs (Phê Duyệt, Thống Kê, Mã Hóa) */}
+          {activeTab === 'quiz' && adminMobileTab !== 'home' && !quizStarted && (
+            <div className="absolute bottom-18 right-5 z-45 flex flex-col gap-2.5">
+              {/* Scroll to Top Button */}
+              <AnimatePresence>
+                {showScrollTop && (
+                  <motion.button
+                    initial={{ scale: 0, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0, opacity: 0 }}
+                    whileTap={{ scale: 0.9 }}
+                    onClick={scrollToTop}
+                    className="w-11 h-11 bg-[#0B3A60] hover:bg-[#1971C2] text-white rounded-full flex items-center justify-center shadow-lg hover:shadow-xl border border-white/20 transition-all cursor-pointer group shrink-0"
+                    title="Cuộn lên đầu trang"
+                  >
+                    <ArrowUp className="h-5.5 w-5.5 group-hover:-translate-y-0.5 transition-transform" />
+                  </motion.button>
+                )}
+              </AnimatePresence>
+
+              {/* Home Icon Button (Quay về Sảnh chính dạng Admin) */}
+              <motion.button
+                initial={{ scale: 0, opacity: 0, y: 10 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={() => {
+                  setAdminMobileTab('home');
+                  scrollToTop();
+                }}
+                className="w-11 h-11 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full flex items-center justify-center shadow-lg hover:shadow-xl border border-white/10 transition-all cursor-pointer group shrink-0"
+                title="Quay về Sảnh chính"
               >
                 <Home className="h-5 w-5 group-hover:scale-110 transition-transform" />
               </motion.button>
