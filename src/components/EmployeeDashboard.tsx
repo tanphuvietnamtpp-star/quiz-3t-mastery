@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { databaseService } from '../firebase';
-import { User, Question, QuizResult, CompanyMapping } from '../types';
+import { User, Question, QuizResult, CompanyMapping, MotivationalSloganBand } from '../types';
 import { formatDate, formatTimeInSeconds, cleanOptionText } from '../utils/format';
 import { BookOpen, Trophy, Award, BarChart3, ChevronRight, CheckCircle2, XCircle, ArrowRight, RotateCcw, HelpCircle, GraduationCap, AlertCircle, Users, TrendingUp, Building2, LogOut, Home, Maximize2, Minimize2, UserCheck, ImagePlus, Lock, Sparkles, X, Plus, Smartphone, Share, ArrowUp, ArrowLeft, Pencil, Trash2, Building, Landmark, Briefcase, Search, Database, RefreshCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -13,9 +13,21 @@ interface EmployeeDashboardProps {
   isAdminReview?: boolean;
   onBackToAdmin?: (tab?: 'users' | 'add_images' | 'stats' | 'encoding') => void;
   slogan?: string;
+  difficulty?: number;
+  onUpdateDifficulty?: (newLevel: number) => void;
+  motivationalSlogans?: MotivationalSloganBand[];
 }
 
-export default function EmployeeDashboard({ user, onLogout, isAdminReview = false, onBackToAdmin, slogan = '3T Hội Tụ - Tân Phú Vươn Xa' }: EmployeeDashboardProps) {
+export default function EmployeeDashboard({ 
+  user, 
+  onLogout, 
+  isAdminReview = false, 
+  onBackToAdmin, 
+  slogan = '3T Hội Tụ - Tân Phú Vươn Xa',
+  difficulty = 1,
+  onUpdateDifficulty,
+  motivationalSlogans = []
+}: EmployeeDashboardProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [pendingUsersCount, setPendingUsersCount] = useState(0);
   const [deptUsers, setDeptUsers] = useState<User[]>([]);
@@ -23,7 +35,7 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
   const [approvalSearchTerm, setApprovalSearchTerm] = useState('');
 
   useEffect(() => {
-    if ((isAdminReview && user.role === 'admin') || user.role === 'approver') {
+    if ((isAdminReview && user.role === 'admin') || user.role === 'approver' || user.canViewStats) {
       try {
         const unsubscribe = databaseService.subscribeUsers((allUsers) => {
           if (user.role === 'admin') {
@@ -31,8 +43,19 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
             const pending = allUsers.filter(u => u.status?.toLowerCase() === 'pending');
             setPendingUsersCount(pending.length);
           } else {
-            // Approver: Only users in the same branch & department
-            const filtered = allUsers.filter(u => u.branch === user.branch && u.department === user.department);
+            // Approver or authorized stats viewer: Check department to decide scope
+            const deptNorm = (user.department || '').trim().toLowerCase();
+            let filtered: User[] = [];
+            if (deptNorm === 'ban tổng giám đốc') {
+               // BTGĐ: Company-wide
+              filtered = allUsers;
+            } else if (deptNorm === 'ban giám đốc') {
+               // BGĐ: Branch-wide
+              filtered = allUsers.filter(u => u.branch === user.branch);
+            } else {
+               // Trưởng Bộ Phận: Department-wide
+              filtered = allUsers.filter(u => u.branch === user.branch && u.department === user.department);
+            }
             setDeptUsers(filtered);
             const pending = filtered.filter(u => u.status?.toLowerCase() === 'pending');
             setPendingUsersCount(pending.length);
@@ -44,6 +67,12 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
       }
     }
   }, [isAdminReview, user.role, user.branch, user.department]);
+
+  // Real-time online users calculation (active in last 240 seconds / 4 minutes)
+  const onlineUsersCount = deptUsers.filter((u) => {
+    if (!u.lastActive) return false;
+    return Math.abs(Date.now() - u.lastActive) <= 240000;
+  }).length;
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -462,6 +491,18 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
   const [results, setResults] = useState<QuizResult[]>([]);
   const [allResults, setAllResults] = useState<QuizResult[]>([]);
 
+  // Calculate stats for today's participants
+  const participantsTodayCount = useMemo(() => {
+    const todayStr = formatDate(new Date());
+    const todayResults = allResults.filter(r => r.date === todayStr);
+    return new Set(todayResults.map(r => r.userId || r.userName)).size;
+  }, [allResults]);
+
+  const attemptsTodayCount = useMemo(() => {
+    const todayStr = formatDate(new Date());
+    return allResults.filter(r => r.date === todayStr).length;
+  }, [allResults]);
+
   // AI Image extraction states (simulated inside smartphone viewport for admins)
   const [selectedImages, setSelectedImages] = useState<{ file: File; compressedBase64: string }[]>([]);
   const [aiLoading, setAiLoading] = useState(false);
@@ -499,10 +540,13 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
       ? Math.round(empQuizResults.reduce((acc, curr) => acc + curr.score, 0) / count)
       : 0;
     
-    let evaluationClass = 'ĐẠT 90%';
-    let style = 'bg-gray-100 text-gray-750 border border-gray-200';
+    let evaluationClass = 'CHƯA THI';
+    let style = 'bg-gray-150 text-gray-500 border border-gray-205 font-medium';
 
-    if (count >= 5 && avg >= 28) {
+    if (count === 0) {
+      evaluationClass = 'CHƯA THI';
+      style = 'bg-gray-100 text-gray-400 border border-gray-200';
+    } else if (count >= 5 && avg >= 28) {
       evaluationClass = 'ĐẠT 150%';
       style = 'bg-blue-50 text-blue-700 border border-blue-100 font-bold';
     } else if (count >= 3 && avg >= 25) {
@@ -511,6 +555,9 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
     } else if (count >= 1 && avg >= 20) {
       evaluationClass = 'ĐẠT 100%';
       style = 'bg-yellow-50 text-yellow-700 border border-yellow-105 font-bold';
+    } else {
+      evaluationClass = 'ĐẠT 90%';
+      style = 'bg-gray-100 text-gray-750 border border-gray-200';
     }
 
     return {
@@ -530,12 +577,12 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
     }
   };
 
-  const refreshData = async () => {
+  const refreshData = async (forceRefresh = false) => {
     try {
       const qs = await databaseService.getQuestions();
       setQuestions(qs);
       
-      const allRes = await databaseService.getQuizResults();
+      const allRes = await databaseService.getQuizResults(false, forceRefresh);
       setAllResults(allRes);
 
       await loadMappings();
@@ -616,7 +663,7 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
               }`}
             >
               {st === 'all' && 'TẤT CẢ'}
-              {st === 'pending' && `CHỜ DUYỆT (${deptUsers.filter(u => u.status === 'pending').length})`}
+              {st === 'pending' && `CHỜ DUYỆT (${deptUsers.filter(u => u.status?.toLowerCase() === 'pending').length})`}
               {st === 'approved' && 'ĐÃ DUYỆT'}
               {st === 'rejected' && 'ĐÃ CHẶN'}
             </button>
@@ -721,7 +768,7 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                         }`}
                         title={item.role === 'approver' ? "Hạ cấp xuống Nhân viên" : "Thăng cấp lên Duyệt viên"}
                       >
-                        {item.role === 'approver' ? 'HẠ CẤP THOÁT KHỎI DUYỆT VIÊN' : 'SÉT LÀM DUYỆT VIÊN'}
+                        {item.role === 'approver' ? 'HẠ CẤP THOÁT KHỎI DUYỆT VIÊN' : 'XÉT LÀM DUYỆT VIÊN'}
                       </button>
                     )}
                   </div>
@@ -775,10 +822,24 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
         <div className="-mx-4 px-4 pb-24 text-left">
           <StatsDashboard 
             users={deptUsers} 
-            results={allResults} 
-            onRefresh={refreshData} 
+            results={
+              user.role === 'admin' 
+                ? allResults 
+                : (() => {
+                    const deptNorm = (user.department || '').trim().toLowerCase();
+                    if (deptNorm === 'ban tổng giám đốc') {
+                      return allResults;
+                    } else if (deptNorm === 'ban giám đốc') {
+                      return allResults.filter(r => r.branch === user.branch);
+                    } else {
+                      return allResults.filter(r => r.branch === user.branch && r.department === user.department);
+                    }
+                  })()
+            } 
+            onRefresh={() => refreshData(true)} 
             onBackToHome={() => setAdminMobileTab('home')}
             companyMappings={companyMappings}
+            isAdmin={user.role === 'admin'}
           />
         </div>
       </div>
@@ -1225,13 +1286,41 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
     }
   };
   
+  const getMaxQuestionTimer = (level: number): number => {
+    if (level === 2) return 60;
+    if (level === 3) return 30;
+    return 90;
+  };
+
+  const getQuestionScore = (timeSpent: number, isCorrect: boolean, level: number): number => {
+    if (!isCorrect) return 0;
+    if (level === 3) {
+      if (timeSpent <= 10) return 10;
+      if (timeSpent <= 15) return 8;
+      if (timeSpent <= 20) return 6;
+      return 5;
+    } else if (level === 2) {
+      if (timeSpent <= 20) return 10;
+      if (timeSpent <= 30) return 8;
+      if (timeSpent <= 40) return 6;
+      return 5;
+    } else {
+      // Level 1: Default
+      if (timeSpent <= 30) return 10;
+      if (timeSpent <= 40) return 8;
+      if (timeSpent <= 50) return 6;
+      return 5;
+    }
+  };
+
   // States of Active Quiz
   const [quizStarted, setQuizStarted] = useState(false);
   const [currentQuizQuestions, setCurrentQuizQuestions] = useState<Question[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, number>>({});
   const [quizTimer, setQuizTimer] = useState(0);
-  const [questionTimer, setQuestionTimer] = useState(90);
+  const [questionTimer, setQuestionTimer] = useState(getMaxQuestionTimer(difficulty));
+  const [questionTimes, setQuestionTimes] = useState<Record<number, number>>({ 0: 0, 1: 0, 2: 0 });
   const [timerInterval, setTimerInterval] = useState<any>(null);
   
   const [backChanceUsed, setBackChanceUsed] = useState(false);
@@ -1240,6 +1329,56 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
   
   const [showResultsReview, setShowResultsReview] = useState(false);
   const [lastQuizResult, setLastQuizResult] = useState<QuizResult | null>(null);
+  const [selectedMotivationalSlogan, setSelectedMotivationalSlogan] = useState<string>('');
+
+  useEffect(() => {
+    if (lastQuizResult) {
+      const getMotivationalSloganForScore = (score: number): string => {
+        const match = (motivationalSlogans || []).find(
+          (band) => score >= band.minScore && score <= band.maxScore
+        );
+        if (match && match.slogans && match.slogans.length > 0) {
+          const randomIndex = Math.floor(Math.random() * match.slogans.length);
+          return match.slogans[randomIndex];
+        }
+        if (match && match.slogan) {
+          return match.slogan;
+        }
+        
+        let fallbackList: string[] = [];
+        if (score === 30) {
+          fallbackList = [
+            "Phản xạ ánh sáng - Tốc độ dẫn đầu,\nxứng danh chiến binh 3T thực thụ!",
+            "Trí tuệ tinh thông, phản xạ thần tốc -\nBạn chính là tấm gương tốc độ 3T!",
+            "Bứt phá mọi giới hạn -\nTốc độ tuyệt đối tạo nên vị thế dẫn đầu!"
+          ];
+        } else if (score >= 20) {
+          fallbackList = [
+            "Chính xác thôi chưa đủ -\nĐẩy nhanh tốc độ để chiếm lĩnh đỉnh cao!",
+            "Kiến thức rất vững vàng -\nHãy rèn thêm phản xạ để tối ưu hóa thời gian!",
+            "Chậm một giây, lỡ một nhịp -\nCố gắng rút ngắn thời gian làm bài ở lượt sau!"
+          ];
+        } else if (score >= 15) {
+          fallbackList = [
+            "Vượt qua thử thách -\nTiếp tục mài giũa tư duy để tăng tốc phản xạ!",
+            "Tốc độ tạo khoảng cách -\nHãy nỗ lực luyện tập để phản xạ nhanh như chớp!",
+            "Kiến thức nằm lòng, phản xạ tự nhiên -\nHãy luyện tập để không còn độ trễ!"
+          ];
+        } else {
+          fallbackList = [
+            "Tốc độ là sống còn - Hãy luyện tập thật nhiều\nđể phản xạ nhanh hơn!",
+            "Thất bại là bước đệm -\nLuyện tập không ngừng, làm chủ tốc độ 3T!",
+            "Quyết tâm bứt phá -\nĐập tan độ trễ để nâng tầm bản thân ở lượt thi tới!"
+          ];
+        }
+        const rIndex = Math.floor(Math.random() * fallbackList.length);
+        return fallbackList[rIndex];
+      };
+
+      const picked = getMotivationalSloganForScore(lastQuizResult.score);
+      setSelectedMotivationalSlogan(picked || '');
+    }
+  }, [lastQuizResult, motivationalSlogans]);
 
   // States for Mistakes reviewing and Analysis
   const [reviewMode, setReviewMode] = useState(false);
@@ -1275,6 +1414,7 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
   const selectedAnswersRef = useRef(selectedAnswers);
   const currentQuizQuestionsRef = useRef(currentQuizQuestions);
   const quizTimerRef = useRef(quizTimer);
+  const questionTimesRef = useRef(questionTimes);
 
   useEffect(() => {
     currentQuestionIndexRef.current = currentQuestionIndex;
@@ -1300,28 +1440,34 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
     quizTimerRef.current = quizTimer;
   }, [quizTimer]);
 
-  // Reset countdown to 90 seconds each time the question changes
+  useEffect(() => {
+    questionTimesRef.current = questionTimes;
+  }, [questionTimes]);
+
+  // Reset countdown to dynamic seconds each time the question changes
   useEffect(() => {
     if (quizStarted) {
-      setQuestionTimer(90);
+      setQuestionTimer(getMaxQuestionTimer(difficulty));
     }
-  }, [currentQuestionIndex, quizStarted]);
+  }, [currentQuestionIndex, quizStarted, difficulty]);
 
   const autoSubmitQuiz = async () => {
     setErrorState(null);
-    let correctCount = 0;
-    const answerLog = currentQuizQuestionsRef.current.map(q => {
+    let finalScore = 0;
+    const answerLog = currentQuizQuestionsRef.current.map((q, idx) => {
       const selectedIndex = selectedAnswersRef.current[q.id] !== undefined ? selectedAnswersRef.current[q.id] : -1;
       const isCorrect = selectedIndex === q.correctAnswerIndex;
-      if (isCorrect) correctCount++;
+      const timeSpent = questionTimesRef.current[idx] || 0;
+      const qScore = getQuestionScore(timeSpent, isCorrect, difficulty);
+      finalScore += qScore;
       return {
         questionId: q.id,
         selectedIndex: selectedIndex,
-        correct: isCorrect
+        correct: isCorrect,
+        timeSpent,
+        score: qScore
       };
     });
-
-    const finalScore = correctCount * 10;
 
     const newResult: QuizResult = {
       id: 'res_' + Math.random().toString(36).substring(2, 9),
@@ -1354,7 +1500,7 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
     const currentIndex = currentQuestionIndexRef.current;
     if (currentIndex < 2) {
       setCurrentQuestionIndex(currentIndex + 1);
-      setQuestionTimer(90);
+      setQuestionTimer(getMaxQuestionTimer(difficulty));
     } else {
       autoSubmitQuiz();
     }
@@ -1365,12 +1511,16 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
     if (quizStarted && !showResultsReview) {
       const interval = setInterval(() => {
         setQuizTimer(prev => prev + 1);
+        setQuestionTimes(prev => ({
+          ...prev,
+          [currentQuestionIndexRef.current]: (prev[currentQuestionIndexRef.current] || 0) + 1
+        }));
         setQuestionTimer(prev => {
           if (prev <= 1) {
             setTimeout(() => {
               handleQuestionTimeout();
             }, 0);
-            return 90;
+            return getMaxQuestionTimer(difficulty);
           }
           return prev - 1;
         });
@@ -1382,7 +1532,7 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
         clearInterval(timerInterval);
       }
     }
-  }, [quizStarted, showResultsReview]);
+  }, [quizStarted, showResultsReview, difficulty]);
 
   // Start the 3T Daily Mock Quiz (3 random questions)
   const startQuiz = () => {
@@ -1394,7 +1544,8 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
     setSelectedAnswers({});
     setCurrentQuestionIndex(0);
     setQuizTimer(0);
-    setQuestionTimer(90);
+    setQuestionTimer(getMaxQuestionTimer(difficulty));
+    setQuestionTimes({ 0: 0, 1: 0, 2: 0 });
     setBackChanceUsed(false);
     setBackClicksCount(0);
     setQuizInfoMessage(null);
@@ -1419,19 +1570,21 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
   // Submit Quiz Action
   const submitQuiz = async () => {
     setErrorState(null);
-    let correctCount = 0;
-    const answerLog = currentQuizQuestions.map(q => {
+    let finalScore = 0;
+    const answerLog = currentQuizQuestions.map((q, idx) => {
       const selectedIndex = selectedAnswers[q.id] !== undefined ? selectedAnswers[q.id] : -1;
       const isCorrect = selectedIndex === q.correctAnswerIndex;
-      if (isCorrect) correctCount++;
+      const timeSpent = questionTimes[idx] || 0;
+      const qScore = getQuestionScore(timeSpent, isCorrect, difficulty);
+      finalScore += qScore;
       return {
         questionId: q.id,
         selectedIndex: selectedIndex,
-        correct: isCorrect
+        correct: isCorrect,
+        timeSpent,
+        score: qScore
       };
     });
-
-    const finalScore = correctCount * 10; // 10 points per question, max 30
 
     const newResult: QuizResult = {
       id: 'res_' + Math.random().toString(36).substring(2, 9),
@@ -1616,7 +1769,16 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                     </h3>
                     <p className="text-[10px] sm:text-[11px] text-purple-750 mt-1 leading-relaxed">
                       <span translate="no" className="notranslate">
-                        Là Trưởng Bộ Phận, Anh/Chị có quyền phê duyệt nhân viên mới và theo dõi tiến độ thi đua 3T của bộ phận mình.
+                        {(() => {
+                          const deptNorm = (user.department || '').trim().toLowerCase();
+                          if (deptNorm === 'ban tổng giám đốc') {
+                            return 'Là thành viên Ban Tổng Giám Đốc, Anh/Chị có thẩm quyền phê duyệt nhân sự đăng ký trên toàn bộ hệ thống doanh nghiệp và theo dõi liên thông báo cáo học tập 3T.';
+                          } else if (deptNorm === 'ban giám đốc') {
+                            return `Là thành viên Ban Giám Đốc, Anh/Chị có quyền phê duyệt tài khoản đăng ký và theo dõi báo cáo toàn diện thuộc chi nhánh ${user.branch}.`;
+                          } else {
+                            return 'Là Trưởng Bộ Phận, Anh/Chị có quyền phê duyệt nhân sự đăng ký mới và theo dõi sát sao tiến trình học tập của bộ phận mình phụ trách.';
+                          }
+                        })()}
                       </span>
                     </p>
                   </div>
@@ -2327,8 +2489,12 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                     {/* Admin rapid action buttons */}
                     {isAdminReview && user.role === 'admin' && (
                       <div className="w-full max-w-sm mx-auto bg-slate-50/90 border border-slate-200/60 rounded-xl p-2 shadow-xs mb-4 sm:mb-5">
-                        <div className="text-[9px] font-extrabold text-[#0B3A60]/85 uppercase tracking-wider mb-2 text-center">
-                          CÔNG CỤ NHANH QUẢN TRỊ VIÊN
+                        <div className="text-[9px] font-extrabold text-[#0B3A60]/85 uppercase tracking-wider mb-2 text-center flex items-center justify-center gap-1.5">
+                          <span>CÔNG CỤ NHANH QUẢN TRỊ VIÊN</span>
+                          <span className="flex items-center gap-1 bg-emerald-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full shadow-2xs shrink-0 normal-case">
+                            <span className="h-1 w-1 rounded-full bg-white block animate-ping" />
+                            <span>{onlineUsersCount} Online</span>
+                          </span>
                         </div>
                         <div className="grid grid-cols-4 gap-1 px-0.5 mb-2">
                           <button
@@ -2363,10 +2529,24 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                             className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group"
                             title="Trang Thống Kê"
                           >
-                            <div className="h-7 w-7 rounded-lg bg-emerald-50 border border-emerald-100/60 flex items-center justify-center group-hover:bg-emerald-100 transition-colors shrink-0">
+                            <div className="h-7 w-7 rounded-lg bg-emerald-50 border border-emerald-100/60 flex items-center justify-center group-hover:bg-emerald-100 transition-colors shrink-0 relative">
                               <BarChart3 className="h-3.5 w-3.5 text-emerald-600" />
+                              {participantsTodayCount > 0 && (
+                                <span className="absolute -top-1.5 -right-1.5 bg-blue-600 text-white text-[9.5px] font-extrabold h-4 px-1 rounded-full border border-white flex items-center justify-center shadow-md min-w-[16px] leading-none animate-bounce">
+                                  {participantsTodayCount}
+                                </span>
+                              )}
                             </div>
-                            <span className="text-[8.5px] font-bold leading-tight truncate w-full text-center text-gray-700">Thống Kê</span>
+                            <div className="flex items-center justify-center gap-0.5 w-full">
+                              <span className="text-[8.5px] font-bold leading-tight truncate text-gray-700">Thống Kê</span>
+                              <span className={`text-[8.5px] font-black leading-none rounded-full min-w-[13px] h-[13px] flex items-center justify-center px-0.5 shadow-xs ring-0.5 ring-white shrink-0 ${
+                                attemptsTodayCount > 0 
+                                  ? 'bg-emerald-500 text-white' 
+                                  : 'bg-slate-400 text-white'
+                              }`}>
+                                {attemptsTodayCount}
+                              </span>
+                            </div>
                           </button>
 
                           <button
@@ -2440,10 +2620,34 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                     </p>
                   </div>
 
+                  {/* Button Segmented Tab cho Cấu hình Mức độ Khó nằm ngay dưới dòng chữ "Ứng Dụng Ôn Tập Quiz 3T Hàng Ngày" */}
+                  <div className="w-full max-w-xs mx-auto animate-fade-in shrink-0 -mt-0.5 mb-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+                    <div className="flex">
+                      {[
+                        { level: 1, label: 'Cấp 1 (90s)', tooltip: 'Dễ | Điểm tốc độ bám mốc 30s-40s-50s' },
+                        { level: 2, label: 'Cấp 2 (60s)', tooltip: 'Vừa | Điểm tốc độ thách thức 20s-30s-40s' },
+                        { level: 3, label: 'Cấp 3 (30s)', tooltip: 'Khó | Tốc độ chớp nhoáng 10s-15s-20s' },
+                      ].map((opt) => (
+                        <button
+                          key={opt.level}
+                          onClick={() => onUpdateDifficulty && onUpdateDifficulty(opt.level)}
+                          className={`flex-1 py-1.5 px-2 text-[10px] font-extrabold rounded-md transition-all active:scale-95 cursor-pointer whitespace-nowrap focus:outline-none ${
+                            difficulty === opt.level
+                              ? 'bg-gradient-to-r from-blue-600 to-[#1971C2] text-white shadow-xs'
+                              : 'text-slate-500 hover:text-slate-800 hover:bg-slate-200/50'
+                          }`}
+                          title={opt.tooltip}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
                   {/* Condensed responsive grid */}
                   <div className="bg-gray-50 border border-gray-150 p-3 sm:p-3.5 rounded-xl w-full max-w-sm grid grid-cols-2 gap-3 text-left text-xs sm:text-sm shrink-0 shadow-2xs">
                     <div className="space-y-0.5">
-                      <div className="text-[10px] sm:text-xs text-gray-450 uppercase tracking-wider font-semibold">Số câu hỏi</div>
+                      <div className="text-[10px] sm:text-xs text-gray-455 uppercase tracking-wider font-semibold">Số câu hỏi</div>
                       <div className="font-bold text-gray-800">
                         <span translate="no" className="notranslate">03 câu (Ngẫu nhiên)</span>
                       </div>
@@ -2451,7 +2655,9 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                     <div className="space-y-0.5">
                       <div className="text-[10px] sm:text-xs text-gray-455 uppercase tracking-wider font-semibold">Thời gian tính</div>
                       <div className="font-bold text-gray-800">
-                        <span translate="no" className="notranslate font-sans">Tự do rèn luyện</span>
+                        <span translate="no" className="notranslate font-sans">
+                          {difficulty === 1 ? '90 giây / câu' : difficulty === 2 ? '60 giây / câu' : '30 giây / câu'}
+                        </span>
                       </div>
                     </div>
                     <div className="space-y-0.5">
@@ -2484,33 +2690,56 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                   </div>
 
                   {/* Approver Department Action Card */}
-                  {user.role === 'approver' && (
-                    <div className="w-full max-w-sm bg-purple-50/70 border border-purple-200/60 p-3 rounded-xl text-left shrink-0 shadow-3xs relative overflow-hidden">
-                      <div className="absolute top-0 right-0 h-16 w-16 bg-purple-500/5 rounded-full -mr-4 -mt-4 animate-pulse-slow" />
-                      <div className="flex items-center justify-between">
-                        <div className="space-y-1">
-                          <span translate="no" className="notranslate bg-purple-200 text-purple-800 text-[9px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full">
-                            Trưởng Bộ Phận
+                  {(user.role === 'approver' || user.canViewStats) && (
+                    <div className="w-full max-w-sm bg-purple-50/70 border border-purple-200/60 p-3.5 rounded-xl text-left shrink-0 shadow-3xs relative overflow-hidden">
+                      <div className="absolute top-0 right-0 h-16 w-16 bg-purple-500/5 rounded-full -mr-4 -mt-4 animate-pulse-slow font-sans" />
+                      <div className="flex flex-col">
+                        <div className="space-y-1 relative z-10">
+                          <span translate="no" className="notranslate bg-purple-250 text-purple-800 text-[9px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full">
+                            {(() => {
+                              const deptNorm = (user.department || '').trim().toLowerCase();
+                              if (deptNorm === 'ban tổng giám đốc') return 'Ban Tổng Giám Đốc';
+                              if (deptNorm === 'ban giám đốc') return 'Ban Giám Đốc';
+                              return 'Trưởng Bộ Phận';
+                            })()}
                           </span>
-                          <h4 className="text-xs sm:text-sm font-extrabold text-[#0B3A60] mt-1.5 leading-snug">
-                            Phê duyệt & Theo dõi d.sách
+                          <h4 className="text-xs sm:text-sm font-extrabold text-[#0B3A60] mt-2 leading-snug">
+                            {user.role === 'approver' ? 'Hành Động Quản Lý' : 'Dữ Liệu Thống Kê'}
                           </h4>
-                          <p className="text-[10px] sm:text-xs text-slate-500">
-                            Có <strong className="text-purple-700 font-extrabold">{pendingUsersCount}</strong> nhân viên đang chờ duyệt.
+                          <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5">
+                            {user.role === 'approver' ? (
+                              <span>Có <strong className="text-purple-700 font-extrabold">{pendingUsersCount}</strong> nhân sự chờ duyệt thuộc cơ cấu của Anh/Chị.</span>
+                            ) : (
+                              <span>Anh/Chị được phân quyền xem báo cáo thống kê rèn luyện học tập 3T của cơ quan/phòng ban.</span>
+                            )}
                           </p>
                         </div>
-                        <button
-                          onClick={() => setShowApprovalPanel(true)}
-                          className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-600 hover:bg-purple-700 active:scale-95 text-white transition-all cursor-pointer shadow-sm shrink-0 relative"
-                          title="Duyệt nhân viên"
-                        >
-                          <UserCheck className="h-4.5 w-4.5" />
-                          {pendingUsersCount > 0 && (
-                            <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[9px] font-extrabold h-4 w-4 rounded-full flex items-center justify-center border border-white">
-                              {pendingUsersCount}
-                            </span>
+                        
+                        <div className={`grid ${user.role === 'approver' && user.canViewStats ? 'grid-cols-2 gap-2' : 'grid-cols-1'} mt-3.5 pt-3.5 border-t border-purple-200/40 relative z-10`}>
+                          {user.role === 'approver' && (
+                            <button
+                              onClick={() => setShowApprovalPanel(true)}
+                              className="flex items-center justify-center gap-1.5 py-2 px-2.5 bg-purple-650 hover:bg-purple-700 active:scale-95 text-white text-[11px] font-extrabold rounded-lg transition-all cursor-pointer shadow-3xs relative animate-fadeIn"
+                            >
+                              <UserCheck className="h-3.5 w-3.5 shrink-0" />
+                              <span>Duyệt Nhân Sự</span>
+                              {pendingUsersCount > 0 && (
+                                <span className="bg-red-650 text-white text-[8px] font-black h-4 px-1 rounded-full border border-white flex items-center justify-center min-w-[15px] animate-pulse">
+                                  {pendingUsersCount}
+                                </span>
+                              )}
+                            </button>
                           )}
-                        </button>
+                          {user.canViewStats && (
+                            <button
+                              onClick={() => setAdminMobileTab('stats')}
+                              className="flex items-center justify-center gap-1.5 py-2 px-2.5 bg-white hover:bg-violet-50 border border-purple-200 text-purple-700 text-[11px] font-extrabold rounded-lg transition-all cursor-pointer active:scale-95 shadow-3xs animate-fadeIn"
+                            >
+                              <BarChart3 className="h-3.5 w-3.5 shrink-0 text-purple-600" />
+                              <span>Xem Thống Kê</span>
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   )}
@@ -2554,9 +2783,16 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                         setActiveTab('practice');
                         setExpandedPracticeId(null);
                       }}
-                      className="flex-1 flex items-center justify-center gap-0.5 sm:gap-1 py-1.5 sm:py-2 px-0.5 sm:px-2 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 rounded-lg sm:rounded-xl transition-all hover:scale-[1.01] active:scale-[0.99] cursor-pointer text-[7.5px] min-[320px]:text-[8px] min-[360px]:text-[9px] min-[400px]:text-[10px] sm:text-xs font-extrabold tracking-tight whitespace-nowrap overflow-hidden select-none"
+                      className="flex-1 flex items-center justify-center gap-0.5 sm:gap-1 py-1.5 sm:py-2 px-0.5 sm:px-2 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 rounded-lg sm:rounded-xl transition-all hover:scale-[1.01] active:scale-[0.99] cursor-pointer text-[7.5px] min-[320px]:text-[8px] min-[360px]:text-[9px] min-[400px]:text-[10px] sm:text-xs font-extrabold tracking-tight whitespace-nowrap overflow-visible select-none"
                     >
-                      <BookOpen className="h-3 w-3 sm:h-4 sm:w-4 text-amber-600 shrink-0" />
+                      <div className="flex items-center justify-center mr-0.5 shrink-0 gap-1">
+                        {questions.length > 0 && (
+                          <span className="text-[8.5px] font-black leading-none bg-amber-600 text-white rounded-full min-w-[15px] h-[15px] flex items-center justify-center px-1 shadow-3xs ring-1 ring-white">
+                            {questions.length}
+                          </span>
+                        )}
+                        <BookOpen className="h-3 w-3 sm:h-4 sm:w-4 text-amber-600 shrink-0" />
+                      </div>
                       <span className="whitespace-nowrap">ÔN TẬP</span>
                     </button>
 
@@ -2630,91 +2866,108 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                               if (s < 15) {
                                 return (
                                   <span className="px-5 py-1 border border-red-400 bg-red-50 text-red-600 text-xs sm:text-sm font-bold rounded-lg inline-flex items-center justify-center shadow-3xs tracking-wide">
-                                    Chưa đạt yêu cầu
+                                    <span translate="no" className="notranslate">Chưa đạt yêu cầu</span>
                                   </span>
                                 );
                               } else if (s >= 15 && s < 20) {
                                 return (
                                   <span className="px-5 py-1 border border-blue-400 bg-blue-50 text-blue-600 text-xs sm:text-sm font-bold rounded-lg inline-flex items-center justify-center shadow-3xs tracking-wide">
-                                    Đạt 90%
+                                    <span translate="no" className="notranslate">Đạt 90%</span>
                                   </span>
                                 );
                               } else if (s >= 20 && s < 24) {
                                 return (
                                   <span className="px-5 py-1 border border-emerald-400 bg-emerald-50 text-emerald-600 text-xs sm:text-sm font-bold rounded-lg inline-flex items-center justify-center shadow-3xs tracking-wide">
-                                    Đạt 100%
+                                    <span translate="no" className="notranslate">Đạt 100%</span>
                                   </span>
                                 );
                               } else if (s >= 24 && s < 27) {
                                 return (
                                   <span className="px-5 py-1 border border-purple-400 bg-purple-50 text-purple-600 text-xs sm:text-sm font-bold rounded-lg inline-flex items-center justify-center shadow-3xs tracking-wide">
-                                    Đạt 120%
+                                    <span translate="no" className="notranslate">Đạt 120%</span>
                                   </span>
                                 );
                               } else {
                                 return (
                                   <span className="px-5 py-1 border border-indigo-400 bg-indigo-50 text-indigo-600 text-xs sm:text-sm font-bold rounded-lg inline-flex items-center justify-center shadow-3xs tracking-wide">
-                                    Đạt 150%
+                                    <span translate="no" className="notranslate">Đạt 150%</span>
                                   </span>
                                 );
                               }
                             })()}
                           </div>
 
+                          {/* Slogan for speed dependent on user score with correct dynamic wrapping for mobile */}
+                          {selectedMotivationalSlogan && (
+                            <div className="shrink-0 my-1.5 w-full px-4 text-center">
+                              <span translate="no" className="notranslate italic text-red-600 font-bold text-xs sm:text-sm block whitespace-pre-line leading-relaxed max-w-[290px] sm:max-w-md mx-auto text-balance">
+                                "{selectedMotivationalSlogan}"
+                              </span>
+                            </div>
+                          )}
+
                           {/* Stat Grid (4 blocks matching exactly) */}
-                          <div className="grid grid-cols-2 gap-3 w-full shrink-0">
-                            {/* Câu đúng */}
-                            <div className="bg-white rounded-xl p-2.5 sm:p-3 flex items-center gap-2.5 border border-gray-200 shadow-3xs text-left">
-                              <div className="w-9 h-9 rounded-full bg-green-50 border border-green-155 flex items-center justify-center text-green-600 shrink-0">
-                                <CheckCircle2 className="h-4.5 w-4.5 stroke-[2.5]" />
-                              </div>
-                              <div>
-                                <div className="text-lg font-bold text-gray-900 font-mono leading-none">
-                                  {String(lastQuizResult.score / 10).padStart(2, '0')}
+                          {(() => {
+                            const correctCount = lastQuizResult.answers.filter(ans => ans.correct).length;
+                            const incorrectCount = 3 - correctCount;
+                            return (
+                              <div className="grid grid-cols-2 gap-3 w-full shrink-0">
+                                {/* Câu đúng */}
+                                <div className="bg-white rounded-xl p-2.5 sm:p-3 flex items-center gap-2.5 border border-gray-200 shadow-3xs text-left">
+                                  <div className="w-9 h-9 rounded-full bg-green-50 border border-green-155 flex items-center justify-center text-green-600 shrink-0">
+                                    <CheckCircle2 className="h-4.5 w-4.5 stroke-[2.5]" />
+                                  </div>
+                                  <div>
+                                    <div className="text-lg font-bold text-gray-900 font-mono leading-none">
+                                      <span translate="no" className="notranslate">{String(correctCount).padStart(2, '0')}</span>
+                                    </div>
+                                    <div className="text-[10px] sm:text-xs text-gray-455 font-bold mt-0.5">Câu đúng</div>
+                                  </div>
                                 </div>
-                                <div className="text-[10px] sm:text-xs text-gray-450 font-bold mt-0.5">Câu đúng</div>
-                              </div>
-                            </div>
 
-                            {/* Câu sai */}
-                            <div className="bg-white rounded-xl p-2.5 sm:p-3 flex items-center gap-2.5 border border-gray-200 shadow-3xs text-left">
-                              <div className="w-9 h-9 rounded-full bg-red-50 border border-red-155 flex items-center justify-center text-red-600 shrink-0">
-                                <XCircle className="h-4.5 w-4.5 stroke-[2.5]" />
-                              </div>
-                              <div>
-                                <div className="text-lg font-bold text-gray-900 font-mono leading-none">
-                                  {String(3 - lastQuizResult.score / 10).padStart(2, '0')}
+                                {/* Câu sai */}
+                                <div className="bg-white rounded-xl p-2.5 sm:p-3 flex items-center gap-2.5 border border-gray-200 shadow-3xs text-left">
+                                  <div className="w-9 h-9 rounded-full bg-red-50 border border-red-155 flex items-center justify-center text-red-600 shrink-0">
+                                    <XCircle className="h-4.5 w-4.5 stroke-[2.5]" />
+                                  </div>
+                                  <div>
+                                    <div className="text-lg font-bold text-gray-900 font-mono leading-none">
+                                      <span translate="no" className="notranslate">{String(incorrectCount).padStart(2, '0')}</span>
+                                    </div>
+                                    <div className="text-[10px] sm:text-xs text-gray-455 font-bold mt-0.5">Câu sai</div>
+                                  </div>
                                 </div>
-                                <div className="text-[10px] sm:text-xs text-gray-450 font-bold mt-0.5">Câu sai</div>
-                              </div>
-                            </div>
 
-                            {/* Bỏ qua */}
-                            <div className="bg-white rounded-xl p-2.5 sm:p-3 flex items-center gap-2.5 border border-gray-200 shadow-3xs text-left">
-                              <div className="w-9 h-9 rounded-full bg-amber-50 border border-amber-155 flex items-center justify-center text-amber-500 shrink-0">
-                                <div className="font-bold text-base select-none leading-none">-</div>
-                              </div>
-                              <div>
-                                <div className="text-lg font-bold text-gray-900 font-mono leading-none">0</div>
-                                <div className="text-[10px] sm:text-xs text-gray-455 font-bold mt-0.5">Bỏ qua</div>
-                              </div>
-                            </div>
-
-                            {/* Thời gian */}
-                            <div className="bg-white rounded-xl p-2.5 sm:p-3 flex items-center gap-2.5 border border-gray-200 shadow-3xs text-left">
-                              <div className="w-9 h-9 rounded-full bg-blue-50 border border-blue-155 flex items-center justify-center text-blue-500 shrink-0">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4.5 w-4.5 text-blue-500 stroke-[2.5]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
-                              </div>
-                              <div>
-                                <div className="text-base font-bold text-gray-900 font-mono leading-none">
-                                  {formatTimeInSeconds(lastQuizResult.duration)}
+                                {/* Bỏ qua */}
+                                <div className="bg-white rounded-xl p-2.5 sm:p-3 flex items-center gap-2.5 border border-gray-200 shadow-3xs text-left">
+                                  <div className="w-9 h-9 rounded-full bg-amber-50 border border-amber-155 flex items-center justify-center text-amber-500 shrink-0">
+                                    <div className="font-bold text-base select-none leading-none">-</div>
+                                  </div>
+                                  <div>
+                                    <div className="text-lg font-bold text-gray-900 font-mono leading-none">
+                                      <span translate="no" className="notranslate">00</span>
+                                    </div>
+                                    <div className="text-[10px] sm:text-xs text-gray-455 font-bold mt-0.5">Bỏ qua</div>
+                                  </div>
                                 </div>
-                                <div className="text-[10px] sm:text-xs text-gray-455 font-bold mt-0.5">Thời gian</div>
+
+                                {/* Thời gian */}
+                                <div className="bg-white rounded-xl p-2.5 sm:p-3 flex items-center gap-2.5 border border-gray-200 shadow-3xs text-left">
+                                  <div className="w-9 h-9 rounded-full bg-blue-50 border border-blue-155 flex items-center justify-center text-blue-500 shrink-0">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4.5 w-4.5 text-blue-500 stroke-[2.5]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                  </div>
+                                  <div>
+                                    <div className="text-base font-bold text-gray-900 font-mono leading-none">
+                                      <span translate="no" className="notranslate">{formatTimeInSeconds(lastQuizResult.duration)}</span>
+                                    </div>
+                                    <div className="text-[10px] sm:text-xs text-gray-455 font-bold mt-0.5">Thời gian</div>
+                                  </div>
+                                </div>
                               </div>
-                            </div>
-                          </div>
+                            );
+                          })()}
 
                           {/* Accuracy block */}
                           <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-3xs w-full space-y-2.5 text-left shrink-0">
@@ -2943,7 +3196,9 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                               setCurrentQuizQuestions(selected);
                             }
                             setSelectedAnswers({}); // Xóa sạch các câu đã chọn để làm lại mới hoàn toàn
-                            setQuestionTimer(90); // Reset countdown timer for the new set
+                            setQuestionTimer(getMaxQuestionTimer(difficulty)); // Reset countdown timer for the new set
+                            setQuestionTimes({ 0: 0, 1: 0, 2: 0 }); // Reset question times
+                            setQuizTimer(0); // Reset main quiz timer
                             setCurrentQuestionIndex(0); // Quay lại làm lại từ đầu từ câu 1
                             setBackChanceUsed(true);
                             setErrorState(null);
@@ -3042,8 +3297,25 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
                         {/* Question display */}
                         {currentQuizQuestions.length > 0 && (
                           <div className="flex-1 flex flex-col justify-center space-y-3.5 text-left font-sans">
-                            <div className="text-[10px] sm:text-xs font-extrabold text-gray-400 tracking-wider uppercase shrink-0">
-                              <span translate="no" className="notranslate">CÂU HỎI {currentQuestionIndex + 1}</span>
+                            <div className="flex justify-between items-center shrink-0">
+                              <div className="text-[10px] sm:text-xs font-extrabold text-gray-400 tracking-wider uppercase">
+                                <span translate="no" className="notranslate">CÂU HỎI {currentQuestionIndex + 1}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5 text-xs">
+                                <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Thời gian:</span>
+                                <span 
+                                  translate="no" 
+                                  className={`notranslate font-mono font-black text-xs px-2 py-0.5 rounded-md ${
+                                    (questionTimes[currentQuestionIndex] || 0) <= 30
+                                      ? "text-emerald-600 bg-emerald-50 border border-emerald-150"
+                                      : (questionTimes[currentQuestionIndex] || 0) <= 50
+                                        ? "text-amber-600 bg-amber-50 border border-amber-150"
+                                        : "text-red-600 bg-red-50 border border-red-150 animate-pulse font-extrabold"
+                                  }`}
+                                >
+                                  {questionTimes[currentQuestionIndex] || 0} giây
+                                </span>
+                              </div>
                             </div>
                             <h3 className="text-sm sm:text-base font-sans font-extrabold text-gray-950 leading-snug shrink-0">
                               <span translate="no" className="notranslate">{currentQuizQuestions[currentQuestionIndex].text}</span>
@@ -3291,6 +3563,43 @@ export default function EmployeeDashboard({ user, onLogout, isAdminReview = fals
 
           {/* Floating Action Buttons for Ôn Tập Tab (Scroll To Top & Back to Home) */}
           {activeTab === 'practice' && !quizStarted && (
+            <div className="absolute bottom-18 right-5 z-45 flex flex-col gap-2.5">
+              {/* Scroll to Top Button */}
+              <AnimatePresence>
+                {showScrollTop && (
+                  <motion.button
+                    initial={{ scale: 0, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0, opacity: 0 }}
+                    whileTap={{ scale: 0.9 }}
+                    onClick={scrollToTop}
+                    className="w-11 h-11 bg-[#0B3A60] hover:bg-[#1971C2] text-white rounded-full flex items-center justify-center shadow-lg hover:shadow-xl border border-white/20 transition-all cursor-pointer group shrink-0"
+                    title="Cuộn lên đầu trang"
+                  >
+                    <ArrowUp className="h-5.5 w-5.5 group-hover:-translate-y-0.5 transition-transform" />
+                  </motion.button>
+                )}
+              </AnimatePresence>
+
+              {/* Home Icon Button (Quay về Trang chủ) */}
+              <motion.button
+                initial={{ scale: 0, opacity: 0, y: 10 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={() => {
+                  setActiveTab('quiz');
+                  scrollToTop();
+                }}
+                className="w-11 h-11 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full flex items-center justify-center shadow-lg hover:shadow-xl border border-white/10 transition-all cursor-pointer group shrink-0 animate-pulse-slow"
+                title="Quay về Trang chủ"
+              >
+                <Home className="h-5 w-5 group-hover:scale-110 transition-transform" />
+              </motion.button>
+            </div>
+          )}
+
+          {/* Floating Action Buttons for Phân Tích Tab (Scroll To Top & Back to Home) */}
+          {activeTab === 'history' && !quizStarted && (
             <div className="absolute bottom-18 right-5 z-45 flex flex-col gap-2.5">
               {/* Scroll to Top Button */}
               <AnimatePresence>

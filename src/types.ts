@@ -10,6 +10,8 @@ export interface User {
   status: 'pending' | 'approved' | 'rejected' | 'PENDING' | 'APPROVED' | 'REJECTED';
   createdAt: string;
   employeeId?: string;
+  canViewStats?: boolean;
+  lastActive?: number;
 }
 
 export interface Question {
@@ -36,6 +38,8 @@ export interface QuizResult {
     questionId: string;
     selectedIndex: number;
     correct: boolean;
+    timeSpent?: number;
+    score?: number;
   }[];
   duration: number; // in seconds
 }
@@ -77,3 +81,11 @@ export const DEPARTMENTS = [
   'Phòng Kỹ Thuật',
   'Phòng Kho Vận'
 ] as const;
+
+export interface MotivationalSloganBand {
+  id: string;
+  minScore: number;
+  maxScore: number;
+  slogan: string;
+  slogans?: string[];
+}

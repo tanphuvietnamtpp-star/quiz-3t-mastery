@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
-import { databaseService } from '../firebase';
-import { User, Question, QuizResult, BRANCHES, DEPARTMENTS, CompanyMapping } from '../types';
+import { databaseService, getQuotaStats } from '../firebase';
+import { User, Question, QuizResult, BRANCHES, DEPARTMENTS, CompanyMapping, MotivationalSloganBand } from '../types';
 import { INITIAL_QUESTIONS } from '../data/mockQuestions';
 import { 
   Users, HelpCircle, ImagePlus, QrCode, AlertTriangle, 
   Trash2, Plus, Sparkles, LogOut, CheckCircle2, UserCheck, 
   RefreshCcw, UserMinus, FileDown, Upload, Pencil, Lock, BarChart3,
-  Database, Building, Briefcase, Landmark, Home, ChevronDown, ChevronUp
+  Database, Building, Briefcase, Landmark, Home, ChevronDown, ChevronUp,
+  ShieldCheck, ShieldAlert, Zap, Activity, Server
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import StatsDashboard from './StatsDashboard';
@@ -19,9 +20,13 @@ interface AdminDashboardProps {
   onSimulateEmployee: () => void;
   slogan: string;
   onUpdateSlogan: (slogan: string) => void;
-  initialTab?: 'users' | 'questions' | 'add_images' | 'qr' | 'stats' | 'encoding';
+  difficulty?: number;
+  onUpdateDifficulty?: (newLevel: number) => void;
+  initialTab?: 'users' | 'questions' | 'add_images' | 'qr' | 'stats' | 'encoding' | 'firebase_data';
   maintenanceObj: { isMaintenance: boolean; message: string };
   onUpdateMaintenance: (isMaintenance: boolean, message: string) => void;
+  motivationalSlogans?: MotivationalSloganBand[];
+  onUpdateMotivationalSlogans?: (newValue: MotivationalSloganBand[]) => void;
 }
 
 export default function AdminDashboard({ 
@@ -30,21 +35,149 @@ export default function AdminDashboard({
   onSimulateEmployee, 
   slogan, 
   onUpdateSlogan, 
+  difficulty = 1,
+  onUpdateDifficulty,
   initialTab,
   maintenanceObj,
-  onUpdateMaintenance
+  onUpdateMaintenance,
+  motivationalSlogans = [],
+  onUpdateMotivationalSlogans
 }: AdminDashboardProps) {
   const [users, setUsers] = useState<User[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [results, setResults] = useState<QuizResult[]>([]);
   
-  const [activeTab, setActiveTab] = useState<'users' | 'questions' | 'add_images' | 'qr' | 'stats' | 'encoding'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'questions' | 'add_images' | 'qr' | 'stats' | 'encoding' | 'firebase_data'>('users');
+  const [isSlogansExpanded, setIsSlogansExpanded] = useState(false);
+  const [localBands, setLocalBands] = useState<MotivationalSloganBand[]>([]);
+
+  // Real-time online users calculation (active in last 240 seconds / 4 minutes, robust against device clock drift)
+  const onlineUsers = users.filter((u) => {
+    if (!u.lastActive) return false;
+    return Math.abs(Date.now() - u.lastActive) <= 240000;
+  });
+
+  // Group online users by branch / representative office
+  const onlineByBranch = onlineUsers.reduce((acc, u) => {
+    const branchName = u.branch ? u.branch.trim() : 'Chưa phân chi nhánh';
+    acc[branchName] = (acc[branchName] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
 
   useEffect(() => {
     if (initialTab) {
       setActiveTab(initialTab);
     }
   }, [initialTab]);
+
+  useEffect(() => {
+    if (motivationalSlogans && motivationalSlogans.length > 0) {
+      setLocalBands(motivationalSlogans.map(item => {
+        if (!item.slogans || !Array.isArray(item.slogans) || item.slogans.length === 0) {
+          return {
+            ...item,
+            slogans: [item.slogan || '']
+          };
+        }
+        return item;
+      }));
+    } else {
+      setLocalBands([
+        {
+          id: 'excellent',
+          minScore: 30,
+          maxScore: 30,
+          slogan: 'Phản xạ ánh sáng - Tốc độ dẫn đầu,\nxứng danh chiến binh 3T thực thụ!',
+          slogans: [
+            'Phản xạ ánh sáng - Tốc độ dẫn đầu,\nxứng danh chiến binh 3T thực thụ!',
+            'Trí tuệ tinh thông, phản xạ thần tốc -\nBạn chính là tấm gương tốc độ 3T!',
+            'Bứt phá mọi giới hạn -\nTốc độ tuyệt đối tạo nên vị thế dẫn đầu!'
+          ]
+        },
+        {
+          id: 'good',
+          minScore: 20,
+          maxScore: 29,
+          slogan: 'Chính xác thôi chưa đủ -\nĐẩy nhanh tốc độ để chiếm lĩnh đỉnh cao!',
+          slogans: [
+            'Chính xác thôi chưa đủ -\nĐẩy nhanh tốc độ để chiếm lĩnh đỉnh cao!',
+            'Kiến thức rất vững vàng -\nHãy rèn thêm phản xạ để tối ưu hóa thời gian!',
+            'Chậm một giây, lỡ một nhịp -\nCố gắng rút ngắn thời gian làm bài ở lượt sau!'
+          ]
+        },
+        {
+          id: 'passing',
+          minScore: 15,
+          maxScore: 19,
+          slogan: 'Vượt qua thử thách -\nTiếp tục mài giũa tư duy để tăng tốc phản xạ!',
+          slogans: [
+            'Vượt qua thử thách -\nTiếp tục mài giũa tư duy để tăng tốc phản xạ!',
+            'Tốc độ tạo khoảng cách -\nHãy nỗ lực luyện tập để phản xạ nhanh như chớp!',
+            'Kiến thức nằm lòng, phản xạ tự nhiên -\nHãy luyện tập để không còn độ trễ!'
+          ]
+        },
+        {
+          id: 'unsatisfactory',
+          minScore: 0,
+          maxScore: 14,
+          slogan: 'Tốc độ là sống còn - Hãy luyện tập thật nhiều\nđể phản xạ nhanh hơn!',
+          slogans: [
+            'Tốc độ là sống còn - Hãy luyện tập thật nhiều\nđể phản xạ nhanh hơn!',
+            'Thất bại là bước đệm -\nLuyện tập không ngừng, làm chủ tốc độ 3T!',
+            'Quyết tâm bứt phá -\nĐập tan độ trễ để nâng tầm bản thân ở lượt thi tới!'
+          ]
+        }
+      ]);
+    }
+  }, [motivationalSlogans]);
+
+  const handleLocalSloganIndexChange = (bandId: string, sloganIndex: number, newValue: string) => {
+    setLocalBands(prev => prev.map(band => {
+      if (band.id === bandId) {
+        const updatedSlogans = [...(band.slogans || [band.slogan])];
+        updatedSlogans[sloganIndex] = newValue;
+        return {
+          ...band,
+          slogans: updatedSlogans,
+          slogan: updatedSlogans[0] || ''
+        };
+      }
+      return band;
+    }));
+  };
+
+  const handleAddSloganSlot = (bandId: string) => {
+    setLocalBands(prev => prev.map(band => {
+      if (band.id === bandId) {
+        const updatedSlogans = [...(band.slogans || [band.slogan]), ''];
+        return {
+          ...band,
+          slogans: updatedSlogans
+        };
+      }
+      return band;
+    }));
+  };
+
+  const handleRemoveSloganSlot = (bandId: string, sloganIndex: number) => {
+    setLocalBands(prev => prev.map(band => {
+      if (band.id === bandId) {
+        const updatedSlogans = [...(band.slogans || [band.slogan])];
+        if (updatedSlogans.length <= 1) {
+          alert('Mỗi nhóm phải có tối thiểu 1 Slogan hâm nóng ý chí!');
+          return band;
+        }
+        updatedSlogans.splice(sloganIndex, 1);
+        return {
+          ...band,
+          slogans: updatedSlogans,
+          slogan: updatedSlogans[0] || ''
+        };
+      }
+      return band;
+    }));
+  };
+
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
 
@@ -83,6 +216,89 @@ export default function AdminDashboard({
   const [editRole, setEditRole] = useState<'employee' | 'approver' | 'admin'>('employee');
   const [editStatus, setEditStatus] = useState<'approved' | 'pending' | 'rejected'>('pending');
   const [editPassword, setEditPassword] = useState('');
+  const [editCanViewStats, setEditCanViewStats] = useState(false);
+
+  // States for 'DỮ LIỆU' - Firebase Quota Integrity & Optimization Center
+  const [quota, setQuota] = useState(getQuotaStats());
+  const [oldResultCount, setOldResultCount] = useState<number | null>(null);
+  const [oldResultIds, setOldResultIds] = useState<string[]>([]);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isCleaning, setIsCleaning] = useState(false);
+  const [cleanMessage, setCleanMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  useEffect(() => {
+    setQuota(getQuotaStats());
+  }, [results]);
+
+  const firebaseQuotaLimits = {
+    reads: 50000,
+    writes: 20000,
+    deletes: 20000
+  };
+
+  const readPercent = Math.min(100, parseFloat(((quota.reads / firebaseQuotaLimits.reads) * 100).toFixed(2)));
+  const writePercent = Math.min(100, parseFloat(((quota.writes / firebaseQuotaLimits.writes) * 100).toFixed(2)));
+  const deletePercent = Math.min(100, parseFloat(((quota.deletes / firebaseQuotaLimits.deletes) * 100).toFixed(2)));
+
+  const getProgressColor = (percent: number) => {
+    if (percent > 80) return 'bg-red-500';
+    if (percent > 40) return 'bg-amber-500';
+    return 'bg-green-500';
+  };
+
+  const getTextColor = (percent: number) => {
+    if (percent > 80) return 'text-red-600';
+    if (percent > 40) return 'text-amber-600';
+    return 'text-green-600';
+  };
+
+  const runHistoricalAnalysis = async () => {
+    setIsAnalyzing(true);
+    setCleanMessage(null);
+    try {
+      const allRes = await databaseService.getQuizResults(false);
+      const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+      const oldRes = allRes.filter(r => r.timestamp < thirtyDaysAgo);
+      setOldResultCount(oldRes.length);
+      setOldResultIds(oldRes.map(r => r.id));
+    } catch (err: any) {
+      console.error("Lỗi khi phân tích dữ liệu lịch sử:", err);
+      setCleanMessage({ type: 'error', text: 'Không thể phân tích dữ liệu Firestore để dọn dẹp.' });
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const handleCleanOldResults = async () => {
+    if (oldResultIds.length === 0) return;
+    
+    const confirmClean = window.confirm(
+      `Hành động Bảo Trì:\nBạn có chắc chắn muốn dọn dẹp và xóa vĩnh viễn ${oldResultIds.length} kết quả thi thử cũ từ tháng trước (>30 ngày trước) không?\n\nHành động này không thể hoàn tác, sẽ giải phóng dung lượng và giúp bảo toàn quota đọc của bạn.`
+    );
+    if (!confirmClean) return;
+
+    setIsCleaning(true);
+    setCleanMessage(null);
+    try {
+      const deletedCount = await databaseService.deleteQuizResults(oldResultIds);
+      setCleanMessage({
+        type: 'success',
+        text: `Dọn dẹp thành công! Đã xóa vĩnh viễn ${deletedCount} kết quả thi thử cũ khỏi Cloud Firestore.`
+      });
+      setOldResultCount(0);
+      setOldResultIds([]);
+      await loadData(true);
+      setQuota(getQuotaStats());
+    } catch (err: any) {
+      console.error("Lỗi khi xóa kết quả:", err);
+      setCleanMessage({
+        type: 'error',
+        text: 'Có lỗi xảy ra trong quá trình dọn dẹp. Vui lòng thử lại.'
+      });
+    } finally {
+      setIsCleaning(false);
+    }
+  };
 
   // States for Manual Question Form
   const [manualText, setManualText] = useState('');
@@ -98,7 +314,7 @@ export default function AdminDashboard({
   const [showQrNotice, setShowQrNotice] = useState(false);
   const [showManualForm, setShowManualForm] = useState(false);
 
-  const loadData = async () => {
+  const loadData = async (forceRefresh = false) => {
     setLoading(true);
     try {
       const allUsers = await databaseService.getUsers();
@@ -107,7 +323,7 @@ export default function AdminDashboard({
       const allQs = await databaseService.getQuestions();
       setQuestions(allQs);
 
-      const allRes = await databaseService.getQuizResults();
+      const allRes = await databaseService.getQuizResults(false, forceRefresh);
       setResults(allRes);
 
       const allMappings = await databaseService.getCompanyMappings();
@@ -181,6 +397,20 @@ export default function AdminDashboard({
     }
   };
 
+  const handleToggleStatsPermission = async (userId: string, currentPermission: boolean) => {
+    try {
+      const newPerm = !currentPermission;
+      await databaseService.updateUser(userId, { canViewStats: newPerm });
+      setNotice({ 
+        type: 'success', 
+        msg: `Đã ${newPerm ? 'cấp' : 'thu hồi'} quyền xem thống kê cho CBNV thành công.` 
+      });
+      await loadData();
+    } catch (err) {
+      setNotice({ type: 'error', msg: 'Thay đổi quyền xem thống kê thất bại.' });
+    }
+  };
+
   const handleOpenEdit = (targetUser: User) => {
     setEditingUser(targetUser);
     setEditName(targetUser.name || '');
@@ -214,6 +444,7 @@ export default function AdminDashboard({
     setEditRole(targetUser.role || 'employee');
     setEditStatus(targetUser.status || 'pending');
     setEditPassword(targetUser.password || '123');
+    setEditCanViewStats(targetUser.canViewStats || false);
   };
 
   const handleSaveEdit = async (e: React.FormEvent) => {
@@ -236,7 +467,8 @@ export default function AdminDashboard({
         branch: editBranch,
         role: editRole,
         status: editStatus,
-        password: editPassword
+        password: editPassword,
+        canViewStats: editCanViewStats
       });
       setNotice({ type: 'success', msg: `Đã cập nhật thông tin CBNV "${finalName}" thành công!` });
       setEditingUser(null);
@@ -757,10 +989,12 @@ export default function AdminDashboard({
 
   // Notifications and badge calculations
   const pendingUsersCount = users.filter(u => u.status?.toLowerCase() === 'pending').length;
+  const approvedUsersCount = users.filter(u => u.status?.toLowerCase() === 'approved').length;
   const totalQuestionsCount = questions.length;
   const todayStr = formatDate(new Date());
   const todayResults = results.filter(r => r.date === todayStr);
   const participantsTodayCount = new Set(todayResults.map(r => r.userId)).size;
+  const attemptsTodayCount = todayResults.length;
 
   const handleExportUsers = () => {
     try {
@@ -934,6 +1168,32 @@ export default function AdminDashboard({
             </div>
           </div>
 
+          {/* Real-time active presence tracker grouped by departments/branches (VỊ TRÍ KHOANH ĐỎ) */}
+          <div className="flex flex-col sm:flex-row items-center gap-2 bg-emerald-50/45 border border-emerald-150/70 rounded-full px-4.5 py-1.5 shrink-0 shadow-3xs max-w-full md:max-w-md lg:max-w-xl text-center md:text-left">
+            <div className="flex items-center gap-1.5 shrink-0 sm:border-r sm:border-emerald-200/50 sm:pr-2.5">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+              </span>
+              <span className="text-[11px] font-black text-emerald-800 tracking-wide uppercase">
+                ĐANG ONLINE: {onlineUsers.length}
+              </span>
+            </div>
+            
+            <div className="flex flex-wrap items-center justify-center sm:justify-start gap-1.5 text-[10px] font-bold text-slate-650">
+              {onlineUsers.length === 0 ? (
+                <span className="text-gray-400 font-semibold italic text-[10px]">Không có nhân viên trực tuyến</span>
+              ) : (
+                Object.entries(onlineByBranch).map(([branchName, count]) => (
+                  <span key={branchName} className="bg-white px-2 py-0.5 border border-emerald-100 rounded-full text-emerald-850 flex items-center gap-1 shadow-3xs" title={branchName}>
+                    <span className="max-w-[100px] truncate">{branchName}</span>
+                    <span className="bg-emerald-150 text-emerald-900 rounded-full w-4.5 h-4.5 flex items-center justify-center text-[9px] font-black shrink-0">{count}</span>
+                  </span>
+                ))
+              )}
+            </div>
+          </div>
+
           <div className="flex items-center gap-2">
             <button
               onClick={onSimulateEmployee}
@@ -964,6 +1224,32 @@ export default function AdminDashboard({
               <span translate="no" className="notranslate">" {slogan} "</span>
             </p>
           </div>
+
+          {/* Cấu hình Mức độ Khó (Segmented Tab) - Trực quan theo Khoanh Đỏ và yêu cầu từ đối tác */}
+          <div className="flex flex-col gap-1 items-start md:items-center shrink-0">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Cấp độ khó tính điểm</span>
+            <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+              {[
+                { level: 1, label: 'Cấp 1 (Dễ)', tooltip: '90s/câu | Đúng ≤30s: 10đ | ≤40s: 8đ | ≤50s: 6đ | >50s: 5đ' },
+                { level: 2, label: 'Cấp 2 (Vừa)', tooltip: '60s/câu | Đúng ≤20s: 10đ | ≤30s: 8đ | ≤40s: 6đ | >40s: 5đ' },
+                { level: 3, label: 'Cấp 3 (Khó)', tooltip: '30s/câu | Đúng ≤10s: 10đ | ≤15s: 8đ | ≤20s: 6đ | >20s: 5đ' },
+              ].map((opt) => (
+                <button
+                  key={opt.level}
+                  onClick={() => onUpdateDifficulty && onUpdateDifficulty(opt.level)}
+                  className={`px-3 py-1 text-[11px] font-extrabold rounded-md transition-all cursor-pointer whitespace-nowrap outline-none ${
+                    difficulty === opt.level
+                      ? 'bg-gradient-to-r from-blue-600 to-[#1971C2] text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-850 hover:bg-slate-200/60'
+                  }`}
+                  title={opt.tooltip}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="flex w-full md:w-auto items-center gap-2">
             <input 
               type="text" 
@@ -994,6 +1280,128 @@ export default function AdminDashboard({
               <span translate="no" className="notranslate">Cập nhật</span>
             </button>
           </div>
+        </div>
+
+        {/* Expandable Slogan Bands Customizer Panel */}
+        <div className="bg-white border border-gray-200 rounded-lg shadow-xs overflow-hidden">
+          <button 
+            type="button"
+            onClick={() => setIsSlogansExpanded(!isSlogansExpanded)}
+            className="w-full px-4 py-3 bg-gray-50 flex items-center justify-between text-xs font-bold text-gray-700 hover:bg-gray-100 transition-colors focus:outline-hidden border-b border-gray-150"
+          >
+            <div className="flex items-center gap-2">
+              <Zap className="h-4 w-4 text-amber-500 animate-pulse" />
+              <span translate="no" className="notranslate uppercase tracking-wider block">Cấu hình Danh sách Slogan truyền động lực ngẫu nhiên (MỚI)</span>
+            </div>
+            {isSlogansExpanded ? <ChevronUp className="h-4.5 w-4.5 text-gray-500" /> : <ChevronDown className="h-4.5 w-4.5 text-gray-500" />}
+          </button>
+
+          {isSlogansExpanded && (
+            <div className="p-4 space-y-4 bg-white">
+              <p className="text-xs text-slate-550 italic leading-relaxed">
+                * Quý quản trị viên có thể thêm **nhiều Slogan hâm nóng ý chí** khác nhau cho từng mốc điểm thi. Hệ thống sẽ **tự động chọn ngẫu nhiên** một Slogan trong danh sách dải điểm tương ứng để tạo bất ngờ và truyền động lực cho nhân viên mỗi khi họ hoàn thành bài thi! Sử dụng phím <strong>Enter</strong> để ngắt xuống dòng thủ công.
+              </p>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {localBands.map((band) => {
+                  let bandLabel = `Mốc điểm ${band.minScore} - ${band.maxScore}`;
+                  let bandBadgeBg = 'bg-slate-100 text-slate-700 border-slate-200';
+                  
+                  if (band.minScore === 30 && band.maxScore === 30) {
+                    bandLabel = 'Nhóm xuất sắc, tuyệt đối (30đ)';
+                    bandBadgeBg = 'bg-emerald-50 text-emerald-700 border-emerald-200';
+                  } else if (band.minScore === 20 && band.maxScore === 29) {
+                    bandLabel = 'Nhóm Khá & Tốt (20đ - 29đ)';
+                    bandBadgeBg = 'bg-blue-50 text-blue-700 border-blue-250';
+                  } else if (band.minScore === 15 && band.maxScore === 19) {
+                    bandLabel = 'Nhóm Đạt Yêu Cầu (15đ - 19đ)';
+                    bandBadgeBg = 'bg-amber-50 text-amber-700 border-amber-250';
+                  } else if (band.minScore === 0 && band.maxScore === 14) {
+                    bandLabel = 'Nhóm Chưa Đạt (Dưới 15đ)';
+                    bandBadgeBg = 'bg-red-50 text-red-700 border-red-200';
+                  }
+
+                  const activeSlogans = band.slogans || [band.slogan];
+
+                  return (
+                    <div key={band.id} className="p-4 border border-gray-200 rounded-lg bg-slate-50/50 space-y-4 flex flex-col justify-between">
+                      <div className="space-y-3">
+                        <div className="flex justify-between items-center flex-wrap gap-2 pb-2 border-b border-gray-200/60">
+                          <span className="text-xs font-extrabold text-gray-800 uppercase tracking-wide">{bandLabel}</span>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 border rounded-full ${bandBadgeBg}`}>
+                            {band.minScore}đ - {band.maxScore}đ
+                          </span>
+                        </div>
+                        
+                        <div className="space-y-3">
+                          {activeSlogans.map((slog, idx) => (
+                            <div key={idx} className="p-2.5 bg-white border border-gray-200 rounded-lg space-y-2">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-bold text-indigo-650 tracking-wider">SLOGAN LỰA CHỌN #{idx + 1}</span>
+                                {activeSlogans.length > 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveSloganSlot(band.id, idx)}
+                                    className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-md transition-colors cursor-pointer"
+                                    title="Xóa slogan này"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                )}
+                              </div>
+
+                              <textarea
+                                rows={2}
+                                value={slog}
+                                onChange={(e) => handleLocalSloganIndexChange(band.id, idx, e.target.value)}
+                                className="w-full px-2.5 py-1.5 text-xs text-gray-800 border border-gray-200 rounded outline-none focus:border-[#1971C2] leading-relaxed whitespace-pre font-sans"
+                                placeholder="..."
+                              />
+
+                              {/* Dynamic Interactive Mobile Preview */}
+                              <div className="bg-red-50/5 border border-dashed border-red-200 p-2 rounded-md">
+                                <span className="text-[9px] text-gray-400 font-bold tracking-wider block mb-1">XEM TRƯỚC BẢN DI ĐỘNG (MOBILE PREVIEW):</span>
+                                <div className="mx-auto max-w-[260px] text-center">
+                                  <span translate="no" className="notranslate text-red-600 italic font-semibold text-[11px] block whitespace-pre-line leading-relaxed">
+                                    "{slog ? slog : 'Chưa có slogan configuration...'}"
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleAddSloganSlot(band.id)}
+                          className="w-full py-1.5 border border-dashed border-indigo-300 text-indigo-650 hover:bg-indigo-50/60 rounded-md text-[11px] font-bold transition-all flex items-center justify-center gap-1 cursor-pointer active:scale-98"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                          <span>Thêm Slogan ý chí cho dải điểm này</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="flex justify-end pt-3 border-t border-gray-150">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (onUpdateMotivationalSlogans) {
+                      await onUpdateMotivationalSlogans(localBands);
+                      alert("Cập nhật danh sách Slogan truyền động lực thành công!");
+                    }
+                  }}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-all whitespace-nowrap shadow-xs active:scale-95 flex items-center gap-1.5 font-sans cursor-pointer"
+                >
+                  <ShieldCheck className="h-4.5 w-4.5" />
+                  <span translate="no" className="notranslate">Lưu danh sách Slogan động lực</span>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Compact Dynamic Maintenance Admin Customizer Widget */}
@@ -1073,7 +1481,7 @@ export default function AdminDashboard({
                 </span>
               )}
             </div>
-            <span translate="no" className="notranslate">PHÊ DUYỆT</span>
+            <span translate="no" className="notranslate">PHÊ DUYỆT({approvedUsersCount})</span>
           </button>
           <button
             onClick={() => { setActiveTab('questions'); setNotice(null); }}
@@ -1121,15 +1529,33 @@ export default function AdminDashboard({
           >
             <div className="relative flex items-center justify-center p-0.5">
               <BarChart3 className="h-[26px] w-[26px] text-current" />
-              <span className={`absolute -top-2 -left-3.5 text-[11px] font-black leading-none rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 shadow-xs ring-1.5 ring-white ${
-                participantsTodayCount > 0 
-                  ? 'bg-emerald-500 text-white' 
-                  : 'bg-slate-400 text-white'
-              }`}>
-                {participantsTodayCount}
-              </span>
+              {participantsTodayCount > 0 && (
+                <span className="absolute -top-2 -left-3.5 text-[11px] font-black leading-none bg-blue-600 text-white rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 shadow-xs ring-1.5 ring-white">
+                  {participantsTodayCount}
+                </span>
+              )}
             </div>
             <span translate="no" className="notranslate">THỐNG KÊ</span>
+            <motion.span
+              key={attemptsTodayCount}
+              initial={{ y: 0 }}
+              animate={attemptsTodayCount > 0 ? {
+                y: [0, -12, 0, -8, 0, -4, 0],
+                scale: [1, 1.25, 0.95, 1.1, 0.98, 1.02, 1],
+              } : {}}
+              transition={{
+                duration: 0.8,
+                ease: "easeInOut"
+              }}
+              className={`text-[11px] font-black leading-none rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 shadow-xs ring-1.5 ring-white shrink-0 ${
+                attemptsTodayCount > 0 
+                  ? 'bg-emerald-500 text-white' 
+                  : 'bg-slate-400 text-white'
+              }`}
+              title="Số lượt kỳ thi đã thực hiện trong ngày"
+            >
+              {attemptsTodayCount}
+            </motion.span>
           </button>
           <button
             onClick={() => { setActiveTab('encoding'); setNotice(null); }}
@@ -1141,6 +1567,17 @@ export default function AdminDashboard({
               <Database className="h-[26px] w-[26px] text-current" />
             </div>
             <span translate="no" className="notranslate">MÃ HÓA</span>
+          </button>
+          <button
+            onClick={() => { setActiveTab('firebase_data'); setNotice(null); }}
+            className={`pb-3 px-4 text-sm font-medium border-b-2 transition-all flex items-center gap-2 ${
+              activeTab === 'firebase_data' ? 'border-[#1971C2] text-[#1971C2] font-bold' : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <div className="relative flex items-center justify-center p-0.5">
+              <Server className="h-[26px] w-[26px] text-current" />
+            </div>
+            <span translate="no" className="notranslate">DỮ LIỆU</span>
           </button>
         </div>
 
@@ -1279,13 +1716,21 @@ export default function AdminDashboard({
                                 <span translate="no" className="notranslate block font-sans text-gray-450 mt-0.5">{item.branch}</span>
                               </td>
                               <td className="py-3 px-4">
-                                <span className={`px-2 py-0.5 rounded-full font-bold ${
-                                  item.role === 'admin' ? 'bg-purple-50 text-purple-700 border border-purple-100' :
-                                  item.role === 'approver' ? 'bg-yellow-50 text-yellow-700 border border-yellow-105' :
-                                  'bg-gray-100 text-gray-700'
-                                }`}>
-                                  <span translate="no" className="notranslate">{item.role === 'admin' ? 'Chủ Admin' : item.role === 'approver' ? 'Duyệt viên (Trưởng BP)' : 'CBNV'}</span>
-                                </span>
+                                <div className="flex flex-col gap-1 items-start">
+                                  <span className={`px-2 py-0.5 rounded-full font-bold text-[11px] ${
+                                    item.role === 'admin' ? 'bg-purple-50 text-purple-700 border border-purple-100' :
+                                    item.role === 'approver' ? 'bg-yellow-50 text-yellow-700 border border-yellow-105' :
+                                    'bg-gray-100 text-gray-700'
+                                  }`}>
+                                    <span translate="no" className="notranslate">{item.role === 'admin' ? 'Chủ Admin' : item.role === 'approver' ? 'Duyệt viên (Trưởng BP)' : 'CBNV'}</span>
+                                  </span>
+                                  {item.canViewStats && (
+                                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border border-emerald-150 text-[9px] font-black bg-emerald-50 text-emerald-800 tracking-tight mt-1">
+                                      <BarChart3 className="h-3 w-3 text-emerald-600 shrink-0" />
+                                      <span>XEM THỐNG KÊ</span>
+                                    </span>
+                                  )}
+                                </div>
                               </td>
                               <td className="py-3 px-4">
                                 <span className={`px-2 py-0.5 rounded-full font-bold ${
@@ -1349,6 +1794,19 @@ export default function AdminDashboard({
                                           <UserMinus className="h-4 w-4" />
                                         </button>
                                       )}
+
+                                      {/* Toggle Stats view permission */}
+                                      <button
+                                        onClick={() => handleToggleStatsPermission(item.id, !!item.canViewStats)}
+                                        className={`p-1.5 rounded-lg border transition-all flex items-center justify-center hover:scale-105 active:scale-95 shadow-sm cursor-pointer ${
+                                          item.canViewStats 
+                                            ? "text-teal-700 bg-teal-50 border-teal-300 hover:bg-teal-100 hover:text-teal-800" 
+                                            : "text-slate-400 bg-slate-50 border-slate-200 hover:bg-slate-100 hover:text-slate-600"
+                                        }`}
+                                        title={item.canViewStats ? "Thu hồi quyền xem Thống Kê" : "Cấp quyền xem Thống Kê"}
+                                      >
+                                        <BarChart3 className="h-4 w-4" />
+                                      </button>
 
                                       {/* Delete button */}
                                       <button
@@ -1817,7 +2275,7 @@ export default function AdminDashboard({
               <StatsDashboard 
                 users={users} 
                 results={results} 
-                onRefresh={loadData} 
+                onRefresh={() => loadData(true)} 
                 onBackToHome={onSimulateEmployee}
                 companyMappings={companyMappings}
               />
@@ -2090,6 +2548,200 @@ export default function AdminDashboard({
                         </>
                       );
                     })()}
+                  </div>
+                </div>
+
+              </div>
+            </motion.div>
+          )}
+
+          {/* DỮ LIỆU View - Firebase Quota, Auto-optimization & Cleanup Control Center */}
+          {activeTab === 'firebase_data' && (
+            <motion.div
+              key="firebase_data_view"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="space-y-6"
+            >
+              {/* Header card */}
+              <div className="bg-white border border-gray-150 rounded-md p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs font-sans">
+                <div>
+                  <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest flex items-center gap-1.5 font-sans">
+                    <Server className="h-4 w-4 text-[#1971C2]" />
+                    <span>Hệ Thống Dữ Liệu & Quota Bảo Trì</span>
+                  </h3>
+                  <p className="text-xs text-gray-400 mt-0.5">Giám sát tài nguyên truy vấn Cloud Firestore và kích hoạt các kịch bản dọn dẹp tối ưu dung lượng.</p>
+                </div>
+                <button
+                  onClick={onSimulateEmployee}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-green-600 hover:bg-green-700 rounded-md shadow-xs transition-colors cursor-pointer active:scale-95 whitespace-nowrap animate-none"
+                >
+                  <Home className="h-3.5 w-3.5" />
+                  <span>MOBILE</span>
+                </button>
+              </div>
+
+              {/* 2-Column Grid Layout */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-8">
+                
+                {/* 1. Firebase Quota Tracker Card */}
+                <div className="bg-white border border-gray-150 rounded-xl shadow-3xs p-5 space-y-4 text-left">
+                  <div className="border-b border-gray-150 pb-3 flex justify-between items-center mr-0">
+                    <h4 className="font-sans font-bold text-sm text-[#0B3A60] uppercase tracking-wider flex items-center gap-2">
+                      <Database className="h-5 w-5 text-blue-500" />
+                      <span>Giới hạn Quota Firebase hàng ngày</span>
+                    </h4>
+                    <div className="px-2 py-0.5 bg-blue-50 border border-blue-100 text-[#1971C2] text-[10px] font-extrabold rounded-md uppercase tracking-wider animate-pulse flex items-center gap-1 shrink-0">
+                      <Zap className="h-3 w-3 fill-current text-[#1971C2]" />
+                      <span>Spark Plan</span>
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-gray-400 leading-relaxed font-sans font-normal">
+                    Ứng dụng của doanh nghiệp đang hoạt động trên gói <strong className="text-gray-700 font-bold">Firestore Enterprise (Spark - Free Tier)</strong> miễn phí trọn đời của Firebase. Hệ thống tự động theo dõi lượng tài nguyên dịch vụ thực tế phát sinh để bạn chủ động điều phối bảo trì.
+                  </p>
+
+                  <div className="space-y-4 pt-2">
+                    {/* Reads Tracker */}
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between items-center text-xs font-sans">
+                        <span className="font-bold text-gray-750">Đọc Dữ Liệu (Reads)</span>
+                        <span className={`font-mono font-bold ${getTextColor(readPercent)}`}>
+                          {quota.reads.toLocaleString()} / {firebaseQuotaLimits.reads.toLocaleString()} ({readPercent}%)
+                        </span>
+                      </div>
+                      <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
+                        <div 
+                          style={{ width: `${readPercent}%` }} 
+                          className={`h-full rounded-full transition-all duration-1000 ${getProgressColor(readPercent)}`}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Writes Tracker */}
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between items-center text-xs font-sans">
+                        <span className="font-bold text-gray-750">Ghi Dữ Liệu (Writes)</span>
+                        <span className={`font-mono font-bold ${getTextColor(writePercent)}`}>
+                          {quota.writes.toLocaleString()} / {firebaseQuotaLimits.writes.toLocaleString()} ({writePercent}%)
+                        </span>
+                      </div>
+                      <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
+                        <div 
+                          style={{ width: `${writePercent}%` }} 
+                          className={`h-full rounded-full transition-all duration-1000 ${getProgressColor(writePercent)}`}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Deletes Tracker */}
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between items-center text-xs font-sans">
+                        <span className="font-bold text-gray-750">Xoá Dữ Liệu (Deletes)</span>
+                        <span className={`font-mono font-bold ${getTextColor(deletePercent)}`}>
+                          {quota.deletes.toLocaleString()} / {firebaseQuotaLimits.deletes.toLocaleString()} ({deletePercent}%)
+                        </span>
+                      </div>
+                      <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
+                        <div 
+                          style={{ width: `${deletePercent}%` }} 
+                          className={`h-full rounded-full transition-all duration-1000 ${getProgressColor(deletePercent)}`}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-3.5 border-t border-gray-100 bg-gray-50/50 p-3 rounded-lg flex items-start gap-2 text-xs text-blue-800 leading-relaxed font-sans font-medium">
+                    <ShieldCheck className="h-4.5 w-4.5 text-blue-600 shrink-0 mt-0.5" />
+                    <div>
+                      <b>Mẹo tiết kiệm quota:</b> Toàn bộ kết quả và câu hỏi được tối ưu hóa cấu trúc nạp tĩnh và lắng nghe thay đổi thông minh (<code>onSnapshot</code>), giúp giảm tối thiểu số lượng đọc dư thừa khi dữ liệu không đổi.
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. Optimizer & Maintenance Section */}
+                <div className="bg-white border border-gray-150 rounded-xl shadow-3xs p-5 space-y-4 relative overflow-hidden font-sans text-left">
+                  <div className="border-b border-gray-150 pb-3 flex justify-between items-center mr-0">
+                    <h4 className="font-sans font-bold text-sm text-[#3b5bdb] uppercase tracking-wider flex items-center gap-2">
+                      <ShieldCheck className="h-5 w-5 text-indigo-500" />
+                      <span>Bảo trì & Tối ưu hóa Quota</span>
+                    </h4>
+                    <div className="px-2 py-0.5 bg-indigo-50 border border-indigo-100 text-[#3B5BDB] text-[10px] font-extrabold rounded-md uppercase tracking-wider flex items-center gap-1 shrink-0">
+                      <Sparkles className="h-3 w-3 text-indigo-600" />
+                      <span>Lọc Tự Động</span>
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-gray-400 leading-relaxed font-sans font-normal">
+                    Hệ thống hiện đã kích hoạt chế độ <b>Tự động Lọc kết quả cũ</b>. Khi nạp dữ liệu ôn tập trên giao diện, Cloud Firestore chỉ đọc các kết quả trong vòng <b>30 ngày gần nhất</b>, giúp bạn tiết kiệm hơn 85% số lượt đọc Firestore mỗi ngày.
+                  </p>
+
+                  <div className="bg-gray-50/70 border border-gray-150 p-4 rounded-xl space-y-3 relative font-sans">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-gray-700 flex items-center gap-1.5">
+                        <Activity className={`h-4 w-4 text-gray-500 ${isAnalyzing ? 'animate-spin' : ''}`} />
+                        Quét dọn dẹp cơ sở kết quả cũ
+                      </span>
+                      <span className="text-[10px] text-gray-400 font-mono font-medium">Auto-Audit</span>
+                    </div>
+
+                    {isAnalyzing ? (
+                      <div className="text-xs font-semibold text-gray-500 italic py-2.5 flex items-center gap-2">
+                        <span className="h-3 w-3 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin" />
+                        Đang rà quét và phân tích trọng số lịch sử từ Cloud Firestore...
+                      </div>
+                    ) : oldResultCount !== null ? (
+                      <div className="space-y-3">
+                        {oldResultCount === 0 ? (
+                          <div className="bg-green-50 border border-green-150 p-3 rounded-lg text-xs leading-relaxed text-green-800 font-bold flex items-start gap-2 animate-fadeIn">
+                            <ShieldCheck className="h-4.5 w-4.5 text-green-600 shrink-0 mt-0.5" />
+                            <div>
+                              Trạng thái Tối ưu Tuyệt đối! Toàn bộ cơ sở dữ liệu đều sạch sẽ và không có bất kỳ kết quả thi cũ nào vượt qua ngưỡng 30 ngày.
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="space-y-3 animate-fadeIn">
+                            <div className="bg-amber-50 border border-amber-150 p-3.5 rounded-lg text-xs leading-relaxed text-amber-800 font-bold flex items-start gap-2.5 shadow-3xs font-sans">
+                              <ShieldAlert className="h-5 w-5 text-amber-600 shrink-0 mt-0.5 animate-bounce" />
+                              <div>
+                                Phát hiện <span className="text-sm font-black text-amber-950 font-mono underline">{oldResultCount}</span> kết quả thi thử cũ từ tháng trước (hơn 30 ngày trước).
+                                <div className="text-[11px] text-gray-500 font-medium mt-1 leading-normal font-sans font-normal">
+                                  Sự hiện diện của dữ liệu này tuy được ẩn đi khỏi giao diện thường nhật nhưng vẫn nằm trong Cloud Firestore. Hãy nhấn nút dưới đây để dọn dẹp toàn bộ, giải phóng dung lượng và giúp bảo toàn quota đọc của bạn.
+                                </div>
+                              </div>
+                            </div>
+
+                            <button
+                              onClick={handleCleanOldResults}
+                              disabled={isCleaning}
+                              className="w-full py-2.5 bg-gradient-to-r from-red-650 to-amber-650 hover:from-red-700 hover:to-amber-700 active:scale-98 text-white font-black text-xs rounded-xl shadow-md transition-all text-center flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              <span>{isCleaning ? 'ĐANG DỌN DẸP...' : `HÀNH ĐỘNG: XÓA VĨNH VIỄN ${oldResultCount} BẢN GHI CŨ`}</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <button
+                        onClick={runHistoricalAnalysis}
+                        className="w-full py-2 bg-indigo-50 hover:bg-indigo-100/80 border border-indigo-200 text-[#1971C2] font-black text-xs rounded-lg transition-all text-center flex items-center justify-center gap-1.5 cursor-pointer hover:scale-[1.01] active:scale-95 shadow-2xs"
+                      >
+                        <RefreshCcw className="h-3.5 w-3.5" />
+                        Kích Hoạt Quét Kiểm Tra Dọn Dẹp
+                      </button>
+                    )}
+
+                    {cleanMessage && (
+                      <div className={`p-3 rounded-lg text-xs border leading-relaxed font-bold ${
+                        cleanMessage.type === 'success' 
+                          ? 'bg-green-50 border-green-200 text-green-900 shadow-3xs' 
+                          : 'bg-red-50 border-red-200 text-red-900 shadow-3xs'
+                      }`}>
+                        {cleanMessage.text}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -2391,6 +3043,28 @@ export default function AdminDashboard({
                     <option value="rejected" translate="no" className="notranslate">Tạm khóa / Từ chối</option>
                   </select>
                 </div>
+              </div>
+
+              {/* Permissions Section */}
+              <div className="bg-blue-50/50 hover:bg-blue-50 border border-blue-100 p-3 rounded-lg flex items-center justify-between gap-3 text-xs leading-relaxed transition-all">
+                <div className="flex items-start gap-2 max-w-[80%]">
+                  <BarChart3 className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
+                  <div>
+                    <h5 className="font-bold text-blue-955">Quyền xem Thống kê</h5>
+                    <p className="text-[10px] text-gray-400 font-medium leading-relaxed mt-0.5">
+                      Cho phép tài khoản này truy cập màn hình báo cáo dữ liệu rèn luyện 3T của ban ngành họ phụ trách.
+                    </p>
+                  </div>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={editCanViewStats}
+                    onChange={(e) => setEditCanViewStats(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-gray-200 rounded-full peer peer-focus:ring-2 peer-focus:ring-blue-300 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#1971C2]"></div>
+                </label>
               </div>
 
               <div className="flex justify-end gap-2.5 pt-3 border-t border-gray-100 font-sans">

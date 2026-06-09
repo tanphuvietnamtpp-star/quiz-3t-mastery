@@ -78,10 +78,13 @@ export default function ApproverDashboard({ user, onLogout, slogan = '3T Hội T
       : 0;
     
     // Evaluation rules (e.g. compliance class based on average score and participation)
-    let evaluationClass = 'ĐẠT 90%';
-    let style = 'bg-gray-100 text-gray-700';
+    let evaluationClass = 'CHƯA THI';
+    let style = 'bg-gray-100 text-gray-500 border border-gray-200';
 
-    if (count >= 5 && avg >= 28) {
+    if (count === 0) {
+      evaluationClass = 'CHƯA THI';
+      style = 'bg-gray-100 text-gray-400 border border-gray-200';
+    } else if (count >= 5 && avg >= 28) {
       evaluationClass = 'ĐẠT 150%';
       style = 'bg-blue-50 text-blue-700 border border-blue-100 font-bold';
     } else if (count >= 3 && avg >= 25) {
@@ -90,6 +93,9 @@ export default function ApproverDashboard({ user, onLogout, slogan = '3T Hội T
     } else if (count >= 1 && avg >= 20) {
       evaluationClass = 'ĐẠT 100%';
       style = 'bg-yellow-50 text-yellow-700 border border-yellow-105 font-bold';
+    } else {
+      evaluationClass = 'ĐẠT 90%';
+      style = 'bg-gray-100 text-gray-750 border border-gray-200';
     }
 
     return {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User } from './types';
+import { User, MotivationalSloganBand } from './types';
 import Landing from './components/Landing';
 import EmployeeDashboard from './components/EmployeeDashboard';
 import ApproverDashboard from './components/ApproverDashboard';
@@ -13,7 +13,10 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [simulateEmployee, setSimulateEmployee] = useState(false);
   const [slogan, setSlogan] = useState('3T Hội Tụ - Tân Phú Vươn Xa');
-  const [adminInitialTab, setAdminInitialTab] = useState<'users' | 'questions' | 'add_images' | 'qr' | 'stats' | 'encoding'>('users');
+  const [difficulty, setDifficulty] = useState(1);
+  const [motivationalSlogans, setMotivationalSlogans] = useState<MotivationalSloganBand[]>([]);
+
+  const [adminInitialTab, setAdminInitialTab] = useState<'users' | 'questions' | 'add_images' | 'qr' | 'stats' | 'encoding' | 'firebase_data'>('users');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
@@ -39,6 +42,33 @@ export default function App() {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
+  // Real-time active presence heartbeat to track online state
+  useEffect(() => {
+    if (!currentUser?.id) return;
+
+    const updatePresence = async () => {
+      try {
+        if (databaseService.isConfigured()) {
+          await databaseService.updateUser(currentUser.id, { lastActive: Date.now() });
+        }
+      } catch (err) {
+        console.warn('Silent presence update failed (ignoring background error):', err);
+      }
+    };
+
+    // Run immediately on mount or user shift
+    updatePresence();
+
+    const interval = setInterval(() => {
+      // Only write presence when page tab is visible to prevent wasting write operations
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        updatePresence();
+      }
+    }, 45000); // Heartbeat every 45 seconds
+
+    return () => clearInterval(interval);
+  }, [currentUser?.id]);
+
   // Secure Startup Logic: Synchronously clear legacy sessions and check saved states sequentially
   useEffect(() => {
     const loadStartupData = async () => {
@@ -63,6 +93,20 @@ export default function App() {
         setSlogan(freshSlogan);
       } catch (err) {
         console.warn("Failed to retrieve live slogan:", err);
+      }
+
+      try {
+        const freshMotivational = await databaseService.getMotivationalSlogans();
+        setMotivationalSlogans(freshMotivational);
+      } catch (err) {
+        console.warn("Failed to retrieve live motivational slogans:", err);
+      }
+
+      try {
+        const freshDifficulty = await databaseService.getDifficulty();
+        setDifficulty(freshDifficulty);
+      } catch (err) {
+        console.warn("Failed to retrieve live difficulty:", err);
       }
 
       // Check production host to strictly enforce showing the Landing/Login page under production domains
@@ -245,6 +289,25 @@ export default function App() {
     }
   };
 
+  const handleUpdateDifficulty = async (newLevel: number) => {
+    try {
+      await databaseService.saveDifficulty(newLevel);
+      setDifficulty(newLevel);
+    } catch (err) {
+      console.error("Lỗi khi cập nhật Độ khó:", err);
+    }
+  };
+
+  const handleUpdateMotivationalSlogans = async (newValue: MotivationalSloganBand[]) => {
+    try {
+      await databaseService.saveMotivationalSlogans(newValue);
+      setMotivationalSlogans(newValue);
+    } catch (err) {
+      console.error("Lỗi khi cập nhật danh sách slogan truyền động lực:", err);
+    }
+  };
+
+
   const handleUpdateMaintenance = async (isMaintenance: boolean, message: string) => {
     try {
       await databaseService.saveMaintenanceMode(isMaintenance, message);
@@ -368,6 +431,9 @@ export default function App() {
                       setSimulateEmployee(false);
                     }}
                     slogan={slogan}
+                    difficulty={difficulty}
+                    onUpdateDifficulty={handleUpdateDifficulty}
+                    motivationalSlogans={motivationalSlogans}
                   />
                 ) : (
                   <AdminDashboard 
@@ -379,15 +445,19 @@ export default function App() {
                     }}
                     slogan={slogan}
                     onUpdateSlogan={handleUpdateSlogan}
+                    difficulty={difficulty}
+                    onUpdateDifficulty={handleUpdateDifficulty}
                     initialTab={adminInitialTab}
                     maintenanceObj={maintenanceObj}
                     onUpdateMaintenance={handleUpdateMaintenance}
+                    motivationalSlogans={motivationalSlogans}
+                    onUpdateMotivationalSlogans={handleUpdateMotivationalSlogans}
                   />
                 )
               ) : currentUser.role === 'approver' ? (
-                <EmployeeDashboard user={currentUser} onLogout={handleLogout} slogan={slogan} />
+                <EmployeeDashboard user={currentUser} onLogout={handleLogout} slogan={slogan} difficulty={difficulty} onUpdateDifficulty={handleUpdateDifficulty} motivationalSlogans={motivationalSlogans} />
               ) : (
-                <EmployeeDashboard user={currentUser} onLogout={handleLogout} slogan={slogan} isAdminReview={false} />
+                <EmployeeDashboard user={currentUser} onLogout={handleLogout} slogan={slogan} difficulty={difficulty} onUpdateDifficulty={handleUpdateDifficulty} isAdminReview={false} motivationalSlogans={motivationalSlogans} />
               )}
             </motion.div>
           )}

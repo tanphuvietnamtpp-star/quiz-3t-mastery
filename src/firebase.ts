@@ -4,6 +4,7 @@ import {
   collection, 
   doc, 
   getDocs, 
+  getDoc,
   setDoc, 
   updateDoc, 
   deleteDoc,
@@ -14,7 +15,7 @@ import {
   onSnapshot
 } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
-import { User, Question, QuizResult, BRANCHES, DEPARTMENTS, CompanyMapping } from './types';
+import { User, Question, QuizResult, BRANCHES, DEPARTMENTS, CompanyMapping, MotivationalSloganBand } from './types';
 import { INITIAL_QUESTIONS } from './data/mockQuestions';
 import rawFirebaseConfig from './firebase-applet-config.json';
 
@@ -243,26 +244,14 @@ const forceSeedCompanyMappings = async () => {
   if (isFirebaseConfigured && db) {
     try {
       const configRef = doc(db, 'config', 'company_mappings');
-      const configSnap = await getDocFromServer(configRef).catch(() => null);
+      const snap = await getDocFromServer(configRef).catch(() => null);
       
-      let needsSeed = true;
-      if (configSnap && configSnap.exists()) {
-        const extMappings = configSnap.data()?.mappings || [];
-        // Check if new branches exist in the firestore config
-        const hasNewBN = extMappings.some((co: any) => 
-          co.branches?.some((br: any) => br.name.includes('TPP-BNI') || br.name === 'Chi Nhánh Bắc Ninh (TPP-BNI)')
-        );
-        const hasNewLA = extMappings.some((co: any) => 
-          co.branches?.some((br: any) => br.name.includes('TPP-LAN') || br.name === 'Chi Nhánh Long An (TPP-LAN)')
-        );
-        if (hasNewBN && hasNewLA) {
-          needsSeed = false;
-        }
-      }
-      
-      if (needsSeed) {
-        await setDoc(configRef, { mappings: INITIAL_COMPANY_MAPPINGS }, { merge: true });
-        console.log("[SUCCESS] Tự động cập nhật / Khởi tạo cấu trúc Chi nhánh mới TPP-BNI, TPP-LAN, TPP-CTY, TPP-314 lên Cloud Firestore.");
+      if (!snap || !snap.exists() || !snap.data()?.mappings || snap.data()?.mappings?.length === 0) {
+        // Only write INITIAL_COMPANY_MAPPINGS if the document does not exist, is empty or failed to load
+        await setDoc(configRef, { mappings: INITIAL_COMPANY_MAPPINGS });
+        console.log("[SUCCESS] Khởi tạo cấu trúc Công ty mặc định lên Cloud Firestore (Lần đầu tiên).");
+      } else {
+        console.log("[INFO] Cấu trúc Công ty đã tồn tại trên Firestore, giữ nguyên cấu hình tùy chỉnh của người dùng.");
       }
     } catch (err) {
       console.error("Automatic seeding of company mappings failed:", err);
@@ -407,6 +396,12 @@ export const getQuotaStats = (): { reads: number; writes: number; deletes: numbe
   return { reads: 0, writes: 0, deletes: 0 };
 };
 
+// Memory cache flag for questions to ensure we only load once from DB per app launch/refresh
+let isQuestionsFetchedThisSession = false;
+
+// Memory cache flag for quiz results to ensure we load from Firestore at least once per app launch/refresh
+let isQuizResultsFetchedThisSession = false;
+
 export const incrementQuota = (type: 'reads' | 'writes' | 'deletes', count: number = 1) => {
   const todayStr = new Date().toISOString().split('T')[0];
   const stats = getQuotaStats();
@@ -469,7 +464,8 @@ export const sanitizeUserList = (users: User[]): User[] => {
           department: 'Phòng Quản Lý Chất Lượng (P.QLCL)',
           branch: u.branch || 'Văn Phòng Nam Kỳ',
           employeeId: u.employeeId || '2018.00281',
-          createdAt: u.createdAt || new Date().toISOString()
+          createdAt: u.createdAt || new Date().toISOString(),
+          lastActive: u.lastActive || undefined
         };
       } else {
         // GỘP (Merge) data if there are duplicate Admin entries in the database
@@ -485,7 +481,8 @@ export const sanitizeUserList = (users: User[]): User[] => {
           department: 'Phòng Quản Lý Chất Lượng (P.QLCL)',
           branch: supremeAdminMerged.branch || u.branch || 'Văn Phòng Nam Kỳ',
           employeeId: supremeAdminMerged.employeeId || u.employeeId || '2018.00281',
-          password: supremeAdminMerged.password || u.password || '111222'
+          password: supremeAdminMerged.password || u.password || '111222',
+          lastActive: u.lastActive || supremeAdminMerged.lastActive
         };
       }
     }
@@ -734,8 +731,62 @@ export const databaseService = {
   },
 
   // Questions Manager
-  async getQuestions(): Promise<Question[]> {
+  async incrementQuestionVersion(): Promise<number> {
     await initializeDatabase();
+    let newVersion = 1;
+    if (isFirebaseConfigured && db) {
+      try {
+        const docRef = doc(db, 'config', 'question_version');
+        const snap = await getDoc(docRef);
+        incrementQuota('reads', 1);
+        if (snap.exists()) {
+          const currentVersion = snap.data().version || 0;
+          newVersion = currentVersion + 1;
+        }
+        await setDoc(docRef, { version: newVersion });
+        incrementQuota('writes', 1);
+        console.log(`[VERSION UPDATE] Đã cập nhật version bộ câu hỏi mới lên Firestore: v${newVersion}`);
+      } catch (err) {
+        console.warn('Error incrementing question version:', err);
+      }
+    }
+    // Storage locally so we don't clear it immediately on our own machine
+    localStorage.setItem('3t_local_question_version', String(newVersion));
+    return newVersion;
+  },
+
+  async getQuestions(forceRefresh = false): Promise<Question[]> {
+    await initializeDatabase();
+    
+    // Check version difference between Firestore and LocalStorage
+    if (isFirebaseConfigured && db && !forceRefresh) {
+      try {
+        const docRef = doc(db, 'config', 'question_version');
+        const snap = await getDoc(docRef);
+        incrementQuota('reads', 1);
+        if (snap.exists()) {
+          const cloudVersion = snap.data().version || 0;
+          const localVersion = parseInt(localStorage.getItem('3t_local_question_version') || '0', 10);
+          if (cloudVersion > localVersion) {
+            console.log(`[VERSION OUTDATED] Phát hiện bộ câu hỏi mới (v${cloudVersion} > v${localVersion}). Tiến hành xóa cache và tải lại!`);
+            localStorage.removeItem('3t_questions');
+            localStorage.setItem('3t_local_question_version', String(cloudVersion));
+            isQuestionsFetchedThisSession = false; // reset the cache flag to force refetch
+          } else {
+            console.log(`[VERSION MATCH] Bộ câu hỏi cục bộ trùng khớp với cloud (v${cloudVersion}). Dùng cache.`);
+          }
+        }
+      } catch (err) {
+        console.warn('Error checking question version:', err);
+      }
+    }
+    
+    // Hard check: If already fetched in this session, grab from localStorage cache and block Firestore reads
+    if (isQuestionsFetchedThisSession && !forceRefresh) {
+      console.log("[CACHE SUCCESS] Đã lấy bộ câu hỏi từ LocalStorage! Tránh gọi lại Firebase thành công.");
+      return getLocalData<Question[]>('3t_questions', INITIAL_QUESTIONS);
+    }
+
     if (isFirebaseConfigured && db) {
       try {
         const querySnapshot = await getDocs(collection(db, 'questions'));
@@ -744,12 +795,18 @@ export const databaseService = {
         querySnapshot.forEach((doc) => {
           questions.push(doc.data() as Question);
         });
-        if (questions.length > 0) return questions;
+        if (questions.length > 0) {
+          setLocalData('3t_questions', questions);
+          isQuestionsFetchedThisSession = true;
+          console.log("[FIREBASE SUCCESS] Đã nạp thành công bộ câu hỏi từ Firestore và lưu vào LocalStorage!");
+          return questions;
+        }
       } catch (err) {
         console.warn('Real Firestore read error for questions:', err);
       }
     }
 
+    isQuestionsFetchedThisSession = true; // Block subsequent reads even on mock questions to protect quota
     return getLocalData<Question[]>('3t_questions', INITIAL_QUESTIONS);
   },
 
@@ -761,6 +818,7 @@ export const databaseService = {
           await setDoc(doc(db, 'questions', q.id), q);
           incrementQuota('writes', 1);
         }
+        await this.incrementQuestionVersion();
       } catch (err) {
         handleFirestoreError(err, OperationType.WRITE, 'questions');
       }
@@ -780,7 +838,9 @@ export const databaseService = {
     await initializeDatabase();
     if (isFirebaseConfigured && db) {
       try {
-        // Mocking deletion pattern if connected
+        await deleteDoc(doc(db, 'questions', id));
+        incrementQuota('deletes', 1);
+        await this.incrementQuestionVersion();
       } catch (err) {
         handleFirestoreError(err, OperationType.DELETE, `questions/${id}`);
       }
@@ -791,8 +851,23 @@ export const databaseService = {
   },
 
   // Quiz Results / History
-  async getQuizResults(fetchOnlyRecent = true): Promise<QuizResult[]> {
+  async getQuizResults(fetchOnlyRecent = true, forceRefresh = false): Promise<QuizResult[]> {
     await initializeDatabase();
+
+    // If we're not forcing a refresh, and we already fetched results from Cloud in this session,
+    // check if we have results in local storage. Return them instantly to save massive read counts on Firestore!
+    if (!forceRefresh && isQuizResultsFetchedThisSession) {
+      const localData = getLocalData<QuizResult[]>('3t_quiz_results', []);
+      if (localData.length > 0) {
+        console.log(`[CACHE SUCCESS] Lấy ${localData.length} kết quả từ LocalStorage sạch sẽ, tiêu thụ 0 lượt đọc Firestore!`);
+        if (fetchOnlyRecent) {
+          const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+          return localData.filter(r => r.timestamp >= thirtyDaysAgo);
+        }
+        return localData;
+      }
+    }
+
     if (isFirebaseConfigured && db) {
       try {
         let qRef: any = collection(db, 'quiz_results');
@@ -807,6 +882,17 @@ export const databaseService = {
         querySnapshot.forEach((doc) => {
           results.push(doc.data() as QuizResult);
         });
+
+        // Merge or replace cached results in localStorage smartly
+        const localData = getLocalData<QuizResult[]>('3t_quiz_results', []);
+        const resultMap = new Map<string, QuizResult>();
+        localData.forEach(r => resultMap.set(r.id, r));
+        results.forEach(r => resultMap.set(r.id, r));
+        const mergedResults = Array.from(resultMap.values());
+        setLocalData('3t_quiz_results', mergedResults);
+
+        isQuizResultsFetchedThisSession = true;
+        console.log(`[FIREBASE SUCCESS] Đã tải mới ${results.length} kết quả từ Firestore và làm mới bộ nhớ đệm.`);
         return results;
       } catch (err) {
         console.warn('Error reading real quiz results:', err);
@@ -814,6 +900,7 @@ export const databaseService = {
     }
 
     const localData = getLocalData<QuizResult[]>('3t_quiz_results', []);
+    isQuizResultsFetchedThisSession = true;
     if (fetchOnlyRecent) {
       const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
       return localData.filter(r => r.timestamp >= thirtyDaysAgo);
@@ -891,6 +978,151 @@ export const databaseService = {
     }
     localStorage.setItem('3t_slogan', slogan);
   },
+
+  async getDifficulty(): Promise<number> {
+    await initializeDatabase();
+    if (isFirebaseConfigured && db) {
+      try {
+        const querySnapshot = await getDocs(collection(db, 'config'));
+        incrementQuota('reads', querySnapshot.size);
+        let level = 1;
+        querySnapshot.forEach((doc) => {
+          if (doc.id === 'difficulty') {
+            level = Number(doc.data().level) || 1;
+          }
+        });
+        if (level) return level;
+      } catch (err) {
+        console.warn('Error reading difficulty from Firestore:', err);
+      }
+    }
+    const local = localStorage.getItem('3t_quiz_difficulty');
+    return local ? Number(local) : 1;
+  },
+
+  async saveDifficulty(level: number): Promise<void> {
+    await initializeDatabase();
+    if (isFirebaseConfigured && db) {
+      try {
+        await setDoc(doc(db, 'config', 'difficulty'), { level: level });
+        incrementQuota('writes', 1);
+      } catch (err) {
+        console.warn('Error writing difficulty to Firestore:', err);
+      }
+    }
+    localStorage.setItem('3t_quiz_difficulty', String(level));
+  },
+
+  async getMotivationalSlogans(): Promise<MotivationalSloganBand[]> {
+    await initializeDatabase();
+    const fallbackSlogans: MotivationalSloganBand[] = [
+      {
+        id: 'excellent',
+        minScore: 30,
+        maxScore: 30,
+        slogan: 'Phản xạ ánh sáng - Tốc độ dẫn đầu,\nxứng danh chiến binh 3T thực thụ!',
+        slogans: [
+          'Phản xạ ánh sáng - Tốc độ dẫn đầu,\nxứng danh chiến binh 3T thực thụ!',
+          'Trí tuệ tinh thông, phản xạ thần tốc -\nBạn chính là tấm gương tốc độ 3T!',
+          'Bứt phá mọi giới hạn -\nTốc độ tuyệt đối tạo nên vị thế dẫn đầu!'
+        ]
+      },
+      {
+        id: 'good',
+        minScore: 20,
+        maxScore: 29,
+        slogan: 'Chính xác thôi chưa đủ -\nĐẩy nhanh tốc độ để chiếm lĩnh đỉnh cao!',
+        slogans: [
+          'Chính xác thôi chưa đủ -\nĐẩy nhanh tốc độ để chiếm lĩnh đỉnh cao!',
+          'Kiến thức rất vững vàng -\nHãy rèn thêm phản xạ để tối ưu hóa thời gian!',
+          'Chậm một giây, lỡ một nhịp -\nCố gắng rút ngắn thời gian làm bài ở lượt sau!'
+        ]
+      },
+      {
+        id: 'passing',
+        minScore: 15,
+        maxScore: 19,
+        slogan: 'Vượt qua thử thách -\nTiếp tục mài giũa tư duy để tăng tốc phản xạ!',
+        slogans: [
+          'Vượt qua thử thách -\nTiếp tục mài giũa tư duy để tăng tốc phản xạ!',
+          'Tốc độ tạo khoảng cách -\nHãy nỗ lực luyện tập để phản xạ nhanh như chớp!',
+          'Kiến thức nằm lòng, phản xạ tự nhiên -\nHãy luyện tập để không còn độ trễ!'
+        ]
+      },
+      {
+        id: 'unsatisfactory',
+        minScore: 0,
+        maxScore: 14,
+        slogan: 'Tốc độ là sống còn - Hãy luyện tập thật nhiều\nđể phản xạ nhanh hơn!',
+        slogans: [
+          'Tốc độ là sống còn - Hãy luyện tập thật nhiều\nđể phản xạ nhanh hơn!',
+          'Thất bại là bước đệm -\nLuyện tập không ngừng, làm chủ tốc độ 3T!',
+          'Quyết tâm bứt phá -\nĐập tan độ trễ để nâng tầm bản thân ở lượt thi tới!'
+        ]
+      }
+    ];
+
+    if (isFirebaseConfigured && db) {
+      try {
+        const querySnapshot = await getDocs(collection(db, 'config'));
+        incrementQuota('reads', querySnapshot.size);
+        let list: MotivationalSloganBand[] | null = null;
+        querySnapshot.forEach((doc) => {
+          if (doc.id === 'motivational_slogans') {
+            list = doc.data().slogans;
+          }
+        });
+        if (list && Array.isArray(list)) {
+          // Normalize to make sure slogans arrays exist
+          return list.map(item => {
+            if (!item.slogans || !Array.isArray(item.slogans) || item.slogans.length === 0) {
+              return {
+                ...item,
+                slogans: [item.slogan || '']
+              };
+            }
+            return item;
+          });
+        }
+      } catch (err) {
+        console.warn('Error reading motivational slogans from Firestore:', err);
+      }
+    }
+    const local = localStorage.getItem('3t_motivational_slogans');
+    if (local) {
+      try {
+        const parsed = JSON.parse(local);
+        if (Array.isArray(parsed)) {
+          return parsed.map((item: any) => {
+            if (!item.slogans || !Array.isArray(item.slogans) || item.slogans.length === 0) {
+              return {
+                ...item,
+                slogans: [item.slogan || '']
+              };
+            }
+            return item;
+          });
+        }
+      } catch {
+        // ignore
+      }
+    }
+    return fallbackSlogans;
+  },
+
+  async saveMotivationalSlogans(slogans: MotivationalSloganBand[]): Promise<void> {
+    await initializeDatabase();
+    if (isFirebaseConfigured && db) {
+      try {
+        await setDoc(doc(db, 'config', 'motivational_slogans'), { slogans });
+        incrementQuota('writes', 1);
+      } catch (err) {
+        console.warn('Error writing motivational slogans to Firestore:', err);
+      }
+    }
+    localStorage.setItem('3t_motivational_slogans', JSON.stringify(slogans));
+  },
+
 
   async getMaintenanceMode(): Promise<{ isMaintenance: boolean; message: string }> {
     await initializeDatabase();
@@ -1032,7 +1264,10 @@ export const databaseService = {
             mappings = doc.data().mappings;
           }
         });
-        if (mappings) return mappings;
+        if (mappings) {
+          setLocalData('3t_company_mappings', mappings);
+          return mappings;
+        }
       } catch (err) {
         console.warn('Error reading company mappings from Firestore:', err);
       }
