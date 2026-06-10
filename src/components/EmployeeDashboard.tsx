@@ -492,9 +492,9 @@ export default function EmployeeDashboard({
   const [allResults, setAllResults] = useState<QuizResult[]>([]);
 
   // Dynamic level:
-  // Cấp 1: 3 lượt liên tiếp đạt 30/30 -> Cấp 2
-  // Cấp 2: 3 lượt liên tiếp đạt 30/30 -> Cấp 3; 3 lượt liên tiếp < 20 -> Cấp 1; Còn lại giữ nguyên
-  // Cấp 3: 3 lượt liên tiếp < 20 -> Cấp 2; Còn lại giữ nguyên
+  // Cấp 1: 5 lượt liên tiếp đạt 30/30 -> Cấp 2
+  // Cấp 2: 5 lượt liên tiếp đạt 30/30 -> Cấp 3; 5 lượt liên tiếp < 20 -> Cấp 1; Còn lại giữ nguyên
+  // Cấp 3: 5 lượt liên tiếp < 20 -> Cấp 2; Còn lại giữ nguyên
   const difficultyState = useMemo(() => {
     const chronologicalResults = [...results].sort((a, b) => a.timestamp - b.timestamp);
     
@@ -512,7 +512,7 @@ export default function EmployeeDashboard({
           consecutiveMaxAtLevel = 0;
         }
         
-        if (consecutiveMaxAtLevel >= 3) {
+        if (consecutiveMaxAtLevel >= 5) {
           currentLevel = 2;
           consecutiveMaxAtLevel = 0;
           consecutiveLowAtLevel = 0;
@@ -529,11 +529,11 @@ export default function EmployeeDashboard({
           consecutiveLowAtLevel = 0;
         }
         
-        if (consecutiveMaxAtLevel >= 3) {
+        if (consecutiveMaxAtLevel >= 5) {
           currentLevel = 3;
           consecutiveMaxAtLevel = 0;
           consecutiveLowAtLevel = 0;
-        } else if (consecutiveLowAtLevel >= 3) {
+        } else if (consecutiveLowAtLevel >= 5) {
           currentLevel = 1;
           consecutiveMaxAtLevel = 0;
           consecutiveLowAtLevel = 0;
@@ -550,7 +550,7 @@ export default function EmployeeDashboard({
           consecutiveLowAtLevel = 0;
         }
         
-        if (consecutiveLowAtLevel >= 3) {
+        if (consecutiveLowAtLevel >= 5) {
           currentLevel = 2;
           consecutiveMaxAtLevel = 0;
           consecutiveLowAtLevel = 0;
@@ -2712,7 +2712,7 @@ export default function EmployeeDashboard({
                     <div className="text-right shrink-0">
                       {difficulty === 1 && (
                         <span className="text-[9px] font-extrabold text-blue-600 bg-blue-50 border border-blue-200/50 px-2 py-0.5 rounded-full shadow-2xs">
-                          {difficultyState.consecutiveMax > 0 ? `🎯 Đạt 30/30: ${difficultyState.consecutiveMax}/3` : '🎯 Thử thách 30/30'}
+                          {difficultyState.consecutiveMax > 0 ? `🎯 Đạt 30/30: ${difficultyState.consecutiveMax}/5` : '🎯 Thử thách 30/30'}
                         </span>
                       )}
                       {difficulty === 2 && (
@@ -2724,9 +2724,9 @@ export default function EmployeeDashboard({
                             : 'text-slate-650 bg-slate-100 border-slate-200'
                         }`}>
                           {difficultyState.consecutiveMax > 0 
-                            ? `🎯 Đạt 30/30: ${difficultyState.consecutiveMax}/3` 
+                            ? `🎯 Đạt 30/30: ${difficultyState.consecutiveMax}/5` 
                             : difficultyState.consecutiveLow > 0
-                            ? `⚠️ Điểm < 20: ${difficultyState.consecutiveLow}/3`
+                            ? `⚠️ Điểm < 20: ${difficultyState.consecutiveLow}/5`
                             : 'Bền bỉ Cấp 2'
                           }
                         </span>
@@ -2738,7 +2738,7 @@ export default function EmployeeDashboard({
                             : 'text-emerald-700 bg-emerald-50 border-emerald-200'
                         }`}>
                           {difficultyState.consecutiveLow > 0
-                            ? `⚠️ Điểm < 20: ${difficultyState.consecutiveLow}/3`
+                            ? `⚠️ Điểm < 20: ${difficultyState.consecutiveLow}/5`
                             : '👑 Vua Tốc Độ Cấp 3'
                           }
                         </span>

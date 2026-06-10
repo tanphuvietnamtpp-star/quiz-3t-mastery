@@ -686,6 +686,23 @@ export const databaseService = {
     return unsubscribe;
   },
 
+  subscribeUser(userId: string, onUpdate: (user: User | null) => void): () => void {
+    if (!isFirebaseConfigured || !db || !userId) {
+      return () => {};
+    }
+    const docRef = doc(db, 'user_profiles', userId);
+    return onSnapshot(docRef, (docSnapshot) => {
+      incrementQuota('reads', 1);
+      if (docSnapshot.exists()) {
+        onUpdate(docSnapshot.data() as User);
+      } else {
+        onUpdate(null);
+      }
+    }, (err) => {
+      console.warn("Error subscribing to user:", err);
+    });
+  },
+
   async updateUser(userId: string, data: Partial<User>): Promise<void> {
     await initializeDatabase();
     if (!isFirebaseConfigured || !db) {
