@@ -331,8 +331,8 @@ export default function App() {
   }
 
   const hasBypassParam = typeof window !== 'undefined' && window.location.search.includes('bypass=true');
-  const isAdminPhone = currentUser?.phone === '0907767304';
-  const isSystemMaintenance = maintenanceObj.isMaintenance && !isAdminPhone && !hasBypassParam;
+  const isAdminUser = currentUser?.role === 'admin' || currentUser?.phone === '0907767304';
+  const isSystemMaintenance = maintenanceObj.isMaintenance && !isAdminUser && (!currentUser ? !hasBypassParam : true);
 
   if (isSystemMaintenance) {
     return (
@@ -369,7 +369,12 @@ export default function App() {
             <div className="pt-4 border-t border-slate-700/50 w-full">
               <button 
                 onClick={() => {
-                  window.location.search = '?bypass=true';
+                  const pass = prompt("Nhập mật mã xác thực quản trị viên để mở cổng sơ cứu:");
+                  if (pass === '111222') {
+                    window.location.search = '?bypass=true';
+                  } else if (pass !== null) {
+                    alert("Mật mã quản trị viên không chính xác!");
+                  }
                 }}
                 className="w-full py-2.5 bg-slate-700 hover:bg-slate-600 active:scale-98 text-slate-200 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 border border-slate-600 shadow-sm font-sans uppercase tracking-wider"
               >

@@ -289,6 +289,7 @@ export default function StatsDashboard({ users, results, onRefresh, onBackToHome
       branch: string;
       attempts: number;
       bestScore: number;
+      totalScore: number;
       totalDuration: number;
       lastAttempt: number;
     }> = {};
@@ -306,12 +307,14 @@ export default function StatsDashboard({ users, results, onRefresh, onBackToHome
           branch: res.branch || matchedUser?.branch || 'Hội sở',
           attempts: 0,
           bestScore: 0,
+          totalScore: 0,
           totalDuration: 0,
           lastAttempt: 0
         };
       }
       grouped[key].attempts += 1;
       grouped[key].totalDuration += res.duration || 0;
+      grouped[key].totalScore += res.score || 0;
       if (res.score > grouped[key].bestScore) {
         grouped[key].bestScore = res.score;
       }
@@ -320,7 +323,12 @@ export default function StatsDashboard({ users, results, onRefresh, onBackToHome
       }
     });
 
-    return Object.values(grouped).sort((a, b) => b.attempts - a.attempts || b.bestScore - a.bestScore);
+    return Object.values(grouped)
+      .map(p => ({
+        ...p,
+        avgScore: p.attempts > 0 ? parseFloat((p.totalScore / p.attempts).toFixed(1)) : 0
+      }))
+      .sort((a, b) => b.attempts - a.attempts || b.avgScore - a.avgScore);
   };
 
   const participantsList = getParticipantsForPeriod(listPeriod).filter(p => {
@@ -414,6 +422,7 @@ export default function StatsDashboard({ users, results, onRefresh, onBackToHome
         branch: string; 
         attempts: number; 
         maxScore: number; 
+        totalScore: number;
         avgDuration: number;
         totalDuration: number;
       } 
@@ -431,12 +440,14 @@ export default function StatsDashboard({ users, results, onRefresh, onBackToHome
             branch: res.branch || 'Hội sở',
             attempts: 0,
             maxScore: 0,
+            totalScore: 0,
             avgDuration: 0,
             totalDuration: 0
           };
         }
         counts[uid].attempts += 1;
         counts[uid].totalDuration += res.duration || 0;
+        counts[uid].totalScore += res.score || 0;
         if (res.score > counts[uid].maxScore) {
           counts[uid].maxScore = res.score;
         }
@@ -444,11 +455,15 @@ export default function StatsDashboard({ users, results, onRefresh, onBackToHome
     });
 
     return Object.values(counts)
-      .map(u => ({
-        ...u,
-        avgDuration: u.attempts > 0 ? Math.round(u.totalDuration / u.attempts) : 0
-      }))
-      .sort((a, b) => b.attempts - a.attempts || b.maxScore - a.maxScore) // Sort primarily by attempt volume, then score
+      .map(u => {
+        const avgScore = u.attempts > 0 ? parseFloat((u.totalScore / u.attempts).toFixed(1)) : 0;
+        return {
+          ...u,
+          avgScore,
+          avgDuration: u.attempts > 0 ? Math.round(u.totalDuration / u.attempts) : 0
+        };
+      })
+      .sort((a, b) => b.attempts - a.attempts || b.avgScore - a.avgScore) // Sort primarily by attempt volume, then average score
       .slice(0, 5);
   };
 
@@ -651,8 +666,15 @@ export default function StatsDashboard({ users, results, onRefresh, onBackToHome
       const totalScore = resList.reduce((sum, r) => sum + r.score, 0);
       const avgScore = parseFloat((totalScore / resList.length).toFixed(1));
       const daily = getDailyAveragesObj(resList);
+      
+      const branchCodes = Array.from(new Set(resList.map(r => {
+        const branchName = r.branch || users.find(u => u.id === r.userId || u.name === r.userName)?.branch || '';
+        return getBranchCodeOnly(branchName);
+      }).filter(Boolean)));
+      const branchSuffix = branchCodes.length > 0 ? ` (${branchCodes.join(', ')})` : '';
+
       return {
-        name: deptName,
+        name: deptName + branchSuffix,
         avgScore,
         attempts: resList.length,
         daily
@@ -783,26 +805,34 @@ export default function StatsDashboard({ users, results, onRefresh, onBackToHome
     };
   }, [scorecardDeptFilter, filteredScorecardResults]);
 
-  // Precompute score lookup: map[user_key_or_name][date_str] -> best_score
-  const scorecardLookup: Record<string, Record<string, number>> = {};
+  // Precompute score lookup: map[user_key_or_name][date_str] -> avg_score
+  const scorecardSumLookup: Record<string, Record<string, number>> = {};
   const scorecardAttemptsLookup: Record<string, Record<string, number>> = {};
   filteredScorecardResults.forEach(r => {
     const userKey = r.userId || r.userName;
     const d = new Date(r.timestamp);
     const dateStr = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
     
-    if (!scorecardLookup[userKey]) {
-      scorecardLookup[userKey] = {};
+    if (!scorecardSumLookup[userKey]) {
+      scorecardSumLookup[userKey] = {};
     }
     if (!scorecardAttemptsLookup[userKey]) {
       scorecardAttemptsLookup[userKey] = {};
     }
     
-    if (scorecardLookup[userKey][dateStr] === undefined || r.score > scorecardLookup[userKey][dateStr]) {
-      scorecardLookup[userKey][dateStr] = r.score;
-    }
-    
+    scorecardSumLookup[userKey][dateStr] = (scorecardSumLookup[userKey][dateStr] || 0) + r.score;
     scorecardAttemptsLookup[userKey][dateStr] = (scorecardAttemptsLookup[userKey][dateStr] || 0) + 1;
+  });
+
+  // Calculate average scores with 1 decimal digit
+  const scorecardLookup: Record<string, Record<string, number>> = {};
+  Object.keys(scorecardSumLookup).forEach(userKey => {
+    scorecardLookup[userKey] = {};
+    Object.keys(scorecardSumLookup[userKey]).forEach(dateStr => {
+      const sum = scorecardSumLookup[userKey][dateStr];
+      const count = scorecardAttemptsLookup[userKey][dateStr];
+      scorecardLookup[userKey][dateStr] = count > 0 ? parseFloat((sum / count).toFixed(1)) : 0;
+    });
   });
 
   // Unique merged personnel records for scorecard
@@ -1064,12 +1094,12 @@ export default function StatsDashboard({ users, results, onRefresh, onBackToHome
           ) : (
             <div className="bg-white border border-gray-150 rounded-xl shadow-3xs p-4 sm:p-5 space-y-3.5 text-left flex flex-col justify-between h-full min-h-[350px] font-sans">
               
-              <div className="border-b border-gray-150 pb-2.5 flex justify-between items-center shrink-0">
-                <h4 className="font-sans font-extrabold text-xs text-[#0B3A60] uppercase tracking-wider flex items-center gap-1.5 col-span-2">
-                  <Activity className="h-4.5 w-4.5 text-blue-500 shrink-0 animate-pulse" />
+              <div className="border-b border-gray-150 pb-3 flex justify-between items-center shrink-0">
+                <h4 className="font-sans font-bold text-sm text-[#0B3A60] uppercase tracking-wider flex items-center gap-2 col-span-2">
+                  <Activity className="h-5 w-5 text-blue-500 shrink-0 animate-pulse" />
                   <span>SỐ CBNV ONLINE TRONG NGÀY</span>
                 </h4>
-                <span className="px-2.5 py-0.5 bg-blue-50 border border-blue-100 text-[#1971C2] text-[11px] font-black rounded-full shadow-2xs font-sans shrink-0">
+                <span className="px-2.5 py-0.5 bg-blue-50 border border-blue-100 text-[#1971C2] text-xs font-extrabold rounded-full shadow-2xs font-sans shrink-0">
                   CÔNG TY: {totalCompanyOnlineToday} người
                 </span>
               </div>
@@ -1096,24 +1126,24 @@ export default function StatsDashboard({ users, results, onRefresh, onBackToHome
               </div>
 
               {/* Scrollable list of departments with online today count - highly dense & optimized to view more rows */}
-              <div className="flex-1 overflow-y-auto space-y-2 max-h-[220px] pr-1">
+              <div className="flex-1 overflow-y-auto space-y-1 max-h-[220px] pr-1">
                 {filteredOnlineTodayByDept.length === 0 ? (
                   <div className="text-center py-6 text-xs text-gray-400 font-medium">
                     Không tìm thấy bộ phận/đơn vị phù hợp
                   </div>
                 ) : (
                   filteredOnlineTodayByDept.map((dept) => (
-                    <div key={dept.name} className="py-1 border-b border-gray-100 last:border-0 hover:bg-slate-50/50 transition-colors">
-                      <div className="flex justify-between items-center text-[11px] leading-tight mb-1">
+                    <div key={dept.name} className="py-2 border-b border-slate-100 last:border-0 hover:bg-slate-50/30 px-1 rounded-md transition-colors">
+                      <div className="flex justify-between items-center text-xs mb-1.5">
                         <div className="flex items-center gap-1.5 min-w-0">
                           <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dept.count > 0 ? 'bg-emerald-500 animate-pulse' : 'bg-gray-300'}`}></span>
-                          <span className="font-bold text-gray-750 truncate max-w-[190px]">{dept.name}</span>
+                          <span className="font-bold text-gray-750 break-words leading-tight">{dept.name}</span>
                         </div>
-                        <span className="font-extrabold text-gray-600 font-mono shrink-0 ml-2">
+                        <span className="font-bold text-gray-600 font-mono shrink-0 ml-2">
                           {dept.count} <span className="text-gray-400 font-normal font-sans">/</span> {dept.totalInDept} <span className="text-gray-400 font-semibold font-sans">người</span> ({dept.totalInDept > 0 ? Math.round((dept.count / dept.totalInDept) * 100) : 0}%)
                         </span>
                       </div>
-                      <div className="h-1 w-full bg-slate-50 rounded-full border border-gray-100 overflow-hidden font-sans">
+                      <div className="h-2 w-full bg-gray-50 rounded-full border border-gray-100 overflow-hidden font-sans">
                         <div 
                           style={{ width: `${dept.totalInDept > 0 ? (dept.count / dept.totalInDept) * 100 : 0}%` }} 
                           className={`h-full rounded-full transition-all duration-300 ${dept.count > 0 ? 'bg-blue-500' : 'bg-gray-200'}`}
@@ -1207,7 +1237,7 @@ export default function StatsDashboard({ users, results, onRefresh, onBackToHome
                         <span>{userStats.attempts} lượt thi thử</span>
                       </div>
                       <div className="text-[10px] text-gray-400 font-medium">
-                        Điểm đỉnh: <b className="text-gray-600 font-mono">{userStats.maxScore}/30</b>
+                        Điểm trung bình: <b className="text-gray-600 font-mono">{userStats.avgScore}/30</b>
                       </div>
                     </div>
                   </motion.div>
@@ -1239,15 +1269,15 @@ export default function StatsDashboard({ users, results, onRefresh, onBackToHome
             </span>
           </div>
 
-          <div className="space-y-3">
+          <div className="space-y-1">
             {branchStats.map((branch, idx) => (
-              <div key={branch.name} className="space-y-1">
-                <div className="flex justify-between items-center text-xs">
+              <div key={branch.name} className="py-2 border-b border-slate-100 last:border-0 hover:bg-slate-50/30 px-1 rounded-md transition-colors">
+                <div className="flex justify-between items-center text-xs mb-1.5">
                   <div className="flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
-                    <span className="font-semibold text-gray-700">{branch.name}</span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></span>
+                    <span className="font-bold text-gray-750">{branch.name}</span>
                   </div>
-                  <span className="font-bold text-gray-500 font-mono">{branch.count} người ({branch.percentage}%)</span>
+                  <span className="font-bold text-gray-600 font-mono">{branch.count} người ({branch.percentage}%)</span>
                 </div>
                 <div className="h-2 w-full bg-gray-50 rounded-full border border-gray-100 overflow-hidden">
                   <div 
@@ -1272,15 +1302,15 @@ export default function StatsDashboard({ users, results, onRefresh, onBackToHome
             </span>
           </div>
 
-          <div className="space-y-3 max-h-[235px] overflow-y-auto pr-1">
+          <div className="space-y-1 max-h-[235px] overflow-y-auto pr-1">
             {departmentStats.map((dept, idx) => (
-              <div key={dept.name} className="space-y-1">
-                <div className="flex justify-between items-center text-xs">
+              <div key={dept.name} className="py-2 border-b border-slate-100 last:border-0 hover:bg-slate-50/30 px-1 rounded-md transition-colors">
+                <div className="flex justify-between items-center text-xs mb-1.5">
                   <div className="flex items-center gap-1.5 min-w-0">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
-                    <span className="font-semibold text-gray-700 truncate">{dept.name}</span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0 animate-pulse"></span>
+                    <span className="font-bold text-gray-750 break-words leading-tight">{dept.name}</span>
                   </div>
-                  <span className="font-bold text-gray-500 font-mono shrink-0 ml-2">{dept.count} người ({dept.percentage}%)</span>
+                  <span className="font-bold text-gray-600 font-mono shrink-0 ml-2">{dept.count} người ({dept.percentage}%)</span>
                 </div>
                 <div className="h-2 w-full bg-gray-50 rounded-full border border-gray-100 overflow-hidden">
                   <div 
@@ -1395,7 +1425,7 @@ export default function StatsDashboard({ users, results, onRefresh, onBackToHome
                 <th className="py-2.5 px-4 w-52 bg-slate-50">Nhân sự tham gia</th>
                 <th className="py-2.5 px-4 w-60 bg-slate-50">Thuộc Bộ phận / Chi nhánh</th>
                 <th className="py-2.5 px-4 text-center w-28 bg-slate-50">Số lượt thi</th>
-                <th className="py-2.5 px-4 text-center w-28 bg-slate-50">Điểm số cao nhất</th>
+                <th className="py-2.5 px-4 text-center w-28 bg-slate-50">Điểm số trung bình</th>
                 <th className="py-2.5 px-4 text-center w-36 bg-slate-50">Thời gian làm bài TB</th>
                 <th className="py-2.5 px-4 text-center w-40 bg-slate-50">Lần thi gần nhất</th>
               </tr>
@@ -1412,7 +1442,8 @@ export default function StatsDashboard({ users, results, onRefresh, onBackToHome
                   const avgMins = Math.floor(stat.totalDuration / stat.attempts / 60);
                   const avgSecs = Math.round((stat.totalDuration / stat.attempts) % 60);
                   const formattedDuration = avgMins > 0 ? `${avgMins}p ${avgSecs}s` : `${avgSecs}s`;
-                  const scoreColor = stat.bestScore === 30 ? 'text-green-600 font-bold bg-green-50 border border-green-100' : 'text-blue-600 font-semibold bg-blue-50/75 border border-blue-100/50';
+                  const statAvgScore = stat.avgScore !== undefined ? stat.avgScore : (stat.attempts > 0 ? parseFloat((stat.totalScore / stat.attempts).toFixed(1)) : 0);
+                  const scoreColor = statAvgScore === 30 ? 'text-green-600 font-bold bg-green-50 border border-green-100' : 'text-blue-600 font-semibold bg-blue-50/75 border border-blue-100/50';
                   
                   return (
                     <tr key={stat.userId + idx} className="hover:bg-slate-50/50 text-xs transition-colors">
@@ -1430,7 +1461,7 @@ export default function StatsDashboard({ users, results, onRefresh, onBackToHome
                       </td>
                       <td className="py-3 px-4 text-center">
                         <span className={`font-mono text-xs px-2.5 py-0.5 rounded-md ${scoreColor}`}>
-                          {stat.bestScore} / 30
+                          {statAvgScore} / 30
                         </span>
                       </td>
                       <td className="py-3 px-4 text-center font-mono font-medium text-gray-505">{formattedDuration}</td>
@@ -1645,7 +1676,7 @@ export default function StatsDashboard({ users, results, onRefresh, onBackToHome
                 departmentAverages.map((item, idx) => (
                   <div key={item.name + idx} className="bg-white border border-gray-150 p-3 rounded-lg shadow-3xs space-y-2">
                     <div className="flex justify-between items-start gap-2">
-                      <div className="font-bold text-xs text-gray-800 line-clamp-1">{item.name}</div>
+                      <div className="font-bold text-xs text-gray-800 line-clamp-2 break-words">{item.name}</div>
                       <div className="shrink-0 text-right">
                         <span className="font-mono text-xs font-black text-emerald-650">{item.avgScore}đ</span>
                         <div className="text-[9px] text-gray-400 font-medium">({item.attempts} lượt)</div>

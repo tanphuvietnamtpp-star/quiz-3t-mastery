@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { databaseService } from '../firebase';
+import { databaseService, getQuotaStats } from '../firebase';
 import { User, Question, QuizResult, CompanyMapping, MotivationalSloganBand } from '../types';
 import { formatDate, formatTimeInSeconds, cleanOptionText } from '../utils/format';
-import { BookOpen, Trophy, Award, BarChart3, ChevronRight, CheckCircle2, XCircle, ArrowRight, RotateCcw, HelpCircle, GraduationCap, AlertCircle, Users, TrendingUp, Building2, LogOut, Home, Maximize2, Minimize2, UserCheck, ImagePlus, Lock, Sparkles, X, Plus, Smartphone, Share, ArrowUp, ArrowLeft, Pencil, Trash2, Building, Landmark, Briefcase, Search, Database, RefreshCcw } from 'lucide-react';
+import { BookOpen, Trophy, Award, BarChart3, ChevronRight, CheckCircle2, XCircle, ArrowRight, RotateCcw, HelpCircle, GraduationCap, AlertCircle, Users, TrendingUp, Building2, LogOut, Home, Maximize2, Minimize2, UserCheck, ImagePlus, Lock, Sparkles, X, Plus, Smartphone, Share, ArrowUp, ArrowLeft, Pencil, Trash2, Building, Landmark, Briefcase, Search, Database, RefreshCcw, QrCode, Server, ShieldCheck, Zap, FileDown, ChevronUp, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts';
 import StatsDashboard from './StatsDashboard';
@@ -11,7 +11,7 @@ interface EmployeeDashboardProps {
   user: User;
   onLogout: () => void;
   isAdminReview?: boolean;
-  onBackToAdmin?: (tab?: 'users' | 'add_images' | 'stats' | 'encoding') => void;
+  onBackToAdmin?: (tab?: 'users' | 'add_images' | 'stats' | 'encoding' | 'qr' | 'firebase_data') => void;
   slogan?: string;
   difficulty?: number;
   onUpdateDifficulty?: (newLevel: number) => void;
@@ -202,8 +202,13 @@ export default function EmployeeDashboard({
   const [activeTab, setActiveTab] = useState<'practice' | 'quiz' | 'history' | 'ai_extract'>('quiz');
   
   // Admin mobile action states
-  const [adminMobileTab, setAdminMobileTab] = useState<'home' | 'users' | 'stats' | 'encoding'>('home');
+  const [adminMobileTab, setAdminMobileTab] = useState<'home' | 'users' | 'stats' | 'encoding' | 'qr' | 'firebase_data'>('home');
   const [adminMobileNotice, setAdminMobileNotice] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
+  
+  // States for Mobile QR and Firebase Data tabs
+  const [customQrUrl, setCustomQrUrl] = useState('https://quiz3t.vercel.app');
+  const [showQrNotice, setShowQrNotice] = useState(false);
+  const [quota, setQuota] = useState({ reads: 0, writes: 0, deletes: 0 });
   
   // States for user management panel
   const [userStatusFilter, setUserStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
@@ -235,6 +240,13 @@ export default function EmployeeDashboard({
       return () => clearTimeout(t);
     }
   }, [adminMobileNotice]);
+
+  // Load quota stats when the firebase_data tab is opened
+  useEffect(() => {
+    if (adminMobileTab === 'firebase_data') {
+      setQuota(getQuotaStats());
+    }
+  }, [adminMobileTab]);
 
   // Load company mappings for stats & encoding
   const loadMappings = async () => {
@@ -1202,6 +1214,233 @@ export default function EmployeeDashboard({
     );
   };
 
+  const renderMobileQrPanel = () => {
+    return (
+      <div className="flex flex-col flex-1 h-full pb-4 font-sans text-left">
+        {/* Header bar */}
+        <div className="flex items-center justify-between py-2 border-b border-gray-200 mb-3 sticky top-0 bg-white z-10 shrink-0">
+          <button 
+            onClick={() => setAdminMobileTab('home')}
+            className="flex items-center gap-1 text-xs font-bold text-gray-500 hover:text-gray-700 p-1 rounded-lg hover:bg-gray-100"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span>Sảnh chính</span>
+          </button>
+          <span className="text-[13px] font-extrabold text-[#0B3A60] uppercase tracking-wide">
+            MÃ QR TRUY CẬP
+          </span>
+          <div className="w-6" />
+        </div>
+
+        {/* Content */}
+        <div className="space-y-4 pb-20 overflow-y-auto max-h-[75vh]">
+          <div className="bg-white border border-gray-150 rounded-xl p-4 space-y-4 shadow-3xs">
+            <div className="text-center space-y-1">
+              <h3 className="text-sm font-bold text-gray-800">Mã QR "Chiến" Ngay</h3>
+              <p className="text-[11px] text-gray-500 leading-relaxed">
+                Quét nhanh bằng camera điện thoại để thực hiện bài trắc nghiệm nhanh 3T Mastery.
+              </p>
+            </div>
+
+            {/* Note alert */}
+            <div className="bg-amber-50 border border-amber-200 text-left p-3 rounded-lg text-[11px] leading-relaxed text-amber-900">
+              <button 
+                type="button"
+                onClick={() => setShowQrNotice(!showQrNotice)}
+                className="w-full flex items-center justify-between font-bold text-amber-955 focus:outline-none cursor-pointer"
+              >
+                <span>⚠️ Lưu ý khi Quét Thử Nghiệm:</span>
+                {showQrNotice ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+              </button>
+              {showQrNotice && (
+                <div className="mt-2 space-y-1 border-t border-amber-200 pt-2 text-[10.5px]">
+                  <p>
+                    Vùng phát triển qua <code className="bg-amber-100 px-1 rounded font-mono text-amber-955 font-bold">ais-dev-...</code> được Google kiểm soát bảo mật.
+                  </p>
+                  <p className="mt-1">
+                    Trình duyệt của bạn phải được đăng nhập bằng Google Mail được phân quyền dự án, hoặc dán đường dẫn web thực tế vào bộ lọc bên dưới.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Input URL */}
+            <div className="space-y-1">
+              <label className="text-[10px] font-extrabold text-gray-500 uppercase tracking-wider block">Liên kết nhúng QR:</label>
+              <div className="flex gap-1.5">
+                <input 
+                  type="text" 
+                  value={customQrUrl} 
+                  onChange={(e) => setCustomQrUrl(e.target.value)}
+                  placeholder="Đường dẫn URL..."
+                  className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 bg-gray-50/50 font-mono text-gray-700"
+                />
+                {customQrUrl !== 'https://quiz3t.vercel.app' && (
+                  <button 
+                    onClick={() => setCustomQrUrl('https://quiz3t.vercel.app')} 
+                    className="px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-655 rounded-lg text-[10px] font-bold transition-all whitespace-nowrap"
+                  >
+                    Mặc định
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* QR Generation image */}
+            <div className="p-3 bg-gray-50 border border-gray-150 rounded-xl flex justify-center items-center">
+              <img 
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(customQrUrl || 'https://quiz3t.vercel.app')}`} 
+                alt="Văn Hóa 3T QR Code Portal" 
+                className="bg-white border rounded-lg p-2 shadow-inner h-[180px] w-[180px]"
+                referrerPolicy="no-referrer"
+              />
+            </div>
+
+            <div className="text-[10px] font-mono text-gray-500 bg-gray-50 p-2 rounded break-all border border-gray-200 max-w-full text-center">
+              {customQrUrl || 'https://quiz3t.vercel.app'}
+            </div>
+
+            <button
+              onClick={() => {
+                const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(customQrUrl || 'https://quiz3t.vercel.app')}`;
+                window.open(qrUrl, '_blank');
+              }}
+              className="w-full flex items-center justify-center gap-1.5 bg-[#1971C2] hover:bg-opacity-95 text-white font-bold text-xs py-2 rounded-lg shadow-3xs"
+            >
+              <FileDown className="h-3.5 w-3.5" />
+              <span>Tải Mã QR nét cao</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderMobileFirebaseDataPanel = () => {
+    const firebaseQuotaLimits = {
+      reads: 50000,
+      writes: 20000,
+      deletes: 20000
+    };
+    const readPercent = Math.min(100, parseFloat(((quota.reads / firebaseQuotaLimits.reads) * 100).toFixed(2)));
+    const writePercent = Math.min(100, parseFloat(((quota.writes / firebaseQuotaLimits.writes) * 100).toFixed(2)));
+    const deletePercent = Math.min(100, parseFloat(((quota.deletes / firebaseQuotaLimits.deletes) * 100).toFixed(2)));
+
+    const getProgressColor = (percent: number) => {
+      if (percent > 80) return 'bg-red-500';
+      if (percent > 40) return 'bg-amber-500';
+      return 'bg-green-500';
+    };
+
+    const getTextColor = (percent: number) => {
+      if (percent > 80) return 'text-red-600';
+      if (percent > 40) return 'text-amber-600';
+      return 'text-green-600';
+    };
+
+    return (
+      <div className="flex flex-col flex-1 h-full pb-4 font-sans text-left">
+        {/* Header bar */}
+        <div className="flex items-center justify-between py-2 border-b border-gray-200 mb-3 sticky top-0 bg-white z-10 shrink-0">
+          <button 
+            onClick={() => setAdminMobileTab('home')}
+            className="flex items-center gap-1 text-xs font-bold text-gray-500 hover:text-gray-700 p-1 rounded-lg hover:bg-gray-100"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span>Sảnh chính</span>
+          </button>
+          <span className="text-[13px] font-extrabold text-[#0B3A60] uppercase tracking-wide">
+            HỆ THỐNG DỮ LIỆU
+          </span>
+          <button 
+            onClick={() => setQuota(getQuotaStats())}
+            className="p-1 border border-gray-200 hover:bg-gray-50 rounded-lg text-gray-500 transition-all cursor-pointer"
+            title="Đồng bộ"
+          >
+            <RefreshCcw className="h-3.5 w-3.5" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="space-y-4 pb-20 overflow-y-auto max-h-[75vh]">
+          {/* Quota limit card */}
+          <div className="bg-white border border-gray-150 rounded-xl p-4 space-y-4 shadow-3xs">
+            <div className="flex justify-between items-center border-b border-gray-100 pb-2">
+              <h3 className="text-xs font-bold text-[#0B3A60] uppercase tracking-wide flex items-center gap-1.5">
+                <Database className="h-4 w-4 text-blue-500" />
+                <span>HẠN MỨC QUOTA FIREBASE</span>
+              </h3>
+              <span className="px-1.5 py-0.5 bg-blue-50 border border-blue-100 text-[#1971C2] text-[8px] font-extrabold rounded uppercase tracking-wider">
+                Spark Plan
+              </span>
+            </div>
+
+            <p className="text-[11px] text-gray-400 leading-relaxed font-normal">
+              Định mức truy cập thực tế của ứng dụng Văn Hóa 3T Mastery với gói Firebase miễn phí trọn đời (Spark Plan):
+            </p>
+
+            <div className="space-y-3.5 pt-1">
+              {/* Reads Tracker */}
+              <div className="space-y-1">
+                <div className="flex justify-between items-center text-[11px]">
+                  <span className="font-bold text-gray-700">Đọc dữ liệu (Reads)</span>
+                  <span className={`font-mono font-bold ${getTextColor(readPercent)}`}>
+                    {quota.reads.toLocaleString()} / {firebaseQuotaLimits.reads.toLocaleString()} ({readPercent}%)
+                  </span>
+                </div>
+                <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
+                  <div 
+                    style={{ width: `${readPercent}%` }} 
+                    className={`h-full rounded-full transition-all duration-1000 ${getProgressColor(readPercent)}`}
+                  />
+                </div>
+              </div>
+
+              {/* Writes Tracker */}
+              <div className="space-y-1">
+                <div className="flex justify-between items-center text-[11px]">
+                  <span className="font-bold text-gray-700">Ghi dữ liệu (Writes)</span>
+                  <span className={`font-mono font-bold ${getTextColor(writePercent)}`}>
+                    {quota.writes.toLocaleString()} / {firebaseQuotaLimits.writes.toLocaleString()} ({writePercent}%)
+                  </span>
+                </div>
+                <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
+                  <div 
+                    style={{ width: `${writePercent}%` }} 
+                    className={`h-full rounded-full transition-all duration-1000 ${getProgressColor(writePercent)}`}
+                  />
+                </div>
+              </div>
+
+              {/* Deletes Tracker */}
+              <div className="space-y-1">
+                <div className="flex justify-between items-center text-[11px]">
+                  <span className="font-bold text-gray-700">Xóa dữ liệu (Deletes)</span>
+                  <span className={`font-mono font-bold ${getTextColor(deletePercent)}`}>
+                    {quota.deletes.toLocaleString()} / {firebaseQuotaLimits.deletes.toLocaleString()} ({deletePercent}%)
+                  </span>
+                </div>
+                <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
+                  <div 
+                    style={{ width: `${deletePercent}%` }} 
+                    className={`h-full rounded-full transition-all duration-1000 ${getProgressColor(deletePercent)}`}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-gray-100 bg-gray-50/70 p-3 rounded-lg flex items-start gap-1.5 text-[10.5px] text-blue-800 leading-relaxed font-medium">
+              <ShieldCheck className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
+              <div>
+                <b>Tự động tối ưu:</b> Máy chủ chỉ đọc kết quả trong vòng <b>30 ngày gần nhất</b>. Giúp giảm tải 85% tổng lượt đọc & bảo toàn định mức quota của dự án.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // Compression helper (Canvas-based Resizer & quality compressor to maintain quotas)
   const compressImage = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -1812,7 +2051,7 @@ export default function EmployeeDashboard({
             {/* Dynamic Inner Panel Viewports */}
             <AnimatePresence mode="wait">
               {/* Departmental Approval Viewport for Approvers */}
-              {showApprovalPanel && user.role === 'approver' && !quizStarted && (
+              {showApprovalPanel && (user.role === 'approver' || user.canViewStats) && !quizStarted && (
                 <motion.div
                   key="department_approvals"
                   initial={{ opacity: 0, y: 10 }}
@@ -2555,6 +2794,8 @@ export default function EmployeeDashboard({
                     {adminMobileTab === 'users' && renderMobileUsersPanel()}
                     {adminMobileTab === 'stats' && renderMobileStatsPanel()}
                     {adminMobileTab === 'encoding' && renderMobileEncodingPanel()}
+                    {adminMobileTab === 'qr' && renderMobileQrPanel()}
+                    {adminMobileTab === 'firebase_data' && renderMobileFirebaseDataPanel()}
                   </div>
                 ) : (
                   // Landing Screen for Practice Exams
@@ -2565,14 +2806,14 @@ export default function EmployeeDashboard({
                     {/* Admin rapid action buttons */}
                     {isAdminReview && user.role === 'admin' && (
                       <div className="w-full max-w-sm mx-auto bg-slate-50/90 border border-slate-200/60 rounded-xl p-2 shadow-xs mb-4 sm:mb-5">
-                        <div className="text-[9px] font-extrabold text-[#0B3A60]/85 uppercase tracking-wider mb-2 text-center flex items-center justify-center gap-1.5">
-                          <span>CÔNG CỤ NHANH QUẢN TRỊ VIÊN</span>
+                        <div className="text-[9px] font-extrabold text-[#0B3A60]/85 uppercase tracking-wider mb-2 text-center flex items-center justify-center gap-1.5 whitespace-nowrap">
+                          <span>CÔNG CỤ QUẢN TRỊ HỆ THỐNG</span>
                           <span className="flex items-center gap-1 bg-emerald-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full shadow-2xs shrink-0 normal-case">
                             <span className="h-1 w-1 rounded-full bg-white block animate-ping" />
                             <span>{onlineUsersCount} Online</span>
                           </span>
                         </div>
-                        <div className="grid grid-cols-4 gap-1 px-0.5 mb-2">
+                        <div className="grid grid-cols-6 gap-0.5 px-0.5 mb-2">
                           <button
                             onClick={() => setAdminMobileTab('users')}
                             className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group"
@@ -2597,7 +2838,18 @@ export default function EmployeeDashboard({
                             <div className="h-7 w-7 rounded-lg bg-purple-50 border border-purple-100/60 flex items-center justify-center group-hover:bg-purple-100 transition-colors shrink-0">
                               <ImagePlus className="h-3.5 w-3.5 text-purple-600" />
                             </div>
-                            <span className="text-[8.5px] font-bold leading-tight truncate w-full text-center text-gray-700 font-sans">Trích xuất AI</span>
+                            <span className="text-[8.5px] font-bold leading-tight truncate w-full text-center text-gray-700 font-sans">Picture</span>
+                          </button>
+
+                          <button
+                            onClick={() => setAdminMobileTab('qr')}
+                            className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group"
+                            title="Mã QR"
+                          >
+                            <div className="h-7 w-7 rounded-lg bg-indigo-50 border border-indigo-100/60 flex items-center justify-center group-hover:bg-indigo-100 transition-colors shrink-0">
+                              <QrCode className="h-3.5 w-3.5 text-indigo-600" />
+                            </div>
+                            <span className="text-[8.5px] font-bold leading-tight truncate w-full text-center text-gray-700">Mã QR</span>
                           </button>
 
                           <button
@@ -2608,21 +2860,17 @@ export default function EmployeeDashboard({
                             <div className="h-7 w-7 rounded-lg bg-emerald-50 border border-emerald-100/60 flex items-center justify-center group-hover:bg-emerald-100 transition-colors shrink-0 relative">
                               <BarChart3 className="h-3.5 w-3.5 text-emerald-600" />
                               {participantsTodayCount > 0 && (
-                                <span className="absolute -top-1.5 -right-1.5 bg-blue-600 text-white text-[9.5px] font-extrabold h-4 px-1 rounded-full border border-white flex items-center justify-center shadow-md min-w-[16px] leading-none animate-bounce">
+                                <span className="absolute -top-1.5 -right-3.5 bg-blue-600 text-white text-[9px] font-extrabold h-4 px-1 rounded-full border border-white flex items-center justify-center shadow-md min-w-[16px] leading-none animate-bounce">
                                   {participantsTodayCount}
                                 </span>
                               )}
+                              {attemptsTodayCount > 0 && (
+                                <span className="absolute -top-1.5 -left-3.5 bg-emerald-500 text-white text-[9px] font-black h-4 px-1 rounded-full border border-white flex items-center justify-center shadow-md min-w-[16px] leading-none">
+                                  {attemptsTodayCount}
+                                </span>
+                              )}
                             </div>
-                            <div className="flex items-center justify-center gap-0.5 w-full">
-                              <span className="text-[8.5px] font-bold leading-tight truncate text-gray-700">Thống Kê</span>
-                              <span className={`text-[8.5px] font-black leading-none rounded-full min-w-[13px] h-[13px] flex items-center justify-center px-0.5 shadow-xs ring-0.5 ring-white shrink-0 ${
-                                attemptsTodayCount > 0 
-                                  ? 'bg-emerald-500 text-white' 
-                                  : 'bg-slate-400 text-white'
-                              }`}>
-                                {attemptsTodayCount}
-                              </span>
-                            </div>
+                            <span className="text-[8.5px] font-bold leading-tight truncate w-full text-center text-gray-700">Thống Kê</span>
                           </button>
 
                           <button
@@ -2634,6 +2882,17 @@ export default function EmployeeDashboard({
                               <Lock className="h-3.5 w-3.5 text-amber-600" />
                             </div>
                             <span className="text-[8.5px] font-bold leading-tight truncate w-full text-center text-gray-700">Mã Hóa</span>
+                          </button>
+
+                          <button
+                            onClick={() => setAdminMobileTab('firebase_data')}
+                            className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group"
+                            title="Dữ Liệu"
+                          >
+                            <div className="h-7 w-7 rounded-lg bg-cyan-50 border border-cyan-100/60 flex items-center justify-center group-hover:bg-cyan-100 transition-colors shrink-0">
+                              <Database className="h-3.5 w-3.5 text-[#0B7285]" />
+                            </div>
+                            <span className="text-[8.5px] font-bold leading-tight truncate w-full text-center text-gray-700">Dữ Liệu</span>
                           </button>
                         </div>
                         {/* Integrated exit button for mobile users where headers are hidden */}
@@ -2793,22 +3052,24 @@ export default function EmployeeDashboard({
 
                   {/* Approver Department Action Card */}
                   {(user.role === 'approver' || user.canViewStats) && (
-                    <div className="w-full max-w-sm bg-purple-50/70 border border-purple-200/60 p-3.5 rounded-xl text-left shrink-0 shadow-3xs relative overflow-hidden">
-                      <div className="absolute top-0 right-0 h-16 w-16 bg-purple-500/5 rounded-full -mr-4 -mt-4 animate-pulse-slow font-sans" />
+                    <div className="w-full max-w-sm bg-purple-50/70 border border-purple-200/60 p-2.5 sm:p-3 rounded-xl text-left shrink-0 shadow-3xs relative overflow-hidden">
+                      <div className="absolute top-0 right-0 h-14 w-14 bg-purple-500/5 rounded-full -mr-4 -mt-4 animate-pulse-slow font-sans" />
                       <div className="flex flex-col">
                         <div className="space-y-1 relative z-10">
-                          <span translate="no" className="notranslate bg-purple-250 text-purple-800 text-[9px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full">
-                            {(() => {
-                              const deptNorm = (user.department || '').trim().toLowerCase();
-                              if (deptNorm === 'ban tổng giám đốc') return 'Ban Tổng Giám Đốc';
-                              if (deptNorm === 'ban giám đốc') return 'Ban Giám Đốc';
-                              return 'Trưởng Bộ Phận';
-                            })()}
-                          </span>
-                          <h4 className="text-xs sm:text-sm font-extrabold text-[#0B3A60] mt-2 leading-snug">
-                            {user.role === 'approver' ? 'Hành Động Quản Lý' : 'Dữ Liệu Thống Kê'}
-                          </h4>
-                          <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <h4 className="text-xs sm:text-sm font-extrabold text-[#0B3A60] leading-none">
+                              {user.role === 'approver' ? 'Hoạt Động Quản Lý' : 'Dữ Liệu Thống Kê'}
+                            </h4>
+                            <span translate="no" className="notranslate bg-purple-250 text-purple-800 text-[8.5px] sm:text-[9px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded-full">
+                              {(() => {
+                                const deptNorm = (user.department || '').trim().toLowerCase();
+                                if (deptNorm === 'ban tổng giám đốc') return 'Ban Tổng Giám Đốc';
+                                if (deptNorm === 'ban giám đốc') return 'Ban Giám Đốc';
+                                return 'DUYỆT VIÊN';
+                              })()}
+                            </span>
+                          </div>
+                          <p className="text-[10px] sm:text-[11px] text-slate-500 mt-1 leading-snug">
                             {user.role === 'approver' ? (
                               <span>Có <strong className="text-purple-700 font-extrabold">{pendingUsersCount}</strong> nhân sự chờ duyệt thuộc cơ cấu của Anh/Chị.</span>
                             ) : (
@@ -2817,27 +3078,25 @@ export default function EmployeeDashboard({
                           </p>
                         </div>
                         
-                        <div className={`grid ${user.role === 'approver' && user.canViewStats ? 'grid-cols-2 gap-2' : 'grid-cols-1'} mt-3.5 pt-3.5 border-t border-purple-200/40 relative z-10`}>
-                          {user.role === 'approver' && (
-                            <button
-                              onClick={() => setShowApprovalPanel(true)}
-                              className="flex items-center justify-center gap-1.5 py-2 px-2.5 bg-purple-650 hover:bg-purple-700 active:scale-95 text-white text-[11px] font-extrabold rounded-lg transition-all cursor-pointer shadow-3xs relative animate-fadeIn"
-                            >
-                              <UserCheck className="h-3.5 w-3.5 shrink-0" />
-                              <span>Duyệt Nhân Sự</span>
-                              {pendingUsersCount > 0 && (
-                                <span className="bg-red-650 text-white text-[8px] font-black h-4 px-1 rounded-full border border-white flex items-center justify-center min-w-[15px] animate-pulse">
-                                  {pendingUsersCount}
-                                </span>
-                              )}
-                            </button>
-                          )}
+                        <div className={`grid ${user.canViewStats ? 'grid-cols-2 gap-2' : 'grid-cols-1'} mt-2.5 pt-2.5 border-t border-purple-200/35 relative z-10`}>
+                          <button
+                            onClick={() => setShowApprovalPanel(true)}
+                            className="flex items-center justify-center gap-1.5 py-1.5 px-2 bg-purple-600 hover:bg-purple-700 active:scale-95 text-white text-[10.5px] sm:text-[11px] font-extrabold rounded-lg transition-all cursor-pointer shadow-3xs relative animate-fadeIn"
+                          >
+                            <UserCheck className="h-3 w-3 sm:h-3.5 sm:w-3.5 shrink-0" />
+                            <span>Duyệt Nhân Sự</span>
+                            {pendingUsersCount > 0 && (
+                              <span className="bg-red-650 text-white text-[8px] font-black h-3.5 px-1 rounded-full border border-white flex items-center justify-center min-w-[14px] animate-pulse">
+                                {pendingUsersCount}
+                              </span>
+                            )}
+                          </button>
                           {user.canViewStats && (
                             <button
                               onClick={() => setAdminMobileTab('stats')}
-                              className="flex items-center justify-center gap-1.5 py-2 px-2.5 bg-white hover:bg-violet-50 border border-purple-200 text-purple-700 text-[11px] font-extrabold rounded-lg transition-all cursor-pointer active:scale-95 shadow-3xs animate-fadeIn"
+                              className="flex items-center justify-center gap-1.5 py-1.5 px-2 bg-white hover:bg-violet-50 border border-purple-200 text-purple-700 text-[10.5px] sm:text-[11px] font-extrabold rounded-lg transition-all cursor-pointer active:scale-95 shadow-3xs animate-fadeIn"
                             >
-                              <BarChart3 className="h-3.5 w-3.5 shrink-0 text-purple-600" />
+                              <BarChart3 className="h-3 w-3 sm:h-3.5 sm:w-3.5 shrink-0 text-purple-600" />
                               <span>Xem Thống Kê</span>
                             </button>
                           )}
@@ -2885,17 +3144,15 @@ export default function EmployeeDashboard({
                         setActiveTab('practice');
                         setExpandedPracticeId(null);
                       }}
-                      className="flex-1 flex items-center justify-center gap-0.5 sm:gap-1 py-1.5 sm:py-2 px-0.5 sm:px-2 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 rounded-lg sm:rounded-xl transition-all hover:scale-[1.01] active:scale-[0.99] cursor-pointer text-[7.5px] min-[320px]:text-[8px] min-[360px]:text-[9px] min-[400px]:text-[10px] sm:text-xs font-extrabold tracking-tight whitespace-nowrap overflow-visible select-none"
+                      className="flex-1 flex items-center justify-center gap-0.5 sm:gap-1 py-1.5 sm:py-2 px-0.5 sm:px-2 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 rounded-lg sm:rounded-xl transition-all hover:scale-[1.01] active:scale-[0.99] cursor-pointer text-[7.5px] min-[320px]:text-[8px] min-[360px]:text-[9px] min-[400px]:text-[10px] sm:text-xs font-extrabold tracking-tight whitespace-nowrap overflow-visible select-none animate-fade-in"
                     >
-                      <div className="flex items-center justify-center mr-0.5 shrink-0 gap-1">
-                        {questions.length > 0 && (
-                          <span className="text-[8.5px] font-black leading-none bg-amber-600 text-white rounded-full min-w-[15px] h-[15px] flex items-center justify-center px-1 shadow-3xs ring-1 ring-white">
-                            {questions.length}
-                          </span>
-                        )}
-                        <BookOpen className="h-3 w-3 sm:h-4 sm:w-4 text-amber-600 shrink-0" />
-                      </div>
+                      <BookOpen className="h-3 w-3 sm:h-4 sm:w-4 text-amber-600 shrink-0 mr-0.5" />
                       <span className="whitespace-nowrap">ÔN TẬP</span>
+                      {questions.length > 0 && (
+                        <span className="text-[8.5px] font-black leading-none bg-amber-600 text-white rounded-full min-w-[15px] h-[15px] flex items-center justify-center px-1 shadow-3xs ring-1 ring-white ml-1 shrink-0 animate-pulse">
+                          {questions.length}
+                        </span>
+                      )}
                     </button>
 
                     <button
