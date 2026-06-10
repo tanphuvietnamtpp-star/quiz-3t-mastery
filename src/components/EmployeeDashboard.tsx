@@ -24,7 +24,7 @@ export default function EmployeeDashboard({
   isAdminReview = false, 
   onBackToAdmin, 
   slogan = '3T Hội Tụ - Tân Phú Vươn Xa',
-  difficulty = 1,
+  difficulty: propDifficulty = 1,
   onUpdateDifficulty,
   motivationalSlogans = []
 }: EmployeeDashboardProps) {
@@ -490,6 +490,82 @@ export default function EmployeeDashboard({
   const [questions, setQuestions] = useState<Question[]>([]);
   const [results, setResults] = useState<QuizResult[]>([]);
   const [allResults, setAllResults] = useState<QuizResult[]>([]);
+
+  // Dynamic level:
+  // Cấp 1: 3 lượt liên tiếp đạt 30/30 -> Cấp 2
+  // Cấp 2: 3 lượt liên tiếp đạt 30/30 -> Cấp 3; 3 lượt liên tiếp < 20 -> Cấp 1; Còn lại giữ nguyên
+  // Cấp 3: 3 lượt liên tiếp < 20 -> Cấp 2; Còn lại giữ nguyên
+  const difficultyState = useMemo(() => {
+    const chronologicalResults = [...results].sort((a, b) => a.timestamp - b.timestamp);
+    
+    let currentLevel = 1;
+    let consecutiveMaxAtLevel = 0;
+    let consecutiveLowAtLevel = 0;
+
+    for (const res of chronologicalResults) {
+      const score = res.score;
+      
+      if (currentLevel === 1) {
+        if (score === 30) {
+          consecutiveMaxAtLevel++;
+        } else {
+          consecutiveMaxAtLevel = 0;
+        }
+        
+        if (consecutiveMaxAtLevel >= 3) {
+          currentLevel = 2;
+          consecutiveMaxAtLevel = 0;
+          consecutiveLowAtLevel = 0;
+        }
+      } else if (currentLevel === 2) {
+        if (score === 30) {
+          consecutiveMaxAtLevel++;
+          consecutiveLowAtLevel = 0;
+        } else if (score < 20) {
+          consecutiveLowAtLevel++;
+          consecutiveMaxAtLevel = 0;
+        } else {
+          consecutiveMaxAtLevel = 0;
+          consecutiveLowAtLevel = 0;
+        }
+        
+        if (consecutiveMaxAtLevel >= 3) {
+          currentLevel = 3;
+          consecutiveMaxAtLevel = 0;
+          consecutiveLowAtLevel = 0;
+        } else if (consecutiveLowAtLevel >= 3) {
+          currentLevel = 1;
+          consecutiveMaxAtLevel = 0;
+          consecutiveLowAtLevel = 0;
+        }
+      } else if (currentLevel === 3) {
+        if (score === 30) {
+          consecutiveMaxAtLevel++;
+          consecutiveLowAtLevel = 0;
+        } else if (score < 20) {
+          consecutiveLowAtLevel++;
+          consecutiveMaxAtLevel = 0;
+        } else {
+          consecutiveMaxAtLevel = 0;
+          consecutiveLowAtLevel = 0;
+        }
+        
+        if (consecutiveLowAtLevel >= 3) {
+          currentLevel = 2;
+          consecutiveMaxAtLevel = 0;
+          consecutiveLowAtLevel = 0;
+        }
+      }
+    }
+    
+    return {
+      level: currentLevel,
+      consecutiveMax: consecutiveMaxAtLevel,
+      consecutiveLow: consecutiveLowAtLevel
+    };
+  }, [results]);
+
+  const difficulty = difficultyState.level;
 
   // Calculate stats for today's participants
   const participantsTodayCount = useMemo(() => {
@@ -2620,27 +2696,53 @@ export default function EmployeeDashboard({
                     </p>
                   </div>
 
-                  {/* Button Segmented Tab cho Cấu hình Mức độ Khó nằm ngay dưới dòng chữ "Ứng Dụng Ôn Tập Quiz 3T Hàng Ngày" */}
-                  <div className="w-full max-w-xs mx-auto animate-fade-in shrink-0 -mt-0.5 mb-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200">
-                    <div className="flex">
-                      {[
-                        { level: 1, label: 'Cấp 1 (90s)', tooltip: 'Dễ | Điểm tốc độ bám mốc 30s-40s-50s' },
-                        { level: 2, label: 'Cấp 2 (60s)', tooltip: 'Vừa | Điểm tốc độ thách thức 20s-30s-40s' },
-                        { level: 3, label: 'Cấp 3 (30s)', tooltip: 'Khó | Tốc độ chớp nhoáng 10s-15s-20s' },
-                      ].map((opt) => (
-                        <button
-                          key={opt.level}
-                          onClick={() => onUpdateDifficulty && onUpdateDifficulty(opt.level)}
-                          className={`flex-1 py-1.5 px-2 text-[10px] font-extrabold rounded-md transition-all active:scale-95 cursor-pointer whitespace-nowrap focus:outline-none ${
-                            difficulty === opt.level
-                              ? 'bg-gradient-to-r from-blue-600 to-[#1971C2] text-white shadow-xs'
-                              : 'text-slate-500 hover:text-slate-800 hover:bg-slate-200/50'
-                          }`}
-                          title={opt.tooltip}
-                        >
-                          {opt.label}
-                        </button>
-                      ))}
+                  {/* Cấu hình Mức độ Khó được ẩn Segmented Tab ngang theo yêu cầu của người dùng, thay thế bằng Thể hiện Cấp độ ôn tập thông minh tự động ( stress-free, natural skill development) */}
+                  <div className="w-full max-w-sm mx-auto mb-2 bg-gradient-to-r from-blue-50/70 via-slate-50/50 to-orange-50/40 border border-slate-200/80 p-2.5 rounded-xl flex items-center justify-between text-left shadow-2xs shrink-0 font-sans">
+                    <div className="flex items-center gap-2">
+                      <div className="h-8 w-8 rounded-lg bg-white shadow-3xs border border-[#1971C2]/15 flex items-center justify-center shrink-0">
+                        <Sparkles className="h-4.5 w-4.5 text-[#1971C2] animate-pulse" />
+                      </div>
+                      <div>
+                        <div className="text-[9px] font-extrabold text-[#1971C2] uppercase tracking-wider">CẤP ĐỘ ÔN LUYỆN TỰ ĐỘNG</div>
+                        <div className="text-xs font-black text-gray-800">
+                          Mức {difficulty} ({difficulty === 1 ? 'Dễ | 90s' : difficulty === 2 ? 'Vừa | 60s' : 'Khó | 30s'}/câu)
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      {difficulty === 1 && (
+                        <span className="text-[9px] font-extrabold text-blue-600 bg-blue-50 border border-blue-200/50 px-2 py-0.5 rounded-full shadow-2xs">
+                          {difficultyState.consecutiveMax > 0 ? `🎯 Đạt 30/30: ${difficultyState.consecutiveMax}/3` : '🎯 Thử thách 30/30'}
+                        </span>
+                      )}
+                      {difficulty === 2 && (
+                        <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full border shadow-2xs ${
+                          difficultyState.consecutiveLow > 0 
+                            ? 'text-rose-600 bg-rose-50 border-rose-200 animate-pulse' 
+                            : difficultyState.consecutiveMax > 0
+                            ? 'text-emerald-600 bg-emerald-50 border-emerald-200'
+                            : 'text-slate-650 bg-slate-100 border-slate-200'
+                        }`}>
+                          {difficultyState.consecutiveMax > 0 
+                            ? `🎯 Đạt 30/30: ${difficultyState.consecutiveMax}/3` 
+                            : difficultyState.consecutiveLow > 0
+                            ? `⚠️ Điểm < 20: ${difficultyState.consecutiveLow}/3`
+                            : 'Bền bỉ Cấp 2'
+                          }
+                        </span>
+                      )}
+                      {difficulty === 3 && (
+                        <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full border shadow-2xs ${
+                          difficultyState.consecutiveLow > 0 
+                            ? 'text-rose-650 bg-rose-50 border-rose-200 animate-pulse' 
+                            : 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                        }`}>
+                          {difficultyState.consecutiveLow > 0
+                            ? `⚠️ Điểm < 20: ${difficultyState.consecutiveLow}/3`
+                            : '👑 Vua Tốc Độ Cấp 3'
+                          }
+                        </span>
+                      )}
                     </div>
                   </div>
 
