@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { User, QuizResult, BRANCHES, DEPARTMENTS, CompanyMapping } from '../types';
+import { User, QuizResult, BRANCHES, DEPARTMENTS, CompanyMapping, LevelRulesConfig } from '../types';
 import { getQuotaStats, databaseService } from '../firebase';
 import { 
   Database, Users, Trophy, Award, BarChart3, Clock, 
@@ -8,6 +8,66 @@ import {
   ChevronDown, ChevronUp
 } from 'lucide-react';
 import { motion } from 'motion/react';
+
+const DEFAULT_LEVEL_RULES: LevelRulesConfig = {
+  introduction: "Để khuyến khích thái độ kiên trì luyện tập, tạo phản xạ nhạy bén và nâng cao chuyên môn, hệ thống Quiz 3T Mastery áp dụng cơ chế phân hạng và thay đổi cấp độ tự động.",
+  inactivityTitle: "Quy Định Duy Trì & Không Hoạt Động",
+  inactivityRule1: "Mỗi ngày, nhân viên cần phải thực hiện ít nhất 02 lượt đánh giá để duy trì và giữ vững phong độ của mình.",
+  inactivityRule2: "Nếu không hoạt động, hệ thống sẽ tự động hạ dần cấp độ (mỗi ngày hạ mỗi cấp) cho đến khi quay về lại cấp 1.",
+  levels: [
+    {
+      level: 1,
+      name: "Cấp 1: Tân Binh",
+      emoji: "🌱",
+      promotion: "Đạt điểm tuyệt đối 30/30 liên tục 10 lượt (đã cập nhật tự động theo đúng thay đổi mới nhất của anh) để nâng hạng lên Chiến Binh.",
+      demotion: "Mức sàn tối thiểu, không thể hạ thấp hơn.",
+      maxTime: "90s/câu",
+      reactionPoints: ["≤ 30s (+10đ)", "31s-40s (+8đ)", "41s-50s (+6đ)", "51s-90s (+5đ)"]
+    },
+    {
+      level: 2,
+      name: "Cấp 2: Chiến Binh",
+      emoji: "🛡️",
+      promotion: "Đạt điểm tuyệt đối 30/30 liên tục 10 lượt để nâng hạng lên Thống Lĩnh.",
+      demotion: "Đạt dưới 20 điểm trong 2 lần thi liên tiếp sẽ bị hạ về Tân Binh.\nLần thứ 1 đạt dưới 20đ: Hệ thống sẽ ngay lập tức hiện cảnh báo đỏ nhắc nhở giữ vững phong độ.\nLần thứ 2 đạt dưới 20đ: Hệ thống tự động hạ cấp.",
+      maxTime: "60s/câu",
+      reactionPoints: ["≤ 20s (+10đ)", "21s-30s (+8đ)", "31s-40s (+6đ)", "41s-60s (+5đ)"]
+    },
+    {
+      level: 3,
+      name: "Cấp 3: Thống Lĩnh",
+      emoji: "⚔️",
+      promotion: "Đạt điểm tuyệt đối 30/30 liên tục 10 lượt để nâng hạng lên Tối Cao.",
+      demotion: "Đạt dưới 26 điểm trong 2 lần thi liên tiếp sẽ bị hạ về Chiến Binh.\nLần thứ 1 dưới 26đ: Cảnh báo phong độ.\nLần thứ 2 dưới 26đ: Tự động hạ cấp.",
+      maxTime: "30s/câu",
+      reactionPoints: ["≤ 10s (+10đ)", "11s-15s (+8đ)", "16s-20s (+6đ)", "21s-30s (+5đ)"]
+    },
+    {
+      level: 4,
+      name: "Cấp 4: Tối Cao",
+      emoji: "👑",
+      promotion: "Đạt điểm tuyệt đối 30/30 liên tục 10 lượt để thăng hạng cao nhất Huyền Thoại.",
+      demotion: "Đạt dưới 27 điểm trong 2 lần thi liên tiếp sẽ bị hạ về Thống Lĩnh (có cảnh báo ở lần đầu).",
+      maxTime: "20s/câu",
+      reactionPoints: ["≤ 5s (+10đ)", "6s-8s (+8đ)", "9s-12s (+6đ)", "13s-20s (+5đ)"]
+    },
+    {
+      level: 5,
+      name: "Cấp 5: Huyền Thoại",
+      emoji: "🔮",
+      promotion: "Cấp bậc cao nhất hệ thống (Giữ nguyên).",
+      demotion: "Đạt dưới 28 điểm trong 2 lần thi liên tiếp sẽ bị hạ về Tối Cao (có cảnh báo ở lần đầu).",
+      maxTime: "15s/câu",
+      reactionPoints: ["≤ 3s (+10đ)", "4s-5s (+8đ)", "6s-8s (+6đ)", "9s-15s (+5đ)"]
+    }
+  ]
+};
+
+const getCleanLevelName = (fullName: string, levelNum: number): string => {
+  if (!fullName) return '';
+  const regex = new RegExp(`^c[ấa]p\\s*${levelNum}\\s*[:\\-]?\\s*`, 'i');
+  return fullName.replace(regex, '').trim();
+};
 
 interface StatsDashboardProps {
   users: User[];
@@ -73,6 +133,17 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
   const [scorecardSearchQuery, setScorecardSearchQuery] = useState('');
   const [onlineBranchFilter, setOnlineBranchFilter] = useState<string>('ALL');
   const [expandedDeptOnline, setExpandedDeptOnline] = useState<string | null>(null);
+  const [levelRules, setLevelRules] = useState<LevelRulesConfig | null>(null);
+
+  useEffect(() => {
+    databaseService.getLevelRules().then(rules => {
+      if (rules) {
+        setLevelRules(rules);
+      }
+    }).catch(err => {
+      console.error("Lỗi khi tải quy chế trong StatsDashboard :", err);
+    });
+  }, []);
   
   // Independent scorecard period and selectable time value states
   const [scorecardPeriod, setScorecardPeriod] = useState<'day' | 'week' | 'month'>('day');
@@ -336,6 +407,7 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
       totalScore: number;
       totalDuration: number;
       lastAttempt: number;
+      lastActive: number;
     }> = {};
 
     filtered.forEach(res => {
@@ -353,7 +425,8 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
           bestScore: 0,
           totalScore: 0,
           totalDuration: 0,
-          lastAttempt: 0
+          lastAttempt: 0,
+          lastActive: matchedUser?.lastActive || 0
         };
       }
       grouped[key].attempts += 1;
@@ -367,10 +440,36 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
       }
     });
 
+    const activeRules = levelRules || DEFAULT_LEVEL_RULES;
+
+    const parseRequiredConsecutive = (lvlIdx: number, defaultVal: number = 10): number => {
+      const promotionText = activeRules.levels[lvlIdx]?.promotion;
+      if (!promotionText) return defaultVal;
+      const match = promotionText.match(/liên\s+tục\s+(\d+)\s+lượt/i) || 
+                    promotionText.match(/(\d+)\s+lượt\s+liên\s+tục/i) || 
+                    promotionText.match(/(\d+)\s+lượt/i);
+      if (match) {
+        return parseInt(match[1], 10);
+      }
+      return defaultVal;
+    };
+
+    const parseDemotionThreshold = (lvlIdx: number, defaultVal: number): number => {
+      const demotionText = activeRules.levels[lvlIdx]?.demotion;
+      if (!demotionText) return defaultVal;
+      const match = demotionText.match(/dưới\s+(\d+)\s+điểm/i) || 
+                    demotionText.match(/dưới\s+(\d+)/i) || 
+                    demotionText.match(/<\s*(\d+)/i);
+      if (match) {
+        return parseInt(match[1], 10);
+      }
+      return defaultVal;
+    };
+
     return Object.values(grouped)
       .map(p => {
-        // Compute level based on all historical results for this participant
-        const userResults = results.filter(r => (p.userId && r.userId === p.userId) || (p.userName && r.userName === p.userName));
+        // Compute level based on all historical results for this participant from rawResults
+        const userResults = rawResults.filter(r => (p.userId && r.userId === p.userId) || (p.userName && r.userName === p.userName));
         const chronologicalResults = [...userResults].sort((a, b) => a.timestamp - b.timestamp);
         
         let currentLevel = 1;
@@ -386,8 +485,8 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
             } else {
               consecutiveMaxAtLevel = 0;
             }
-            
-            if (consecutiveMaxAtLevel >= 5) {
+            const reqConsecutive = parseRequiredConsecutive(0, 10);
+            if (consecutiveMaxAtLevel >= reqConsecutive) {
               currentLevel = 2;
               consecutiveMaxAtLevel = 0;
               consecutiveLowAtLevel = 0;
@@ -395,20 +494,19 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
           } else if (currentLevel === 2) {
             if (score === 30) {
               consecutiveMaxAtLevel++;
-              consecutiveLowAtLevel = 0;
-            } else if (score < 20) {
-              consecutiveLowAtLevel++;
-              consecutiveMaxAtLevel = 0;
             } else {
               consecutiveMaxAtLevel = 0;
-              consecutiveLowAtLevel = 0;
             }
-            
-            if (consecutiveMaxAtLevel >= 5) {
+            const demotionMin = parseDemotionThreshold(1, 20);
+            if (score < demotionMin) {
+              consecutiveLowAtLevel++;
+            }
+            const reqConsecutive = parseRequiredConsecutive(1, 10);
+            if (consecutiveMaxAtLevel >= reqConsecutive) {
               currentLevel = 3;
               consecutiveMaxAtLevel = 0;
               consecutiveLowAtLevel = 0;
-            } else if (consecutiveLowAtLevel >= 5) {
+            } else if (consecutiveLowAtLevel >= 2) {
               currentLevel = 1;
               consecutiveMaxAtLevel = 0;
               consecutiveLowAtLevel = 0;
@@ -416,17 +514,55 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
           } else if (currentLevel === 3) {
             if (score === 30) {
               consecutiveMaxAtLevel++;
-              consecutiveLowAtLevel = 0;
-            } else if (score < 20) {
-              consecutiveLowAtLevel++;
-              consecutiveMaxAtLevel = 0;
             } else {
+              consecutiveMaxAtLevel = 0;
+            }
+            const demotionMin = parseDemotionThreshold(2, 26);
+            if (score < demotionMin) {
+              consecutiveLowAtLevel++;
+            }
+            const reqConsecutive = parseRequiredConsecutive(2, 10);
+            if (consecutiveMaxAtLevel >= reqConsecutive) {
+              currentLevel = 4;
+              consecutiveMaxAtLevel = 0;
+              consecutiveLowAtLevel = 0;
+            } else if (consecutiveLowAtLevel >= 2) {
+              currentLevel = 2;
               consecutiveMaxAtLevel = 0;
               consecutiveLowAtLevel = 0;
             }
-            
-            if (consecutiveLowAtLevel >= 5) {
-              currentLevel = 2;
+          } else if (currentLevel === 4) {
+            if (score === 30) {
+              consecutiveMaxAtLevel++;
+            } else {
+              consecutiveMaxAtLevel = 0;
+            }
+            const demotionMin = parseDemotionThreshold(3, 27);
+            if (score < demotionMin) {
+              consecutiveLowAtLevel++;
+            }
+            const reqConsecutive = parseRequiredConsecutive(3, 10);
+            if (consecutiveMaxAtLevel >= reqConsecutive) {
+              currentLevel = 5;
+              consecutiveMaxAtLevel = 0;
+              consecutiveLowAtLevel = 0;
+            } else if (consecutiveLowAtLevel >= 2) {
+              currentLevel = 3;
+              consecutiveMaxAtLevel = 0;
+              consecutiveLowAtLevel = 0;
+            }
+          } else if (currentLevel === 5) {
+            if (score === 30) {
+              consecutiveMaxAtLevel++;
+            } else {
+              consecutiveMaxAtLevel = 0;
+            }
+            const demotionMin = parseDemotionThreshold(4, 28);
+            if (score < demotionMin) {
+              consecutiveLowAtLevel++;
+            }
+            if (consecutiveLowAtLevel >= 2) {
+              currentLevel = 4;
               consecutiveMaxAtLevel = 0;
               consecutiveLowAtLevel = 0;
             }
@@ -1626,22 +1762,34 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
                       </td>
                       <td className="py-3 px-2 text-center font-mono font-bold text-gray-700 whitespace-nowrap">{formattedDuration}</td>
                       <td className="py-3 px-4 text-center whitespace-nowrap">
-                        {stat.level === 3 ? (
-                          <span className="font-sans font-black text-[10px] uppercase px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-150 shadow-3xs tracking-wider inline-flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 bg-purple-500 rounded-full animate-ping"></span>
-                            Cấp 3
-                          </span>
-                        ) : stat.level === 2 ? (
-                          <span className="font-sans font-black text-[10px] uppercase px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-150 shadow-3xs tracking-wider inline-flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 bg-amber-500 rounded-full"></span>
-                            Cấp 2
-                          </span>
-                        ) : (
-                          <span className="font-sans font-black text-[10px] uppercase px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-150 shadow-3xs tracking-wider inline-flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
-                            Cấp 1
-                          </span>
-                        )}
+                        {(() => {
+                          const currentRules = levelRules || DEFAULT_LEVEL_RULES;
+                          const uLvl = stat.level || 1;
+                          const lvlConfig = currentRules.levels.find(l => l.level === uLvl) || DEFAULT_LEVEL_RULES.levels[uLvl - 1] || { name: `Cấp ${uLvl}`, emoji: '🌱' };
+                          const cleanLvlName = getCleanLevelName(lvlConfig.name, uLvl);
+                          const isOnlineNow = stat.lastActive ? Math.abs(Date.now() - stat.lastActive) <= 240000 : false;
+                          
+                          let badgeColors = 'bg-emerald-50 text-emerald-700 border-emerald-150';
+                          if (uLvl === 2) badgeColors = 'bg-blue-50 text-blue-700 border-blue-150';
+                          else if (uLvl === 3) badgeColors = 'bg-amber-50 text-amber-700 border-amber-150';
+                          else if (uLvl === 4) badgeColors = 'bg-purple-50 text-purple-700 border-purple-150';
+                          else if (uLvl === 5) badgeColors = 'bg-rose-50 text-rose-700 border-rose-150';
+
+                          return (
+                            <div className="inline-flex flex-col items-center justify-center text-center">
+                              <span className={`relative font-sans px-3 py-1 rounded-lg border shadow-3xs font-black tracking-wide flex flex-col items-center justify-center min-w-[95px] ${badgeColors} ${isOnlineNow ? 'animate-pulse' : ''}`}>
+                                <span className="text-[10px] uppercase opacity-75 font-mono">Cấp {uLvl}</span>
+                                <span className="text-[11px] font-bold mt-0.5 whitespace-normal leading-tight">{cleanLvlName}</span>
+                                {isOnlineNow && (
+                                  <>
+                                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-400 rounded-full border border-white animate-ping"></span>
+                                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border border-white"></span>
+                                  </>
+                                )}
+                              </span>
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td className="py-3 px-4 text-center font-mono text-[10.5px] text-gray-455 animate-fade-in whitespace-nowrap">
                         <div className="font-bold text-gray-800 text-xs">

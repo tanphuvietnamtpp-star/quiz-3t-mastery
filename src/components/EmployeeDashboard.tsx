@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { databaseService, getQuotaStats } from '../firebase';
-import { User, Question, QuizResult, CompanyMapping, MotivationalSloganBand } from '../types';
+import { User, Question, QuizResult, CompanyMapping, MotivationalSloganBand, LevelRulesConfig, LevelRuleItem } from '../types';
 import { formatDate, formatTimeInSeconds, cleanOptionText } from '../utils/format';
-import { BookOpen, Trophy, Award, BarChart3, ChevronRight, CheckCircle2, XCircle, ArrowRight, RotateCcw, HelpCircle, GraduationCap, AlertCircle, Users, TrendingUp, Building2, LogOut, Home, Maximize2, Minimize2, UserCheck, ImagePlus, Lock, Sparkles, X, Plus, Smartphone, Share, ArrowUp, ArrowLeft, Pencil, Trash2, Building, Landmark, Briefcase, Search, Database, RefreshCcw, QrCode, Server, ShieldCheck, Zap, FileDown, ChevronUp, ChevronDown } from 'lucide-react';
+import { BookOpen, Trophy, Award, BarChart3, ChevronRight, CheckCircle2, XCircle, ArrowRight, RotateCcw, HelpCircle, GraduationCap, AlertCircle, Users, TrendingUp, Building2, LogOut, Home, Maximize2, Minimize2, UserCheck, ImagePlus, Lock, Sparkles, X, Plus, Smartphone, Share, ArrowUp, ArrowLeft, Pencil, Trash2, Building, Landmark, Briefcase, Search, Database, RefreshCcw, QrCode, Server, ShieldCheck, Zap, FileDown, ChevronUp, ChevronDown, Timer, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts';
 import StatsDashboard from './StatsDashboard';
@@ -17,6 +17,60 @@ interface EmployeeDashboardProps {
   onUpdateDifficulty?: (newLevel: number) => void;
   motivationalSlogans?: MotivationalSloganBand[];
 }
+
+const DEFAULT_LEVEL_RULES: LevelRulesConfig = {
+  introduction: "Để khuyến khích thái độ kiên trì luyện tập, tạo phản xạ nhạy bén và nâng cao chuyên môn, hệ thống Quiz 3T Mastery áp dụng cơ chế phân hạng và thay đổi cấp độ tự động.",
+  inactivityTitle: "Quy Định Duy Trì & Không Hoạt Động",
+  inactivityRule1: "Mỗi ngày, nhân viên cần phải thực hiện ít nhất 02 lượt đánh giá để duy trì và giữ vững phong độ của mình.",
+  inactivityRule2: "Nếu không hoạt động, hệ thống sẽ tự động hạ dần cấp độ (mỗi ngày hạ mỗi cấp) cho đến khi quay về lại cấp 1.",
+  levels: [
+    {
+      level: 1,
+      name: "Cấp 1: Tân Binh",
+      emoji: "🌱",
+      promotion: "Đạt điểm tuyệt đối 30/30 liên tục 10 lượt (đã cập nhật tự động theo đúng thay đổi mới nhất của anh) để nâng hạng lên Chiến Binh.",
+      demotion: "Mức sàn tối thiểu, không thể hạ thấp hơn.",
+      maxTime: "90s/câu",
+      reactionPoints: ["≤ 30s (+10đ)", "31s-40s (+8đ)", "41s-50s (+6đ)", "51s-90s (+5đ)"]
+    },
+    {
+      level: 2,
+      name: "Cấp 2: Chiến Binh",
+      emoji: "🛡️",
+      promotion: "Đạt điểm tuyệt đối 30/30 liên tục 10 lượt để nâng hạng lên Thống Lĩnh.",
+      demotion: "Đạt dưới 20 điểm trong 2 lần thi liên tiếp sẽ bị hạ về Tân Binh.\nLần thứ 1 đạt dưới 20đ: Hệ thống sẽ ngay lập tức hiện cảnh báo đỏ nhắc nhở giữ vững phong độ.\nLần thứ 2 đạt dưới 20đ: Hệ thống tự động hạ cấp.",
+      maxTime: "60s/câu",
+      reactionPoints: ["≤ 20s (+10đ)", "21s-30s (+8đ)", "31s-40s (+6đ)", "41s-60s (+5đ)"]
+    },
+    {
+      level: 3,
+      name: "Cấp 3: Thống Lĩnh",
+      emoji: "⚔️",
+      promotion: "Đạt điểm tuyệt đối 30/30 liên tục 10 lượt để nâng hạng lên Tối Cao.",
+      demotion: "Đạt dưới 26 điểm trong 2 lần thi liên tiếp sẽ bị hạ về Chiến Binh.\nLần thứ 1 dưới 26đ: Cảnh báo phong độ.\nLần thứ 2 dưới 26đ: Tự động hạ cấp.",
+      maxTime: "30s/câu",
+      reactionPoints: ["≤ 10s (+10đ)", "11s-15s (+8đ)", "16s-20s (+6đ)", "21s-30s (+5đ)"]
+    },
+    {
+      level: 4,
+      name: "Cấp 4: Tối Cao",
+      emoji: "👑",
+      promotion: "Đạt điểm tuyệt đối 30/30 liên tục 10 lượt để thăng hạng cao nhất Huyền Thoại.",
+      demotion: "Đạt dưới 27 điểm trong 2 lần thi liên tiếp sẽ bị hạ về Thống Lĩnh (có cảnh báo ở lần đầu).",
+      maxTime: "20s/câu",
+      reactionPoints: ["≤ 5s (+10đ)", "6s-8s (+8đ)", "9s-12s (+6đ)", "13s-20s (+5đ)"]
+    },
+    {
+      level: 5,
+      name: "Cấp 5: Huyền Thoại",
+      emoji: "🔮",
+      promotion: "Cấp bậc cao nhất hệ thống (Giữ nguyên).",
+      demotion: "Đạt dưới 28 điểm trong 2 lần thi liên tiếp sẽ bị hạ về Tối Cao (có cảnh báo ở lần đầu).",
+      maxTime: "15s/câu",
+      reactionPoints: ["≤ 3s (+10đ)", "4s-5s (+8đ)", "6s-8s (+6đ)", "9s-15s (+5đ)"]
+    }
+  ]
+};
 
 export default function EmployeeDashboard({ 
   user, 
@@ -200,6 +254,10 @@ export default function EmployeeDashboard({
   };
 
   const [activeTab, setActiveTab] = useState<'practice' | 'quiz' | 'history' | 'ai_extract'>('quiz');
+  const [showLevelRules, setShowLevelRules] = useState(false);
+  const [levelRules, setLevelRules] = useState<LevelRulesConfig | null>(null);
+  const [savingLevelRules, setSavingLevelRules] = useState(false);
+  const [editableRules, setEditableRules] = useState<LevelRulesConfig | null>(null);
   
   // Admin mobile action states
   const [adminMobileTab, setAdminMobileTab] = useState<'home' | 'users' | 'stats' | 'encoding' | 'qr' | 'firebase_data'>('home');
@@ -511,6 +569,7 @@ export default function EmployeeDashboard({
   // Cấp 5 (Huyền Thoại): Thăng cấp: Đạt điểm tuyệt đối 30 điểm liên tục -> Giữ nguyên. Hạ cấp: Điểm < 28 không liên tiếp 2 lần (lần 1 cảnh báo) -> Cấp 4.
   const difficultyState = useMemo(() => {
     const chronologicalResults = [...results].sort((a, b) => a.timestamp - b.timestamp);
+    const activeRules = levelRules || DEFAULT_LEVEL_RULES;
     
     let currentLevel = 1;
     let consecutiveMaxAtLevel = 0;
@@ -520,11 +579,35 @@ export default function EmployeeDashboard({
     let latestFeedbackType: 'promotion' | 'demotion' | 'warning' | null = null;
 
     const levelNames: Record<number, string> = {
-      1: 'Tân Binh (Cấp 1)',
-      2: 'Chiến Binh (Cấp 2)',
-      3: 'Thống Lĩnh (Cấp 3)',
-      4: 'Tối Cao (Cấp 4)',
-      5: 'Huyền Thoại (Cấp 5)'
+      1: activeRules.levels[0]?.name || 'Tân Binh (Cấp 1)',
+      2: activeRules.levels[1]?.name || 'Chiến Binh (Cấp 2)',
+      3: activeRules.levels[2]?.name || 'Thống Lĩnh (Cấp 3)',
+      4: activeRules.levels[3]?.name || 'Tối Cao (Cấp 4)',
+      5: activeRules.levels[4]?.name || 'Huyền Thoại (Cấp 5)'
+    };
+
+    const parseRequiredConsecutive = (lvlIdx: number, defaultVal: number = 10): number => {
+      const promotionText = activeRules.levels[lvlIdx]?.promotion;
+      if (!promotionText) return defaultVal;
+      const match = promotionText.match(/liên\s+tục\s+(\d+)\s+lượt/i) || 
+                    promotionText.match(/(\d+)\s+lượt\s+liên\s+tục/i) || 
+                    promotionText.match(/(\d+)\s+lượt/i);
+      if (match) {
+        return parseInt(match[1], 10);
+      }
+      return defaultVal;
+    };
+
+    const parseDemotionThreshold = (lvlIdx: number, defaultVal: number): number => {
+      const demotionText = activeRules.levels[lvlIdx]?.demotion;
+      if (!demotionText) return defaultVal;
+      const match = demotionText.match(/dưới\s+(\d+)\s+điểm/i) || 
+                    demotionText.match(/dưới\s+(\d+)/i) || 
+                    demotionText.match(/<\s*(\d+)/i);
+      if (match) {
+        return parseInt(match[1], 10);
+      }
+      return defaultVal;
     };
 
     for (let i = 0; i < chronologicalResults.length; i++) {
@@ -544,7 +627,8 @@ export default function EmployeeDashboard({
           consecutiveMaxAtLevel = 0;
         }
         
-        if (consecutiveMaxAtLevel >= 5) {
+        const reqConsecutive = parseRequiredConsecutive(0, 10);
+        if (consecutiveMaxAtLevel >= reqConsecutive) {
           currentLevel = 2;
           consecutiveMaxAtLevel = 0;
           lowScoreCountAtLevel = 0;
@@ -561,11 +645,13 @@ export default function EmployeeDashboard({
           consecutiveMaxAtLevel = 0;
         }
 
-        if (score < 20) {
+        const demotionMin = parseDemotionThreshold(1, 20);
+        if (score < demotionMin) {
           lowScoreCountAtLevel++;
         }
 
-        if (consecutiveMaxAtLevel >= 5) {
+        const reqConsecutive = parseRequiredConsecutive(1, 10);
+        if (consecutiveMaxAtLevel >= reqConsecutive) {
           currentLevel = 3;
           consecutiveMaxAtLevel = 0;
           lowScoreCountAtLevel = 0;
@@ -581,9 +667,9 @@ export default function EmployeeDashboard({
           
           if (isLatestResult) {
             latestFeedbackType = 'demotion';
-            latestFeedbackMessage = `Bạn đã bị tụt xuống ${levelNames[1]} do có 2 lần đạt điểm dưới 20 điểm.`;
+            latestFeedbackMessage = `Bạn đã bị tụt xuống ${levelNames[1]} do có 2 lần đạt điểm dưới ${demotionMin} điểm.`;
           }
-        } else if (score < 20 && lowScoreCountAtLevel === 1 && isLatestResult) {
+        } else if (score < demotionMin && lowScoreCountAtLevel === 1 && isLatestResult) {
           latestFeedbackType = 'warning';
           latestFeedbackMessage = `⚠️ CẢNH BÁO: Đây là lần thứ 1 bạn đạt điểm dưới tối thiểu (${score}/30đ) của cấp độ ${levelNames[2]}. Sẽ bị hạ cấp về ${levelNames[1]} nếu đạt thấp thêm lần nữa!`;
         }
@@ -594,11 +680,13 @@ export default function EmployeeDashboard({
           consecutiveMaxAtLevel = 0;
         }
 
-        if (score < 26) {
+        const demotionMin = parseDemotionThreshold(2, 26);
+        if (score < demotionMin) {
           lowScoreCountAtLevel++;
         }
 
-        if (consecutiveMaxAtLevel >= 5) {
+        const reqConsecutive = parseRequiredConsecutive(2, 10);
+        if (consecutiveMaxAtLevel >= reqConsecutive) {
           currentLevel = 4;
           consecutiveMaxAtLevel = 0;
           lowScoreCountAtLevel = 0;
@@ -614,9 +702,9 @@ export default function EmployeeDashboard({
           
           if (isLatestResult) {
             latestFeedbackType = 'demotion';
-            latestFeedbackMessage = `Bạn đã bị tụt xuống ${levelNames[2]} do có 2 lần đạt điểm dưới 26 điểm.`;
+            latestFeedbackMessage = `Bạn đã bị tụt xuống ${levelNames[2]} do có 2 lần đạt điểm dưới ${demotionMin} điểm.`;
           }
-        } else if (score < 26 && lowScoreCountAtLevel === 1 && isLatestResult) {
+        } else if (score < demotionMin && lowScoreCountAtLevel === 1 && isLatestResult) {
           latestFeedbackType = 'warning';
           latestFeedbackMessage = `⚠️ CẢNH BÁO: Đây là lần thứ 1 bạn đạt điểm dưới tối thiểu (${score}/30đ) của cấp độ ${levelNames[3]}. Sẽ bị hạ cấp về ${levelNames[2]} nếu đạt thấp thêm lần nữa!`;
         }
@@ -627,11 +715,13 @@ export default function EmployeeDashboard({
           consecutiveMaxAtLevel = 0;
         }
 
-        if (score < 27) {
+        const demotionMin = parseDemotionThreshold(3, 27);
+        if (score < demotionMin) {
           lowScoreCountAtLevel++;
         }
 
-        if (consecutiveMaxAtLevel >= 5) {
+        const reqConsecutive = parseRequiredConsecutive(3, 10);
+        if (consecutiveMaxAtLevel >= reqConsecutive) {
           currentLevel = 5;
           consecutiveMaxAtLevel = 0;
           lowScoreCountAtLevel = 0;
@@ -647,9 +737,9 @@ export default function EmployeeDashboard({
           
           if (isLatestResult) {
             latestFeedbackType = 'demotion';
-            latestFeedbackMessage = `Bạn đã bị tụt xuống ${levelNames[3]} do có 2 lần đạt điểm dưới 27 điểm.`;
+            latestFeedbackMessage = `Bạn đã bị tụt xuống ${levelNames[3]} do có 2 lần đạt điểm dưới ${demotionMin} điểm.`;
           }
-        } else if (score < 27 && lowScoreCountAtLevel === 1 && isLatestResult) {
+        } else if (score < demotionMin && lowScoreCountAtLevel === 1 && isLatestResult) {
           latestFeedbackType = 'warning';
           latestFeedbackMessage = `⚠️ CẢNH BÁO: Đây là lần thứ 1 bạn đạt điểm dưới tối thiểu (${score}/30đ) của cấp độ ${levelNames[4]}. Sẽ bị hạ cấp về ${levelNames[3]} nếu đạt thấp thêm lần nữa!`;
         }
@@ -660,7 +750,8 @@ export default function EmployeeDashboard({
           consecutiveMaxAtLevel = 0;
         }
 
-        if (score < 28) {
+        const demotionMin = parseDemotionThreshold(4, 28);
+        if (score < demotionMin) {
           lowScoreCountAtLevel++;
         }
 
@@ -671,9 +762,9 @@ export default function EmployeeDashboard({
           
           if (isLatestResult) {
             latestFeedbackType = 'demotion';
-            latestFeedbackMessage = `Bạn đã bị tụt xuống ${levelNames[4]} do có 2 lần đạt điểm dưới 28 điểm.`;
+            latestFeedbackMessage = `Bạn đã bị tụt xuống ${levelNames[4]} do có 2 lần đạt điểm dưới ${demotionMin} điểm.`;
           }
-        } else if (score < 28 && lowScoreCountAtLevel === 1 && isLatestResult) {
+        } else if (score < demotionMin && lowScoreCountAtLevel === 1 && isLatestResult) {
           latestFeedbackType = 'warning';
           latestFeedbackMessage = `⚠️ CẢNH BÁO: Đây là lần thứ 1 bạn đạt điểm dưới tối thiểu (${score}/30đ) của cấp độ ${levelNames[5]}. Sẽ bị hạ cấp về ${levelNames[4]} nếu đạt thấp thêm lần nữa!`;
         }
@@ -687,7 +778,7 @@ export default function EmployeeDashboard({
       latestFeedbackType,
       latestFeedbackMessage
     };
-  }, [results]);
+  }, [results, levelRules]);
 
   const difficulty = difficultyState.level;
 
@@ -1705,6 +1796,344 @@ export default function EmployeeDashboard({
     );
   };
 
+  const renderMobileRulesEditorPanel = () => {
+    return null;
+  };
+
+  const old_unused_renderMobileRulesEditorPanel = () => {
+
+    const handleSaveRulesClick = async () => {
+      setSavingLevelRules(true);
+      try {
+        await databaseService.saveLevelRules(editableRules);
+        // Also update local live rules immediately so change is reflected live
+        setLevelRules(editableRules);
+        setAdminMobileNotice({ type: 'success', msg: 'Lưu quy chế thăng/hạ cấp và điểm số thành công đồng bộ trên hệ thống!' });
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } catch (err: any) {
+        console.error(err);
+        setAdminMobileNotice({ type: 'error', msg: 'Lỗi đồng bộ dữ liệu quy chế lên Firestore: ' + err.message });
+      } finally {
+        setSavingLevelRules(false);
+      }
+    };
+
+    return (
+      <div className="flex flex-col flex-1 h-full pb-4 font-sans text-left">
+        {/* Header bar */}
+        <div className="flex items-center justify-between py-2 border-b border-gray-200 mb-3 sticky top-0 bg-white z-10 shrink-0">
+          <button 
+            onClick={() => {
+              setAdminMobileTab('home');
+              setAdminMobileNotice(null);
+            }}
+            className="flex items-center gap-1 text-xs font-bold text-gray-500 hover:text-gray-700 p-1 rounded-lg hover:bg-gray-100 cursor-pointer"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span>Sảnh chính</span>
+          </button>
+          <span className="text-[13px] font-extrabold text-[#0B3A60] uppercase tracking-wide">
+            CẤU HÌNH QUY CHẾ 3T
+          </span>
+          <button 
+            onClick={() => setEditableRules(levelRules || DEFAULT_LEVEL_RULES)}
+            className="p-1 border border-gray-200 hover:bg-gray-50 rounded-lg text-gray-500 transition-all cursor-pointer"
+            title="Khôi phục lại hiện tại"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+          </button>
+        </div>
+
+        {/* Notice toast */}
+        {adminMobileNotice && (
+          <div className={`p-2.5 rounded-lg text-xs font-bold mb-3 flex items-start gap-1.5 shadow-3xs ${
+            adminMobileNotice.type === 'success' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-800 border border-red-200'
+          }`}>
+            {adminMobileNotice.type === 'success' ? (
+              <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+            ) : (
+              <XCircle className="h-4 w-4 text-red-600 shrink-0 mt-0.5" />
+            )}
+            <span>{adminMobileNotice.msg}</span>
+          </div>
+        )}
+
+        {/* Content fields - elegant scrolling layout */}
+        <div className="space-y-4 pb-24 overflow-y-auto max-h-[72vh] px-0.5 style-scrollbar">
+          
+          {/* Card: Giới thiệu chung */}
+          <div className="bg-white border border-gray-150 rounded-xl p-3.5 space-y-3 shadow-3xs">
+            <h3 className="text-xs font-extrabold text-[#0B3A60] uppercase tracking-wider flex items-center gap-1.5 border-b border-gray-100 pb-2">
+              <Award className="h-4 w-4 text-blue-500" />
+              <span>GIỚI THIỆU CHUNG DUY TRÌ HỌC TẬP</span>
+            </h3>
+            <div className="space-y-1.5">
+              <label className="text-[10.5px] font-bold text-gray-650 block">Mô tả và tiêu đề đầu trang quyển quy chế:</label>
+              <textarea
+                value={editableRules.introduction || ''}
+                onChange={(e) => setEditableRules({ ...editableRules, introduction: e.target.value })}
+                className="w-full min-h-[70px] text-xs p-2 border border-gray-250 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 leading-normal"
+                placeholder="Nhập nội dung mô tả quy chế..."
+              />
+            </div>
+          </div>
+
+          {/* Card: Quy chế Hạ cấp độ do không hoạt động (Duy trì phong độ) */}
+          <div className="bg-white border border-gray-150 rounded-xl p-3.5 space-y-3 shadow-3xs">
+            <h3 className="text-xs font-extrabold text-[#0B3A60] uppercase tracking-wider flex items-center gap-1.5 border-b border-gray-100 pb-2">
+              <AlertTriangle className="h-4 w-4 text-amber-500" />
+              <span>QUY CHẾ DUY TRÌ & HẠ CẤP TỰ ĐỘNG</span>
+            </h3>
+            
+            <p className="text-[10px] text-gray-400 font-medium leading-relaxed">
+              CBNV cần hoàn thành ít nhất 02 lượt ôn luyện/ngày để giữ vững phong độ. Nếu không đạt yêu cầu, hệ thống sẽ tự động hạ giảm cấp độ chầm chậm qua mỗi ngày cho tới khi về Cấp 1: Tân Binh.
+            </p>
+
+            <div className="space-y-2.5">
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-gray-600">Yêu cầu giữ vững phong độ (Dòng 1):</label>
+                <input
+                  type="text"
+                  value={editableRules.inactivityRules?.rule1 || 'Để duy trì cấp độ, mỗi ngày nhân viên cần phải thực hiện ít nhất 02 lượt đánh giá để giữ vững phong độ của mình.'}
+                  onChange={(e) => setEditableRules({
+                    ...editableRules,
+                    inactivityRules: {
+                      ...editableRules.inactivityRules,
+                      rule1: e.target.value
+                    }
+                  })}
+                  className="w-full text-xs p-2 border border-gray-250 rounded-lg focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-gray-600">Quy định hạ cấp tự động hàng ngày (Dòng 2):</label>
+                <input
+                  type="text"
+                  value={editableRules.inactivityRules?.rule2 || 'Nếu nhân viên không hoạt động thì hệ thống sẽ hạ dần cấp độ (mỗi ngày hạ một cấp) cho đến khi quay về lại cấp 1.'}
+                  onChange={(e) => setEditableRules({
+                    ...editableRules,
+                    inactivityRules: {
+                      ...editableRules.inactivityRules,
+                      rule2: e.target.value
+                    }
+                  })}
+                  className="w-full text-xs p-2 border border-gray-250 rounded-lg focus:outline-none focus:border-blue-500"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Cards for each Level Rule */}
+          {editableRules.levels.map((lvl, index) => (
+            <div key={lvl.level} className="bg-white border border-gray-150 rounded-xl p-3.5 space-y-3.5 shadow-3xs">
+              <div className="flex justify-between items-center border-b border-gray-100 pb-2">
+                <h4 className="text-xs font-black text-gray-950 uppercase flex items-center gap-1.5">
+                  <span className="inline-flex items-center justify-center h-4 w-4 rounded-full bg-slate-900 text-white text-[9.5px] font-bold font-mono">{lvl.level}</span>
+                  <span>CẤP {lvl.level}: {lvl.name}</span>
+                </h4>
+                <input
+                  type="text"
+                  value={lvl.emoji || ''}
+                  onChange={(e) => {
+                    const newLevels = [...editableRules.levels];
+                    newLevels[index] = { ...newLevels[index], emoji: e.target.value };
+                    setEditableRules({ ...editableRules, levels: newLevels });
+                  }}
+                  className="w-8 text-center text-xs p-0.5 border border-gray-250 rounded focus:outline-none"
+                  title="Emoji đại diện"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-gray-600">Tên Cấp Độ:</label>
+                  <input
+                    type="text"
+                    value={lvl.name || ''}
+                    onChange={(e) => {
+                      const newLevels = [...editableRules.levels];
+                      newLevels[index] = { ...newLevels[index], name: e.target.value };
+                      setEditableRules({ ...editableRules, levels: newLevels });
+                    }}
+                    className="w-full text-xs p-1.5 border border-gray-250 rounded-lg focus:outline-none"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-gray-600">Thời gian trả lời tối đa (giây):</label>
+                  <input
+                    type="number"
+                    value={lvl.maxTime || 0}
+                    onChange={(e) => {
+                      const newLevels = [...editableRules.levels];
+                      newLevels[index] = { ...newLevels[index], maxTime: parseInt(e.target.value) || 0 };
+                      setEditableRules({ ...editableRules, levels: newLevels });
+                    }}
+                    className="w-full text-xs p-1.5 border border-gray-250 rounded-lg font-mono focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-[#0B3A60] flex items-center gap-1">
+                    <TrendingUp className="h-3 w-3 text-emerald-600" />
+                    <span>Quy tắc đạt điểm tuyệt đối đạt chuẩn (Thăng cấp):</span>
+                  </label>
+                  <textarea
+                    value={lvl.promotionCriteria || ''}
+                    onChange={(e) => {
+                      const newLevels = [...editableRules.levels];
+                      newLevels[index] = { ...newLevels[index], promotionCriteria: e.target.value };
+                      setEditableRules({ ...editableRules, levels: newLevels });
+                    }}
+                    className="w-full text-[11px] p-2 border border-gray-250 rounded-lg focus:outline-none leading-normal min-h-[46px]"
+                  />
+                </div>
+
+                {lvl.level > 1 && (
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-[#0B3A60] flex items-center gap-1">
+                      <ChevronDown className="h-3 w-3 text-red-600" />
+                      <span>Quy tắc cảnh báo hạ cấp độ:</span>
+                    </label>
+                    <textarea
+                      value={lvl.demotionCriteria || ''}
+                      onChange={(e) => {
+                        const newLevels = [...editableRules.levels];
+                        newLevels[index] = { ...newLevels[index], demotionCriteria: e.target.value };
+                        setEditableRules({ ...editableRules, levels: newLevels });
+                      }}
+                      className="w-full text-[11px] p-2 border border-gray-250 rounded-lg focus:outline-none leading-normal min-h-[46px]"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Reaction Points Config */}
+              <div className="border-t border-gray-100 pt-2.5 space-y-1.5">
+                <span className="text-[11px] font-extrabold text-blue-900 uppercase tracking-wider block">Thiết lập điểm số phản xạ nhanh:</span>
+                <div className="grid grid-cols-2 gap-2 text-[10px]">
+                  <div className="space-y-0.5">
+                    <label className="text-emerald-700 font-bold block">Đạt 10 điểm khi trả lời dưới (giây):</label>
+                    <input
+                      type="text"
+                      value={lvl.reactionPoints?.p10 || ''}
+                      onChange={(e) => {
+                        const newLevels = [...editableRules.levels];
+                        newLevels[index] = {
+                          ...newLevels[index],
+                          reactionPoints: {
+                            ...newLevels[index].reactionPoints,
+                            p10: e.target.value
+                          }
+                        };
+                        setEditableRules({ ...editableRules, levels: newLevels });
+                      }}
+                      className="w-full text-xs p-1.5 border border-gray-250 rounded focus:outline-none"
+                    />
+                  </div>
+                  <div className="space-y-0.5">
+                    <label className="text-blue-700 font-bold block">Nhận 8 điểm trong khoảng (giây):</label>
+                    <input
+                      type="text"
+                      value={lvl.reactionPoints?.p8 || ''}
+                      onChange={(e) => {
+                        const newLevels = [...editableRules.levels];
+                        newLevels[index] = {
+                          ...newLevels[index],
+                          reactionPoints: {
+                            ...newLevels[index].reactionPoints,
+                            p8: e.target.value
+                          }
+                        };
+                        setEditableRules({ ...editableRules, levels: newLevels });
+                      }}
+                      className="w-full text-xs p-1.5 border border-gray-250 rounded focus:outline-none"
+                    />
+                  </div>
+                  <div className="space-y-0.5">
+                    <label className="text-amber-700 font-bold block">Nhận 6 điểm trong khoảng (giây):</label>
+                    <input
+                      type="text"
+                      value={lvl.reactionPoints?.p6 || ''}
+                      onChange={(e) => {
+                        const newLevels = [...editableRules.levels];
+                        newLevels[index] = {
+                          ...newLevels[index],
+                          reactionPoints: {
+                            ...newLevels[index].reactionPoints,
+                            p6: e.target.value
+                          }
+                        };
+                        setEditableRules({ ...editableRules, levels: newLevels });
+                      }}
+                      className="w-full text-xs p-1.5 border border-gray-250 rounded focus:outline-none"
+                    />
+                  </div>
+                  <div className="space-y-0.5">
+                    <label className="text-slate-500 font-bold block">Nhận 5 điểm trong khoảng (giây):</label>
+                    <input
+                      type="text"
+                      value={lvl.reactionPoints?.p5 || ''}
+                      onChange={(e) => {
+                        const newLevels = [...editableRules.levels];
+                        newLevels[index] = {
+                          ...newLevels[index],
+                          reactionPoints: {
+                            ...newLevels[index].reactionPoints,
+                            p5: e.target.value
+                          }
+                        };
+                        setEditableRules({ ...editableRules, levels: newLevels });
+                      }}
+                      className="w-full text-xs p-1.5 border border-gray-250 rounded focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+
+          {/* Spacer to push save button */}
+          <div className="h-10"></div>
+        </div>
+
+        {/* Floating action bar at bottom with save */}
+        <div className="absolute bottom-3 left-3 right-3 bg-white border border-gray-150 p-2.5 rounded-xl shadow-lg flex items-center justify-between gap-3 z-30">
+          <button
+            onClick={() => {
+              setAdminMobileTab('home');
+              setAdminMobileNotice(null);
+            }}
+            className="flex-1 py-2 px-3 border border-gray-250 hover:bg-gray-50 active:scale-95 transition-all text-gray-700 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 cursor-pointer"
+          >
+            <span>ĐÓNG THOÁT</span>
+          </button>
+          
+          <button
+            onClick={handleSaveRulesClick}
+            disabled={savingLevelRules}
+            className="flex-1 py-2 px-4 bg-gradient-to-r from-blue-600 to-[#1971C2] hover:shadow-md active:scale-97 transition-all text-white font-extrabold text-xs rounded-xl flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60"
+          >
+            {savingLevelRules ? (
+              <>
+                <RefreshCcw className="h-3.5 w-3.5 animate-spin" />
+                <span>ĐANG đồng bộ...</span>
+              </>
+            ) : (
+              <>
+                <ShieldCheck className="h-3.5 w-3.5" />
+                <span>LƯU QUY CHẾ LÊN CLOUD</span>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   // Compression helper (Canvas-based Resizer & quality compressor to maintain quotas)
   const compressImage = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -1904,7 +2333,16 @@ export default function EmployeeDashboard({
   };
   
   const getMaxQuestionTimer = (level: number): number => {
-    if (level === 5) return 10;
+    if (levelRules && levelRules.levels) {
+      const match = levelRules.levels.find(l => l.level === level);
+      if (match && match.maxTime) {
+        const parsed = parseInt(match.maxTime, 10);
+        if (!isNaN(parsed) && parsed > 0) {
+          return parsed;
+        }
+      }
+    }
+    if (level === 5) return 15;
     if (level === 4) return 20;
     if (level === 3) return 30;
     if (level === 2) return 60;
@@ -2029,6 +2467,13 @@ export default function EmployeeDashboard({
           .filter(r => r.userId === user.id)
           .sort((a, b) => b.timestamp - a.timestamp);
         setResults(userResults);
+
+        try {
+          const rules = await databaseService.getLevelRules();
+          setLevelRules(rules);
+        } catch (ruleErr) {
+          console.error("Lỗi khi tải quy chế cấp độ:", ruleErr);
+        }
       } catch (err) {
         console.error("Lỗi khi tải dữ liệu nhân viên:", err);
       }
@@ -2318,7 +2763,7 @@ export default function EmployeeDashboard({
   return (
     <div className="h-[100dvh] min-h-[100dvh] max-h-[100dvh] overflow-hidden bg-gray-50 flex flex-col">
       {/* Simulation preview banner - Hidden on mobile viewports so mock screen can occupy the top space (tràn lên trên) */}
-      {isAdminReview && user.role === 'admin' && (
+      {isAdminReview && (user.role === 'admin' || user.role === 'executive') && (
         <div className="hidden sm:flex bg-amber-500 text-white px-6 py-2 flex-col sm:flex-row justify-between items-center text-xs md:text-sm font-bold shadow-md z-50 gap-1.5 shrink-0">
           <div className="flex items-center gap-2">
             <span translate="no" className="notranslate bg-amber-700 px-2 py-0.5 rounded text-[10px] text-white tracking-widest shrink-0 uppercase">Chế độ xem thử</span>
@@ -2326,8 +2771,8 @@ export default function EmployeeDashboard({
           </div>
           {onBackToAdmin && (
             <button 
-              onClick={onBackToAdmin}
-              className="bg-white text-gray-900 hover:bg-gray-100 transition-all font-bold px-3 py-1 rounded shadow-sm font-sans shrink-0 text-xs"
+              onClick={() => onBackToAdmin()}
+              className="bg-white text-gray-900 hover:bg-gray-100 transition-all font-bold px-3 py-1 rounded shadow-sm font-sans shrink-0 text-xs cursor-pointer"
             >
               <span translate="no" className="notranslate">Quay lại trang Quản trị</span>
             </button>
@@ -2364,8 +2809,197 @@ export default function EmployeeDashboard({
             
             {/* Dynamic Inner Panel Viewports */}
             <AnimatePresence mode="wait">
+              {/* Quy định Thăng/Hạ Cấp Độ & Điểm Phản Xạ */}
+              {showLevelRules && (
+                <motion.div
+                  key="level_rules_viewport"
+                  initial={{ opacity: 0, y: 15 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -15 }}
+                  transition={{ duration: 0.25, ease: "easeOut" }}
+                  className="space-y-4 font-sans pb-10"
+                >
+                  {/* Top Header Bar inside Smartphone with Home Button */}
+                  <div className="flex items-center justify-between border-b border-blue-100 pb-2.5">
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => setShowLevelRules(false)}
+                        className="p-1 px-2.5 bg-blue-50 hover:bg-blue-100 text-[#1971C2] border border-blue-200/50 rounded-lg flex items-center justify-center cursor-pointer transition-all active:scale-95 text-[11px] font-extrabold gap-1"
+                        title="Trở về Trang chủ [Home]"
+                      >
+                        <Home className="h-3.5 w-3.5" />
+                        <span>Trang chủ</span>
+                      </button>
+                    </div>
+                    <span translate="no" className="notranslate text-[9px] font-extrabold text-blue-700 bg-blue-50 border border-blue-200/50 px-2.5 py-0.5 rounded-full uppercase truncate">
+                      Quy chế 3T Mastery
+                    </span>
+                  </div>
+
+                  {(() => {
+                    const currentRules = levelRules || DEFAULT_LEVEL_RULES;
+                    
+                    const getLevelBgClass = (lvlNum: number) => {
+                      if (lvlNum === 1) return "bg-slate-50 border-slate-200";
+                      if (lvlNum === 2) return "bg-blue-50/50 border-blue-150";
+                      if (lvlNum === 3) return "bg-emerald-50/30 border-emerald-150";
+                      if (lvlNum === 4) return "bg-amber-50/40 border-amber-150";
+                      return "bg-rose-50/45 border-rose-150";
+                    };
+
+                    const getLevelNumBgClass = (lvlNum: number) => {
+                      if (lvlNum === 1) return "bg-slate-200/25 text-slate-400/40";
+                      if (lvlNum === 2) return "bg-blue-105/25 text-blue-400/30";
+                      if (lvlNum === 3) return "bg-emerald-100/25 text-emerald-450/40";
+                      if (lvlNum === 4) return "bg-amber-155/25 text-amber-500/30";
+                      return "bg-rose-150/25 text-rose-500/30";
+                    };
+
+                    return (
+                      <>
+                        <div className="bg-gradient-to-br from-blue-600 to-[#1971C2] text-white p-3 rounded-xl shadow-sm text-left">
+                          <h2 className="text-xs font-black flex items-center gap-1.5 leading-tight animate-pulse">
+                            <Sparkles className="h-4 w-4 text-amber-300 shrink-0" />
+                            QUY CHẾ THĂNG / HẠ CẤP ĐỘ
+                          </h2>
+                          <p className="text-[10px] mt-1 text-blue-10/95 leading-relaxed font-semibold">
+                            {currentRules.introduction}
+                          </p>
+                        </div>
+
+                        {/* 5 Levels Section with cards layout */}
+                        <div className="space-y-2.5">
+                          <h3 className="text-[10px] font-extrabold text-[#1971C2] uppercase tracking-widest text-left flex items-center gap-1">
+                            <TrendingUp className="h-3.5 w-3.5 shrink-0" />
+                            <span>Chi tiết 5 Cấp bậc Ôn Luyện</span>
+                          </h3>
+
+                          {currentRules.levels.map((lvl) => (
+                            <div key={lvl.level} className={`${getLevelBgClass(lvl.level)} border rounded-xl p-3 text-left relative overflow-hidden shadow-3xs`}>
+                              <div className={`${getLevelNumBgClass(lvl.level)} absolute -top-1.5 -right-1.5 w-10 h-10 rounded-full flex items-center justify-center text-xs font-black select-none`}>
+                                {lvl.level}
+                              </div>
+                              <div className="flex items-center gap-1.5 mb-1.5">
+                                <span className="text-sm">{lvl.emoji}</span>
+                                <h4 translate="no" className="notranslate text-xs font-black leading-none bg-transparent border-0 p-0 m-0 outline-none inline-block shadow-none text-left font-sans text-gray-900">{lvl.name}</h4>
+                              </div>
+                              <div className="space-y-1 text-[10.5px] leading-relaxed">
+                                <div className="flex items-start gap-1">
+                                  <span className="text-emerald-600 font-bold shrink-0">➢ Thăng cấp:</span>
+                                  <span className="text-gray-650">{lvl.promotion}</span>
+                                </div>
+                                <div className="flex items-start gap-1 pt-1 border-t border-dotted border-gray-200 mt-1">
+                                  <span className="text-rose-600 font-bold shrink-0">➢ Hạ cấp:</span>
+                                  <span className="text-gray-655">{lvl.demotion}</span>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+
+                          {/* Level Maintenance & Inactivity Penalty Policy Card */}
+                          <div className="bg-gradient-to-r from-orange-50 to-amber-50/60 border border-orange-200 rounded-xl p-3 text-left relative overflow-hidden shadow-3xs col-span-full">
+                            <div className="absolute -top-1.5 -right-1.5 w-10 h-10 bg-orange-200/20 rounded-full flex items-center justify-center text-xs font-black text-orange-400/40 select-none">
+                              ⚠️
+                            </div>
+                            <div className="flex items-center gap-1.5 mb-1.5">
+                              <span className="text-sm">🔄</span>
+                              <h4 translate="no" className="notranslate text-xs font-black text-orange-850 leading-none">{currentRules.inactivityTitle}</h4>
+                            </div>
+                            <div className="space-y-1.5 text-[10.5px] leading-relaxed">
+                              <div className="flex items-start gap-1">
+                                <span className="text-orange-700 font-bold shrink-0">➢ Để duy trì cấp độ:</span>
+                                <span className="text-gray-700">{currentRules.inactivityRule1}</span>
+                              </div>
+                              <div className="flex items-start gap-1 pt-1.5 border-t border-orange-200/40 mt-1.5">
+                                <span className="text-rose-600 font-bold shrink-0">➢ Nếu không hoạt động:</span>
+                                <span className="text-gray-700">{currentRules.inactivityRule2}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Reaction Score Guidelines */}
+                        <div className="bg-slate-50 border border-slate-205 rounded-xl p-3.5 text-left shadow-2xs space-y-2.5">
+                          <h3 className="text-[10px] font-extrabold text-blue-900 border-b border-blue-100 pb-1.5 flex items-center gap-1.5">
+                            <Timer className="h-4 w-4 text-[#1971C2]" />
+                            ĐIỂM TRẢ LỜI THEO THỜI GIAN PHẢN XẠ
+                          </h3>
+                          <p className="text-[10px] sm:text-[10.5px] text-gray-600 leading-relaxed font-semibold">
+                            Để khuyến khích phản xạ nhanh nhạy và nắm vững kiến thức, hệ thống chấm điểm nhảy động tự động dựa trên số giây suy nghĩ (chỉ tính khi bạn trả lời <strong className="text-emerald-700 font-bold">ĐÚNG</strong>):
+                          </p>
+
+                          <div className="space-y-3.5 pt-1">
+                            {currentRules.levels.map((lvl) => (
+                              <div key={lvl.level} className="space-y-1">
+                                <div className={`flex justify-between items-center ${
+                                  lvl.level === 1 ? 'bg-slate-200/50' : 
+                                  lvl.level === 2 ? 'bg-blue-100/50' :
+                                  lvl.level === 3 ? 'bg-emerald-100/50' :
+                                  lvl.level === 4 ? 'bg-amber-100/50' : 'bg-rose-100/50'
+                                } px-2 py-0.5 rounded-sm`}>
+                                  <span translate="no" className="notranslate text-[10px] font-bold text-gray-700">{lvl.emoji} {lvl.name}</span>
+                                  <span translate="no" className="notranslate text-[9px] font-bold text-gray-550">Tối đa: {lvl.maxTime}</span>
+                                </div>
+                                <div className="grid grid-cols-2 gap-1 px-1 text-[9.5px] font-semibold text-gray-600">
+                                  {(Array.isArray(lvl.reactionPoints) 
+                                    ? lvl.reactionPoints 
+                                    : [
+                                        `≤ ${(lvl.reactionPoints as any).p10 || '0s'} (+10đ)`,
+                                        `${(lvl.reactionPoints as any).p8 || '0s'} (+8đ)`,
+                                        `${(lvl.reactionPoints as any).p6 || '0s'} (+6đ)`,
+                                        `${(lvl.reactionPoints as any).p5 || '0s'} (+5đ)`
+                                      ]
+                                  ).map((pt, pIdx) => (
+                                    <div key={pIdx} className="flex items-center gap-0.5">
+                                      {pIdx === 0 ? '⚡' : '⏱️'} {pt}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Fatal Warning footnote */}
+                          <div className="flex items-start gap-1 p-2 bg-rose-50/50 border border-rose-100 rounded-lg mt-2.5">
+                            <AlertTriangle className="h-3.5 w-3.5 text-rose-600 shrink-0 mt-0.5" />
+                            <p className="text-[9px] sm:text-[9.5px] text-rose-750 font-bold leading-normal">
+                              Lưu ý: Nếu thành viên trả lời SAI ở bất kỳ cấp độ nào, điểm số nhận về chắc chắn là 0 điểm.
+                            </p>
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
+
+                  {/* Foot navigation: Home and Back to top */}
+                  <div className="pt-2 flex items-center justify-between gap-3">
+                    <button
+                      onClick={() => {
+                        setShowLevelRules(false);
+                        innerViewportRef.current?.scrollTo({ top: 0, behavior: 'instant' });
+                      }}
+                      className="flex-1 py-2 px-4 bg-gradient-to-r from-blue-600 to-[#1971C2] hover:shadow-xs active:scale-98 transition-all text-white font-extrabold text-xs rounded-xl flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Home className="h-4 w-4" />
+                      <span>QUAY VỀ TRANG CHỦ</span>
+                    </button>
+                    
+                    {showScrollTop && (
+                      <button
+                        onClick={scrollToTop}
+                        className="py-2 px-3 bg-gray-100 hover:bg-gray-200 active:scale-95 transition-all text-gray-700 font-bold text-xs rounded-xl flex items-center justify-center gap-1 cursor-pointer border border-gray-200"
+                        title="Cuộn lên đầu trang"
+                      >
+                        <ChevronUp className="h-4 w-4 animate-bounce" />
+                        <span>TOP</span>
+                      </button>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+
               {/* Departmental Approval Viewport for Approvers */}
-              {showApprovalPanel && (user.role === 'approver' || user.canViewStats) && !quizStarted && (
+              {showApprovalPanel && !showLevelRules && (user.role === 'approver' || user.canViewStats) && !quizStarted && (
                 <motion.div
                   key="department_approvals"
                   initial={{ opacity: 0, y: 10 }}
@@ -2530,7 +3164,7 @@ export default function EmployeeDashboard({
               )}
 
               {/* Practice Tab Viewport */}
-              {activeTab === 'practice' && !quizStarted && !showApprovalPanel && (
+              {activeTab === 'practice' && !quizStarted && !showApprovalPanel && !showLevelRules && (
                 <motion.div
                   key="practice"
                   initial={{ opacity: 0, y: 10 }}
@@ -2628,7 +3262,7 @@ export default function EmployeeDashboard({
           )}
 
           {/* AI Extract Tab Viewport inside Smartphone Simulation for Administrators */}
-          {activeTab === 'ai_extract' && !quizStarted && !showApprovalPanel && (
+          {activeTab === 'ai_extract' && !quizStarted && !showApprovalPanel && !showLevelRules && (
             <motion.div
               key="ai_extract_viewport"
               initial={{ opacity: 0, y: 10 }}
@@ -2788,7 +3422,7 @@ export default function EmployeeDashboard({
           )}
 
           {/* History Tab Viewport */}
-          {activeTab === 'history' && !quizStarted && !showApprovalPanel && (
+          {activeTab === 'history' && !quizStarted && !showApprovalPanel && !showLevelRules && (
             <motion.div
               key="history"
               initial={{ opacity: 0, y: 10 }}
@@ -3094,7 +3728,7 @@ export default function EmployeeDashboard({
           )}
 
           {/* Core Mock Interactive Quiz Section */}
-          {activeTab === 'quiz' && !showApprovalPanel && (
+          {activeTab === 'quiz' && !showApprovalPanel && !showLevelRules && (
             <motion.div
               key="quiz_portal"
               initial={{ opacity: 0, y: 10 }}
@@ -3129,17 +3763,17 @@ export default function EmployeeDashboard({
                             </span>
                           )}
                         </div>
-                        <div className={`grid ${user.role === 'executive' ? 'grid-cols-4' : 'grid-cols-6'} gap-0.5 px-0.5 mb-2`}>
+                        <div className="flex flex-row items-center justify-between gap-1 overflow-x-auto no-scrollbar px-1 pt-2.5 pb-1 mb-1">
                           {(user.role === 'admin' || user.role === 'executive') && (
                             <button
                               onClick={() => setAdminMobileTab('users')}
-                              className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group"
+                              className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group shrink-0"
                               title="Phê Duyệt & Phân Quyền"
                             >
                               <div className="h-7 w-7 rounded-lg bg-blue-50 border border-blue-100/60 flex items-center justify-center group-hover:bg-blue-100 transition-colors shrink-0 relative">
                                 <UserCheck className="h-3.5 w-3.5 text-[#1971C2]" />
                                 {pendingUsersCount > 0 && (
-                                  <span className="absolute -top-1.5 -right-1.5 bg-red-650 text-white text-[9.5px] font-extrabold h-4 px-1 rounded-full border border-white flex items-center justify-center shadow-md min-w-[16px] leading-none animate-bounce">
+                                  <span className="absolute -top-2 -right-1.5 bg-red-650 text-white text-[9.5px] font-extrabold h-4 px-1 rounded-full border border-white flex items-center justify-center shadow-md min-w-[16px] leading-none animate-bounce">
                                     {pendingUsersCount}
                                   </span>
                                 )}
@@ -3150,10 +3784,10 @@ export default function EmployeeDashboard({
 
                           <button
                             onClick={() => setActiveTab('ai_extract')}
-                            className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-750 font-sans cursor-pointer group"
+                            className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-755 font-sans cursor-pointer group shrink-0"
                             title="Trích xuất Câu Hỏi AI (Hình Ảnh)"
                           >
-                            <div className="h-7 w-7 rounded-lg bg-purple-50 border border-purple-100/60 flex items-center justify-center group-hover:bg-purple-100 transition-colors shrink-0">
+                            <div className="h-7 w-7 rounded-lg bg-purple-50 border border-purple-100/60 flex items-center justify-center group-hover:bg-purple-100 transition-colors shrink-0 font-sans">
                               <ImagePlus className="h-3.5 w-3.5 text-purple-600" />
                             </div>
                             <span className="text-[8.5px] font-bold leading-tight truncate w-full text-center text-gray-700 font-sans">Picture</span>
@@ -3161,7 +3795,7 @@ export default function EmployeeDashboard({
 
                           <button
                             onClick={() => setAdminMobileTab('qr')}
-                            className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group"
+                            className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group shrink-0"
                             title="Mã QR"
                           >
                             <div className="h-7 w-7 rounded-lg bg-indigo-50 border border-indigo-100/60 flex items-center justify-center group-hover:bg-indigo-100 transition-colors shrink-0">
@@ -3172,19 +3806,19 @@ export default function EmployeeDashboard({
 
                           <button
                             onClick={() => setAdminMobileTab('stats')}
-                            className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group"
+                            className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group shrink-0"
                             title="Trang Thống Kê"
                           >
                             <div className="h-7 w-7 rounded-lg bg-emerald-50 border border-emerald-100/60 flex items-center justify-center group-hover:bg-emerald-100 transition-colors shrink-0 relative">
                               <BarChart3 className="h-3.5 w-3.5 text-emerald-600" />
-                              {participantsTodayCount > 0 && (
-                                <span className="absolute -top-1.5 -right-3.5 bg-blue-600 text-white text-[9px] font-extrabold h-4 px-1 rounded-full border border-white flex items-center justify-center shadow-md min-w-[16px] leading-none animate-bounce">
-                                  {participantsTodayCount}
+                              {attemptsTodayCount > 0 && (
+                                <span className="absolute -top-2.5 -left-3 bg-emerald-500 text-white text-[9px] font-black h-4 px-1 rounded-full border border-white flex items-center justify-center shadow-md min-w-[16px] leading-none">
+                                  {attemptsTodayCount}
                                 </span>
                               )}
-                              {attemptsTodayCount > 0 && (
-                                <span className="absolute -top-1.5 -left-3.5 bg-emerald-500 text-white text-[9px] font-black h-4 px-1 rounded-full border border-white flex items-center justify-center shadow-md min-w-[16px] leading-none">
-                                  {attemptsTodayCount}
+                              {participantsTodayCount > 0 && (
+                                <span className="absolute -top-2.5 -right-2.5 bg-blue-600 text-white text-[9px] font-extrabold h-4 px-1 rounded-full border border-white flex items-center justify-center shadow-md min-w-[16px] leading-none animate-bounce">
+                                  {participantsTodayCount}
                                 </span>
                               )}
                             </div>
@@ -3194,7 +3828,7 @@ export default function EmployeeDashboard({
                           {user.role === 'admin' && (
                             <button
                               onClick={() => setAdminMobileTab('encoding')}
-                              className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group"
+                              className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group shrink-0"
                               title="Trang Mã Hóa"
                             >
                               <div className="h-7 w-7 rounded-lg bg-amber-50 border border-amber-100/60 flex items-center justify-center group-hover:bg-amber-100 transition-colors shrink-0">
@@ -3207,7 +3841,7 @@ export default function EmployeeDashboard({
                           {user.role === 'admin' && (
                             <button
                               onClick={() => setAdminMobileTab('firebase_data')}
-                              className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group"
+                              className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group shrink-0"
                               title="Dữ Liệu"
                             >
                               <div className="h-7 w-7 rounded-lg bg-cyan-50 border border-cyan-100/60 flex items-center justify-center group-hover:bg-cyan-100 transition-colors shrink-0">
@@ -3254,7 +3888,11 @@ export default function EmployeeDashboard({
                     </div>
 
                     {/* Cấu hình Mức độ Khó tự dộng */}
-                    <div className="w-full max-w-sm mx-auto mb-2 bg-gradient-to-r from-blue-50/70 via-slate-50/50 to-orange-50/40 border border-slate-200/80 py-1.5 px-2.5 rounded-xl flex items-center justify-between text-left shadow-2xs shrink-0 font-sans">
+                    <div 
+                      onClick={() => setShowLevelRules(true)}
+                      className="w-full max-w-sm mx-auto mb-2 bg-gradient-to-r from-blue-50/70 via-slate-50/50 to-orange-50/40 border border-blue-200/60 hover:border-blue-400 py-1.5 px-2.5 rounded-xl flex items-center justify-between text-left shadow-2xs shrink-0 font-sans cursor-pointer hover:shadow-xs active:scale-[0.995] transition-all relative group"
+                      title="Bấm để xem Quy chế Thăng/Hạ Cấp & Điểm Phản Xạ"
+                    >
                       <div className="flex items-center gap-2">
                         <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 shadow-3xs border ${
                           difficulty === 5
@@ -3271,12 +3909,14 @@ export default function EmployeeDashboard({
                         </div>
                         <div>
                           <div className="text-[8px] font-extrabold text-[#1971C2] uppercase tracking-wider font-sans leading-none mb-0.5">CẤP ĐỘ ÔN LUYỆN TỰ ĐỘNG</div>
-                          <div className="text-xs font-black text-gray-800 font-sans leading-tight">
-                            {difficulty === 5 ? '🏆 Cấp 5: Huyền Thoại' :
-                             difficulty === 4 ? '🔥 Cấp 4: Tối Cao' :
-                             difficulty === 3 ? '⚔️ Cấp 3: Thống Lĩnh' :
-                             difficulty === 2 ? '🛡️ Cấp 2: Chiến Binh' :
-                             '🌱 Cấp 1: Tân Binh'}
+                          <div className="text-xs font-black text-gray-800 font-sans leading-tight flex items-center gap-1">
+                            <span>
+                              {difficulty === 5 ? '🏆 Cấp 5: Huyền Thoại' :
+                               difficulty === 4 ? '🔥 Cấp 4: Tối Cao' :
+                               difficulty === 3 ? '⚔️ Cấp 3: Thống Lĩnh' :
+                               difficulty === 2 ? '🛡️ Cấp 2: Chiến Binh' :
+                               '🌱 Cấp 1: Tân Binh'}
+                            </span>
                           </div>
                         </div>
                       </div>

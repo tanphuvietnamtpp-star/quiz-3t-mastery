@@ -91,3 +91,22 @@ export interface MotivationalSloganBand {
   slogan: string;
   slogans?: string[];
 }
+
+export interface LevelRuleItem {
+  level: number;
+  name: string;
+  emoji: string;
+  promotion: string;
+  demotion: string;
+  maxTime: string;
+  reactionPoints: string[];
+}
+
+export interface LevelRulesConfig {
+  id?: string;
+  introduction: string;
+  inactivityTitle: string;
+  inactivityRule1: string;
+  inactivityRule2: string;
+  levels: LevelRuleItem[];
+}

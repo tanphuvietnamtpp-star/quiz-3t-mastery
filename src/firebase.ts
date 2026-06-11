@@ -15,7 +15,7 @@ import {
   onSnapshot
 } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
-import { User, Question, QuizResult, BRANCHES, DEPARTMENTS, CompanyMapping, MotivationalSloganBand } from './types';
+import { User, Question, QuizResult, BRANCHES, DEPARTMENTS, CompanyMapping, MotivationalSloganBand, LevelRulesConfig, LevelRuleItem } from './types';
 import { INITIAL_QUESTIONS } from './data/mockQuestions';
 import rawFirebaseConfig from './firebase-applet-config.json';
 
@@ -154,43 +154,6 @@ export const INITIAL_COMPANY_MAPPINGS: CompanyMapping[] = [
         departments: [
           { id: 'nm_pxsx', name: 'Phân xưởng sản xuất' },
           { id: 'nm_ptckt', name: 'Phòng Tài chính Kế toán' }
-        ]
-      }
-    ]
-  },
-  {
-    id: 'baobitanphu',
-    name: 'BAO BÌ TÂN PHÚ',
-    branches: [
-      {
-        id: 'cnlongan_old',
-        name: 'Chi nhánh Long An (Cũ)',
-        departments: [
-          { id: 'cnla-tcd', name: 'Tổ Cơ Điện' },
-          { id: 'cnla-pdbcl', name: 'Phòng Đảm Bảo Chất Lượng' },
-          { id: 'cnla-psx', name: 'Phòng Sản Xuất' }
-        ]
-      },
-      {
-        id: 'cnhungyen',
-        name: 'Chi nhánh Hưng Yên',
-        departments: [
-          { id: 'cnhy-hyns', name: 'Hành Chính Nhân Sự' },
-          { id: 'cnhy-kt', name: 'Kế Toán' }
-        ]
-      }
-    ]
-  },
-  {
-    id: 'nhuatienphong',
-    name: 'NHỰA TIÊN PHONG TÂN PHÚ',
-    branches: [
-      {
-        id: 'cn-danang',
-        name: 'Văn Phòng Đà Nẵng',
-        departments: [
-          { id: 'cndn-pkd', name: 'Phòng Kinh Doanh' },
-          { id: 'cndn-bpk', name: 'Bộ Phận Kho' }
         ]
       }
     ]
@@ -346,7 +309,19 @@ const forceSeedCompanyMappings = async () => {
         await setDoc(configRef, { mappings: INITIAL_COMPANY_MAPPINGS });
         console.log("[SUCCESS] Khởi tạo cấu trúc Công ty mặc định lên Cloud Firestore (Lần đầu tiên).");
       } else {
-        console.log("[INFO] Cấu trúc Công ty đã tồn tại trên Firestore, giữ nguyên cấu hình tùy chỉnh của người dùng.");
+        console.log("[INFO] Cấu trúc Công ty đã tồn tại trên Firestore, kiểm tra và dọn dẹp các công ty cũ (nếu có).");
+        const currentMappings = snap.data()?.mappings as CompanyMapping[];
+        if (currentMappings && Array.isArray(currentMappings)) {
+          const filtered = currentMappings.filter(co => {
+            const upperName = (co.name || '').trim().toUpperCase();
+            return upperName !== 'BAO BÌ TÂN PHÚ' && upperName !== 'NHỰA TIÊN PHONG TÂN PHÚ' && co.id !== 'baobitanphu' && co.id !== 'nhuatienphong';
+          });
+          if (filtered.length !== currentMappings.length) {
+            await setDoc(configRef, { mappings: filtered });
+            setLocalData('3t_company_mappings', filtered);
+            console.log("[SUCCESS] Đã dọn dẹp và xóa vĩnh viễn BAO BÌ TÂN PHÚ và NHỰA TIÊN PHONG TÂN PHÚ ra khỏi Firestore!");
+          }
+        }
       }
     } catch (err) {
       console.error("Automatic seeding of company mappings failed:", err);
@@ -521,9 +496,24 @@ if (!localStorage.getItem('3t_questions')) {
   setLocalData('3t_questions', INITIAL_QUESTIONS);
 }
 
-const storedMappings = localStorage.getItem('3t_company_mappings');
+let storedMappings = localStorage.getItem('3t_company_mappings');
 if (!storedMappings || !storedMappings.includes('TPP-BNI')) {
   setLocalData('3t_company_mappings', INITIAL_COMPANY_MAPPINGS);
+} else {
+  try {
+    const parsed = JSON.parse(storedMappings) as CompanyMapping[];
+    if (Array.isArray(parsed)) {
+      const filtered = parsed.filter(co => {
+        const upperName = (co.name || '').trim().toUpperCase();
+        return upperName !== 'BAO BÌ TÂN PHÚ' && upperName !== 'NHỰA TIÊN PHONG TÂN PHÚ' && co.id !== 'baobitanphu' && co.id !== 'nhuatienphong';
+      });
+      if (filtered.length !== parsed.length) {
+        setLocalData('3t_company_mappings', filtered);
+      }
+    }
+  } catch (e) {
+    // Ignore error
+  }
 }
 
 // Clear stale "3t_users" LocalStorage garbage instantly to ensure clean environment
@@ -1510,6 +1500,102 @@ export const databaseService = {
     }
 
     return { usersUpdated, resultsUpdated };
+  },
+
+  async getLevelRules(): Promise<LevelRulesConfig> {
+    await initializeDatabase();
+    const fallbackRules: LevelRulesConfig = {
+      introduction: "Để khuyến khích thái độ kiên trì luyện tập, tạo phản xạ nhạy bén và nâng cao chuyên môn, hệ thống Quiz 3T Mastery áp dụng cơ chế phân hạng và thay đổi cấp độ tự động.",
+      inactivityTitle: "Quy Định Duy Trì & Không Hoạt Động",
+      inactivityRule1: "Mỗi ngày, nhân viên cần phải thực hiện ít nhất 02 lượt đánh giá để duy trì và giữ vững phong độ của mình.",
+      inactivityRule2: "Nếu không hoạt động, hệ thống sẽ tự động hạ dần cấp độ (mỗi ngày hạ mỗi cấp) cho đến khi quay về lại cấp 1.",
+      levels: [
+        {
+          level: 1,
+          name: "Cấp 1: Tân Binh",
+          emoji: "🌱",
+          promotion: "Đạt điểm tuyệt đối 30/30 liên tục 10 lượt (đã cập nhật tự động theo đúng thay đổi mới nhất của anh) để nâng hạng lên Chiến Binh.",
+          demotion: "Mức sàn tối thiểu, không thể hạ thấp hơn.",
+          maxTime: "90s/câu",
+          reactionPoints: ["≤ 30s (+10đ)", "31s-40s (+8đ)", "41s-50s (+6đ)", "51s-90s (+5đ)"]
+        },
+        {
+          level: 2,
+          name: "Cấp 2: Chiến Binh",
+          emoji: "🛡️",
+          promotion: "Đạt điểm tuyệt đối 30/30 liên tục 10 lượt để nâng hạng lên Thống Lĩnh.",
+          demotion: "Đạt dưới 20 điểm trong 2 lần thi liên tiếp sẽ bị hạ về Tân Binh.\nLần thứ 1 đạt dưới 20đ: Hệ thống sẽ ngay lập tức hiện cảnh báo đỏ nhắc nhở giữ vững phong độ.\nLần thứ 2 đạt dưới 20đ: Hệ thống tự động hạ cấp.",
+          maxTime: "60s/câu",
+          reactionPoints: ["≤ 20s (+10đ)", "21s-30s (+8đ)", "31s-40s (+6đ)", "41s-60s (+5đ)"]
+        },
+        {
+          level: 3,
+          name: "Cấp 3: Thống Lĩnh",
+          emoji: "⚔️",
+          promotion: "Đạt điểm tuyệt đối 30/30 liên tục 10 lượt để nâng hạng lên Tối Cao.",
+          demotion: "Đạt dưới 26 điểm trong 2 lần thi liên tiếp sẽ bị hạ về Chiến Binh.\nLần thứ 1 dưới 26đ: Cảnh báo phong độ.\nLần thứ 2 dưới 26đ: Tự động hạ cấp.",
+          maxTime: "30s/câu",
+          reactionPoints: ["≤ 10s (+10đ)", "11s-15s (+8đ)", "16s-20s (+6đ)", "21s-30s (+5đ)"]
+        },
+        {
+          level: 4,
+          name: "Cấp 4: Tối Cao",
+          emoji: "👑",
+          promotion: "Đạt điểm tuyệt đối 30/30 liên tục 10 lượt để thăng hạng cao nhất Huyền Thoại.",
+          demotion: "Đạt dưới 27 điểm trong 2 lần thi liên tiếp sẽ bị hạ về Thống Lĩnh (có cảnh báo ở lần đầu).",
+          maxTime: "20s/câu",
+          reactionPoints: ["≤ 5s (+10đ)", "6s-8s (+8đ)", "9s-12s (+6đ)", "13s-20s (+5đ)"]
+        },
+        {
+          level: 5,
+          name: "Cấp 5: Huyền Thoại",
+          emoji: "🔮",
+          promotion: "Cấp bậc cao nhất hệ thống (Giữ nguyên).",
+          demotion: "Đạt dưới 28 điểm trong 2 lần thi liên tiếp sẽ bị hạ về Tối Cao (có cảnh báo ở lần đầu).",
+          maxTime: "15s/câu",
+          reactionPoints: ["≤ 3s (+10đ)", "4s-5s (+8đ)", "6s-8s (+6đ)", "9s-15s (+5đ)"]
+        }
+      ]
+    };
+
+    if (isFirebaseConfigured && db) {
+      try {
+        const docRef = doc(db, 'config', 'level_rules');
+        const snap = await getDoc(docRef);
+        incrementQuota('reads', 1);
+        if (snap.exists()) {
+          const cloudConfig = snap.data() as LevelRulesConfig;
+          localStorage.setItem('3t_level_rules', JSON.stringify(cloudConfig));
+          return cloudConfig;
+        }
+      } catch (err) {
+        console.warn('Error reading level rules from Firestore:', err);
+      }
+    }
+
+    const localData = localStorage.getItem('3t_level_rules');
+    if (localData) {
+      try {
+        return JSON.parse(localData) as LevelRulesConfig;
+      } catch {
+        return fallbackRules;
+      }
+    }
+    return fallbackRules;
+  },
+
+  async saveLevelRules(rules: LevelRulesConfig): Promise<void> {
+    await initializeDatabase();
+    if (isFirebaseConfigured && db) {
+      try {
+        await setDoc(doc(db, 'config', 'level_rules'), rules);
+        incrementQuota('writes', 1);
+        console.log("[SUCCESS] Đã lưu thành công quy chế thăng hạ cấp mới lên Firestore.");
+      } catch (err) {
+        console.warn('Error writing level rules to Firestore:', err);
+      }
+    }
+    localStorage.setItem('3t_level_rules', JSON.stringify(rules));
   }
 };
 
