@@ -4,7 +4,8 @@ import { getQuotaStats, databaseService } from '../firebase';
 import { 
   Database, Users, Trophy, Award, BarChart3, Clock, 
   Activity, ShieldAlert, Sparkles, RefreshCcw, TrendingUp, 
-  Building2, Calendar, ShieldCheck, Zap, Home, Trash2
+  Building2, Calendar, ShieldCheck, Zap, Home, Trash2,
+  ChevronDown, ChevronUp
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -17,21 +18,64 @@ interface StatsDashboardProps {
   isAdmin?: boolean;
 }
 
-export default function StatsDashboard({ users, results, onRefresh, onBackToHome, companyMappings, isAdmin = false }: StatsDashboardProps) {
+export default function StatsDashboard({ users: rawUsers, results: rawResults, onRefresh, onBackToHome, companyMappings, isAdmin = false }: StatsDashboardProps) {
   const [quota, setQuota] = useState(getQuotaStats());
-  const [rankingPeriod, setRankingPeriod] = useState<'day' | 'week' | 'month'>('month');
+  const [rankingPeriod, setRankingPeriod] = useState<'day' | 'week' | 'month'>('day');
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [listPeriod, setListPeriod] = useState<'day' | 'week' | 'month' | 'year'>('month');
-  const [statsPeriod, setStatsPeriod] = useState<'day' | 'week' | 'month' | 'year'>('month');
+  const [listPeriod, setListPeriod] = useState<'day' | 'week' | 'month' | 'year'>('day');
+  const [statsPeriod, setStatsPeriod] = useState<'day' | 'week' | 'month' | 'year'>('day');
   const [searchQuery, setSearchQuery] = useState('');
   const [mappings, setMappings] = useState<CompanyMapping[]>(companyMappings || []);
+
+  // Filter users based on companyMappings exclusion
+  const users = useMemo(() => {
+    return rawUsers.filter(u => {
+      const bNameNorm = (u.branch || '').trim().normalize('NFC').toLowerCase();
+      const dNameNorm = (u.department || '').trim().normalize('NFC').toLowerCase();
+      for (const co of mappings) {
+        for (const br of co.branches) {
+          if (br.name.trim().normalize('NFC').toLowerCase() === bNameNorm) {
+            if (br.excludeFromStats) return false;
+            for (const d of br.departments) {
+              if (d.name.trim().normalize('NFC').toLowerCase() === dNameNorm) {
+                if (d.excludeFromStats) return false;
+              }
+            }
+          }
+        }
+      }
+      return true;
+    });
+  }, [rawUsers, mappings]);
+
+  // Filter results based on companyMappings exclusion
+  const results = useMemo(() => {
+    return rawResults.filter(r => {
+      const bNameNorm = (r.branch || '').trim().normalize('NFC').toLowerCase();
+      const dNameNorm = (r.department || '').trim().normalize('NFC').toLowerCase();
+      for (const co of mappings) {
+        for (const br of co.branches) {
+          if (br.name.trim().normalize('NFC').toLowerCase() === bNameNorm) {
+            if (br.excludeFromStats) return false;
+            for (const d of br.departments) {
+              if (d.name.trim().normalize('NFC').toLowerCase() === dNameNorm) {
+                if (d.excludeFromStats) return false;
+              }
+            }
+          }
+        }
+      }
+      return true;
+    });
+  }, [rawResults, mappings]);
   const [scorecardBranchFilter, setScorecardBranchFilter] = useState('');
   const [scorecardDeptFilter, setScorecardDeptFilter] = useState('');
   const [scorecardSearchQuery, setScorecardSearchQuery] = useState('');
   const [onlineBranchFilter, setOnlineBranchFilter] = useState<string>('ALL');
+  const [expandedDeptOnline, setExpandedDeptOnline] = useState<string | null>(null);
   
   // Independent scorecard period and selectable time value states
-  const [scorecardPeriod, setScorecardPeriod] = useState<'day' | 'week' | 'month'>('month');
+  const [scorecardPeriod, setScorecardPeriod] = useState<'day' | 'week' | 'month'>('day');
   const [selectedScorecardWeekVal, setSelectedScorecardWeekVal] = useState<string>(() => {
     const d = new Date();
     const day = d.getDay();
@@ -324,10 +368,77 @@ export default function StatsDashboard({ users, results, onRefresh, onBackToHome
     });
 
     return Object.values(grouped)
-      .map(p => ({
-        ...p,
-        avgScore: p.attempts > 0 ? parseFloat((p.totalScore / p.attempts).toFixed(1)) : 0
-      }))
+      .map(p => {
+        // Compute level based on all historical results for this participant
+        const userResults = results.filter(r => (p.userId && r.userId === p.userId) || (p.userName && r.userName === p.userName));
+        const chronologicalResults = [...userResults].sort((a, b) => a.timestamp - b.timestamp);
+        
+        let currentLevel = 1;
+        let consecutiveMaxAtLevel = 0;
+        let consecutiveLowAtLevel = 0;
+
+        for (const res of chronologicalResults) {
+          const score = res.score;
+          
+          if (currentLevel === 1) {
+            if (score === 30) {
+              consecutiveMaxAtLevel++;
+            } else {
+              consecutiveMaxAtLevel = 0;
+            }
+            
+            if (consecutiveMaxAtLevel >= 5) {
+              currentLevel = 2;
+              consecutiveMaxAtLevel = 0;
+              consecutiveLowAtLevel = 0;
+            }
+          } else if (currentLevel === 2) {
+            if (score === 30) {
+              consecutiveMaxAtLevel++;
+              consecutiveLowAtLevel = 0;
+            } else if (score < 20) {
+              consecutiveLowAtLevel++;
+              consecutiveMaxAtLevel = 0;
+            } else {
+              consecutiveMaxAtLevel = 0;
+              consecutiveLowAtLevel = 0;
+            }
+            
+            if (consecutiveMaxAtLevel >= 5) {
+              currentLevel = 3;
+              consecutiveMaxAtLevel = 0;
+              consecutiveLowAtLevel = 0;
+            } else if (consecutiveLowAtLevel >= 5) {
+              currentLevel = 1;
+              consecutiveMaxAtLevel = 0;
+              consecutiveLowAtLevel = 0;
+            }
+          } else if (currentLevel === 3) {
+            if (score === 30) {
+              consecutiveMaxAtLevel++;
+              consecutiveLowAtLevel = 0;
+            } else if (score < 20) {
+              consecutiveLowAtLevel++;
+              consecutiveMaxAtLevel = 0;
+            } else {
+              consecutiveMaxAtLevel = 0;
+              consecutiveLowAtLevel = 0;
+            }
+            
+            if (consecutiveLowAtLevel >= 5) {
+              currentLevel = 2;
+              consecutiveMaxAtLevel = 0;
+              consecutiveLowAtLevel = 0;
+            }
+          }
+        }
+
+        return {
+          ...p,
+          level: currentLevel,
+          avgScore: p.attempts > 0 ? parseFloat((p.totalScore / p.attempts).toFixed(1)) : 0
+        };
+      })
       .sort((a, b) => b.attempts - a.attempts || b.avgScore - a.avgScore);
   };
 
@@ -392,7 +503,7 @@ export default function StatsDashboard({ users, results, onRefresh, onBackToHome
 
     const count = onlineInDept.length;
     const percentage = totalInDept > 0 ? Math.round((count / totalInDept) * 100) : 0;
-    return { name: fullDeptName, count, totalInDept, percentage };
+    return { name: fullDeptName, count, totalInDept, percentage, onlineUsers: onlineInDept };
   }).sort((a, b) => b.count - a.count || b.totalInDept - a.totalInDept || a.name.localeCompare(b.name));
 
   const filteredOnlineTodayByDept = onlineTodayByDept.filter(dept => {
@@ -1126,18 +1237,29 @@ export default function StatsDashboard({ users, results, onRefresh, onBackToHome
               </div>
 
               {/* Scrollable list of departments with online today count - highly dense & optimized to view more rows */}
-              <div className="flex-1 overflow-y-auto space-y-1 max-h-[220px] pr-1">
+              <div className="flex-1 overflow-y-auto space-y-1 max-h-[300px] pr-1">
                 {filteredOnlineTodayByDept.length === 0 ? (
                   <div className="text-center py-6 text-xs text-gray-400 font-medium">
                     Không tìm thấy bộ phận/đơn vị phù hợp
                   </div>
                 ) : (
                   filteredOnlineTodayByDept.map((dept) => (
-                    <div key={dept.name} className="py-2 border-b border-slate-100 last:border-0 hover:bg-slate-50/30 px-1 rounded-md transition-colors">
-                      <div className="flex justify-between items-center text-xs mb-1.5">
+                    <div 
+                      key={dept.name} 
+                      onClick={() => setExpandedDeptOnline(expandedDeptOnline === dept.name ? null : dept.name)}
+                      className="py-2.5 border-b border-slate-100 last:border-0 hover:bg-slate-50/50 px-1.5 rounded-lg transition-all cursor-pointer select-none group"
+                    >
+                      <div className="flex justify-between items-center text-xs mb-1.5 gap-2">
                         <div className="flex items-center gap-1.5 min-w-0">
                           <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dept.count > 0 ? 'bg-emerald-500 animate-pulse' : 'bg-gray-300'}`}></span>
-                          <span className="font-bold text-gray-750 break-words leading-tight">{dept.name}</span>
+                          <span className="font-bold text-gray-750 break-words leading-tight group-hover:text-[#1971C2] transition-colors flex items-center gap-1">
+                            {dept.name}
+                            {expandedDeptOnline === dept.name ? (
+                              <ChevronUp className="h-3 w-3 text-slate-550 inline-block shrink-0 animate-fade-in" />
+                            ) : (
+                              <ChevronDown className="h-3 w-3 text-slate-400 group-hover:text-blue-500 inline-block shrink-0 transition-colors animate-fade-in" />
+                            )}
+                          </span>
                         </div>
                         <span className="font-bold text-gray-600 font-mono shrink-0 ml-2">
                           {dept.count} <span className="text-gray-400 font-normal font-sans">/</span> {dept.totalInDept} <span className="text-gray-400 font-semibold font-sans">người</span> ({dept.totalInDept > 0 ? Math.round((dept.count / dept.totalInDept) * 100) : 0}%)
@@ -1149,6 +1271,40 @@ export default function StatsDashboard({ users, results, onRefresh, onBackToHome
                           className={`h-full rounded-full transition-all duration-300 ${dept.count > 0 ? 'bg-blue-500' : 'bg-gray-200'}`}
                         />
                       </div>
+
+                      {/* Expanded list of online users in this department */}
+                      {expandedDeptOnline === dept.name && (
+                        <div 
+                          className="mt-2.5 pl-3 border-l-2 border-blue-400 space-y-1.5 transition-all text-left animate-fade-in"
+                          onClick={(e) => e.stopPropagation()} // Prevent closing when tapping list items
+                        >
+                          {dept.onlineUsers.length === 0 ? (
+                            <div className="text-[10px] text-gray-400 italic py-1 pl-1">
+                              Không có ai online hôm nay
+                            </div>
+                          ) : (
+                            dept.onlineUsers.map((u: any) => (
+                              <div key={u.id} className="flex items-center justify-between text-[11px] bg-slate-50/70 hover:bg-slate-100/50 border border-slate-100/85 py-1 px-2 rounded-md transition-all">
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <span className="w-1 h-1 rounded-full bg-emerald-500 shrink-0"></span>
+                                  <span className="font-extrabold text-[#0B3A60] truncate">{u.name || 'CBNV ẩn danh'}</span>
+                                  {u.employeeId && (
+                                    <span className="text-[9px] font-mono text-slate-400 font-medium tracking-tight bg-slate-200/60 px-1 rounded shrink-0">
+                                      {u.employeeId}
+                                    </span>
+                                  )}
+                                </div>
+                                {u.lastActive && (
+                                  <div className="text-[10px] text-gray-500 font-medium font-mono flex items-center gap-1 shrink-0 ml-2">
+                                    <Clock className="h-3 w-3 text-slate-450" />
+                                    <span>{new Date(u.lastActive).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
+                                  </div>
+                                )}
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      )}
                     </div>
                   ))
                 )}
@@ -1425,15 +1581,16 @@ export default function StatsDashboard({ users, results, onRefresh, onBackToHome
                 <th className="py-2.5 px-4 w-52 bg-slate-50">Nhân sự tham gia</th>
                 <th className="py-2.5 px-4 w-60 bg-slate-50">Thuộc Bộ phận / Chi nhánh</th>
                 <th className="py-2.5 px-4 text-center w-28 bg-slate-50">Số lượt thi</th>
-                <th className="py-2.5 px-4 text-center w-28 bg-slate-50">Điểm số trung bình</th>
-                <th className="py-2.5 px-4 text-center w-36 bg-slate-50">Thời gian làm bài TB</th>
-                <th className="py-2.5 px-4 text-center w-40 bg-slate-50">Lần thi gần nhất</th>
+                <th className="py-2.5 px-2 text-center w-28 bg-slate-50 leading-tight">Điểm số<br />trung bình</th>
+                <th className="py-2.5 px-2 text-center w-24 bg-slate-50 leading-tight">Thời gian<br />làm bài TB</th>
+                <th className="py-2.5 px-4 text-center w-28 bg-slate-50">LEVEL</th>
+                <th className="py-2.5 px-4 text-center w-32 bg-slate-50 leading-tight">Lần thi gần nhất</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {participantsList.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-10 text-center text-xs text-gray-400 font-semibold bg-gray-50/30">
+                  <td colSpan={8} className="py-10 text-center text-xs text-gray-400 font-semibold bg-gray-50/30">
                     Chưa có nhân sự nào tham gia đạt điều kiện lọc trong khoảng thời gian này.
                   </td>
                 </tr>
@@ -1449,30 +1606,58 @@ export default function StatsDashboard({ users, results, onRefresh, onBackToHome
                     <tr key={stat.userId + idx} className="hover:bg-slate-50/50 text-xs transition-colors">
                       <td className="py-3 px-4 text-center font-mono font-semibold text-gray-400">{idx + 1}</td>
                       <td className="py-3 px-4">
-                        <div className="font-bold text-gray-800">{stat.userName}</div>
-                        <div className="text-[10px] text-gray-400 font-mono mt-0.5">MS: {stat.employeeId} • SĐT: {stat.phone}</div>
+                        <div className="font-bold text-gray-800 line-clamp-1">{stat.userName}</div>
+                        <div className="text-[10px] text-gray-400 font-mono mt-0.5 space-y-0.5">
+                          <div>MS: {stat.employeeId}</div>
+                          <div className="text-gray-500 font-semibold">SĐT: {stat.phone}</div>
+                        </div>
                       </td>
                       <td className="py-3 px-4 text-[11px] leading-relaxed">
                         <div className="font-bold text-gray-650">{stat.department}</div>
-                        <div className="text-gray-405 font-medium">{stat.branch}</div>
+                        <div className="text-gray-455 font-medium">{stat.branch}</div>
                       </td>
                       <td className="py-3 px-4 text-center">
                         <span className="font-mono font-extrabold text-[#1971C2] bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-100/50">{stat.attempts} lượt</span>
                       </td>
-                      <td className="py-3 px-4 text-center">
-                        <span className={`font-mono text-xs px-2.5 py-0.5 rounded-md ${scoreColor}`}>
+                      <td className="py-3 px-2 text-center whitespace-nowrap">
+                        <span className={`font-mono text-xs px-2 px-1 rounded-md whitespace-nowrap inline-block ${scoreColor}`}>
                           {statAvgScore} / 30
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-center font-mono font-medium text-gray-505">{formattedDuration}</td>
-                      <td className="py-3 px-4 text-center font-mono text-[10.5px] text-gray-405">
-                        {new Date(stat.lastAttempt).toLocaleString('vi-VN', {
-                          day: '2-digit',
-                          month: '2-digit',
-                          year: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
+                      <td className="py-3 px-2 text-center font-mono font-bold text-gray-700 whitespace-nowrap">{formattedDuration}</td>
+                      <td className="py-3 px-4 text-center whitespace-nowrap">
+                        {stat.level === 3 ? (
+                          <span className="font-sans font-black text-[10px] uppercase px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-150 shadow-3xs tracking-wider inline-flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 bg-purple-500 rounded-full animate-ping"></span>
+                            Cấp 3
+                          </span>
+                        ) : stat.level === 2 ? (
+                          <span className="font-sans font-black text-[10px] uppercase px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-150 shadow-3xs tracking-wider inline-flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 bg-amber-500 rounded-full"></span>
+                            Cấp 2
+                          </span>
+                        ) : (
+                          <span className="font-sans font-black text-[10px] uppercase px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-150 shadow-3xs tracking-wider inline-flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
+                            Cấp 1
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-center font-mono text-[10.5px] text-gray-455 animate-fade-in whitespace-nowrap">
+                        <div className="font-bold text-gray-800 text-xs">
+                          {new Date(stat.lastAttempt).toLocaleTimeString('vi-VN', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            hour12: false
+                          })}
+                        </div>
+                        <div className="text-[10px] text-gray-450 mt-0.5">
+                          {new Date(stat.lastAttempt).toLocaleDateString('vi-VN', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            year: 'numeric'
+                          })}
+                        </div>
                       </td>
                     </tr>
                   );

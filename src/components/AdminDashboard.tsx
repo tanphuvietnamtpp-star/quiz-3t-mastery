@@ -8,7 +8,7 @@ import {
   Trash2, Plus, Sparkles, LogOut, CheckCircle2, UserCheck, 
   RefreshCcw, UserMinus, FileDown, Upload, Pencil, Lock, BarChart3,
   Database, Building, Briefcase, Landmark, Home, ChevronDown, ChevronUp,
-  ShieldCheck, ShieldAlert, Zap, Activity, Server
+  ShieldCheck, ShieldAlert, Zap, Activity, Server, Search, X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import StatsDashboard from './StatsDashboard';
@@ -48,6 +48,14 @@ export default function AdminDashboard({
   const [results, setResults] = useState<QuizResult[]>([]);
   
   const [activeTab, setActiveTab] = useState<'users' | 'questions' | 'add_images' | 'qr' | 'stats' | 'encoding' | 'firebase_data'>('users');
+  
+  // Search and filter states for User Registration List
+  const [userSearchQuery, setUserSearchQuery] = useState('');
+  const [userRoleFilter, setUserRoleFilter] = useState('all');
+  const [userStatusFilter, setUserStatusFilter] = useState('all');
+  const [userBranchFilter, setUserBranchFilter] = useState('all');
+  const [userDeptFilter, setUserDeptFilter] = useState('all');
+
   const [isSlogansExpanded, setIsSlogansExpanded] = useState(false);
   const [localBands, setLocalBands] = useState<MotivationalSloganBand[]>([]);
 
@@ -190,6 +198,17 @@ export default function AdminDashboard({
     message: string;
     onConfirm: () => void | Promise<void>;
   } | null>(null);
+
+  // States for Searching and Editing Questions
+  const [questionSearchQuery, setQuestionSearchQuery] = useState('');
+  const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
+  const [editQText, setEditQText] = useState('');
+  const [editQOpt0, setEditQOpt0] = useState('');
+  const [editQOpt1, setEditQOpt1] = useState('');
+  const [editQOpt2, setEditQOpt2] = useState('');
+  const [editQOpt3, setEditQOpt3] = useState('');
+  const [editQCorrectIndex, setEditQCorrectIndex] = useState(0);
+  const [editQExplanation, setEditQExplanation] = useState('');
   const [editingMapping, setEditingMapping] = useState<{
     type: 'company' | 'branch' | 'department';
     coId: string;
@@ -408,6 +427,29 @@ export default function AdminDashboard({
       await loadData();
     } catch (err) {
       setNotice({ type: 'error', msg: 'Thay đổi quyền xem thống kê thất bại.' });
+    }
+  };
+
+  const handleToggleExecutive = async (userId: string, currentRole: string) => {
+    try {
+      if (currentRole !== 'executive') {
+        await databaseService.updateUser(userId, { 
+          role: 'executive',
+          status: 'approved',
+          company: 'TÂN PHÚ VIỆT NAM',
+          department: 'Ban Tổng Giám Đốc',
+          branch: 'Văn Phòng Công Ty (TPP-CTY)'
+        });
+        setNotice({ type: 'success', msg: 'Đã đặc cách tài khoản vào Ban Tổng Giám Đốc thành công.' });
+      } else {
+        await databaseService.updateUser(userId, { 
+          role: 'employee'
+        });
+        setNotice({ type: 'success', msg: 'Đã bãi nhiệm quyền đặc cách Ban Tổng Giám Đốc.' });
+      }
+      await loadData();
+    } catch (err) {
+      setNotice({ type: 'error', msg: 'Có lỗi xảy ra khi cập nhật đặc quyền đặc cách.' });
     }
   };
 
@@ -809,8 +851,8 @@ export default function AdminDashboard({
           let width = img.width;
           let height = img.height;
           
-          // Max dimension scaling constraint (e.g. 1024px maximum edge to preserve bandwidth)
-          const MAX_SIZE = 1024;
+          // Max dimension scaling constraint (optimized to 800px for faster mobile uploads and higher success rate)
+          const MAX_SIZE = 800;
           if (width > height) {
             if (width > MAX_SIZE) {
               height *= MAX_SIZE / width;
@@ -828,8 +870,8 @@ export default function AdminDashboard({
           const ctx = canvas.getContext('2d');
           if (ctx) {
             ctx.drawImage(img, 0, 0, width, height);
-            // Compress with high compression quality 0.65 JPEG
-            const dataUrl = canvas.toDataURL('image/jpeg', 0.65);
+            // Compress with high compression quality 0.60 JPEG for optimal bandwidth
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.60);
             // Extract the pure base64 chunk from Data URL
             const base64Chunk = dataUrl.split(',')[1];
             resolve(base64Chunk);
@@ -888,15 +930,49 @@ export default function AdminDashboard({
       });
 
       if (!response.ok) {
-        const errResult = await response.json();
-        throw new Error(errResult.error || "Gặp lỗi trong tiến trình giải mã hình ảnh.");
+        let errorMsg = "Gặp lỗi trong tiến trình giải mã hình ảnh.";
+        const contentType = response.headers.get("content-type") || "";
+        if (contentType.includes("application/json")) {
+          try {
+            const errResult = await response.json();
+            errorMsg = errResult.error || errorMsg;
+          } catch (e) {
+            // Ignore parse error and keep default
+          }
+        } else {
+          try {
+            const rawText = await response.text();
+            if (rawText.length > 0) {
+              const titleMatch = rawText.match(/<title>([\s\S]*?)<\/title>/i);
+              const titleText = titleMatch ? titleMatch[1].trim() : "";
+              errorMsg = `Lỗi máy chủ (${response.status}): ${titleText || rawText.substring(0, 100)}...`;
+            } else {
+              errorMsg = `Lỗi kết nối máy chủ (Mã trạng thái: ${response.status}).`;
+            }
+          } catch (e) {
+            errorMsg = `Lỗi kết nối HTTP status ${response.status}.`;
+          }
+        }
+        
+        throw new Error(
+          `${errorMsg}\n\n👉 Ý KIẾN KHẮC PHỤC:\n` +
+          `1. Có thể ảnh dung lượng quá lớn hoặc kết nối 4G/Wifi bị gián đoạn gây Hết thời gian chờ (Timeout).\n` +
+          `2. Bạn hãy thử CHỤP ẢNH MÀN HÌNH (Screenshot) hình ảnh này để tối ưu dung lượng siêu nhẹ, rồi chọn tải ảnh chụp màn hình đó lên để bóc tách lại.\n` +
+          `3. Nên thực hiện ở nơi sóng mạnh hoặc kết nối Wifi ổn định hơn.`
+        );
       }
 
-      const result = await response.json();
+      let result;
+      try {
+        result = await response.json();
+      } catch (e) {
+        throw new Error("Không thể đọc phản hồi JSON từ máy chủ AI. Vui lòng thử lại bằng ảnh chụp màn hình gọn hơn.");
+      }
+
       const aiQuestions: Question[] = result.questions || [];
 
       if (aiQuestions.length === 0) {
-        setNotice({ type: 'error', msg: 'Không tìm thấy câu hỏi trắc nghiệm hợp lệ nào trong các hình ảnh đã chọn.' });
+        setNotice({ type: 'error', msg: 'Không tìm thấy câu hỏi trắc nghiệm hợp lệ nào trong các hình ảnh đã chọn. Bạn hãy chụp thẳng diện câu hỏi và thử lại.' });
         setExtracting(false);
         return;
       }
@@ -924,7 +1000,10 @@ export default function AdminDashboard({
 
     } catch (err: any) {
       console.error(err);
-      setNotice({ type: 'error', msg: err.message || 'Lỗi bóc tác dữ liệu bằng AI. Vui lòng thử lại.' });
+      setNotice({ 
+        type: 'error', 
+        msg: err.message || 'Lỗi bóc tác dữ liệu bằng AI. Vui lòng tải lại ảnh chụp nhỡ/bản chụp mờ hoặc kiểm tra mạng.' 
+      });
     } finally {
       setExtracting(false);
     }
@@ -987,6 +1066,51 @@ export default function AdminDashboard({
     });
   };
 
+  const handleOpenEditQuestion = (q: Question) => {
+    setEditingQuestion(q);
+    setEditQText(q.text || '');
+    // Clean A. or other prefixes from stored option if needed, but cleanOptionText handles that!
+    setEditQOpt0(cleanOptionText(q.options?.[0] || ''));
+    setEditQOpt1(cleanOptionText(q.options?.[1] || ''));
+    setEditQOpt2(cleanOptionText(q.options?.[2] || ''));
+    setEditQOpt3(cleanOptionText(q.options?.[3] || ''));
+    setEditQCorrectIndex(q.correctAnswerIndex ?? 0);
+    setEditQExplanation(q.explanation || '');
+  };
+
+  const handleSaveQuestionEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingQuestion) return;
+
+    const updatedOptions = [
+      `A. ${editQOpt0.trim()}`,
+      `B. ${editQOpt1.trim()}`,
+      `C. ${editQOpt2.trim()}`,
+      `D. ${editQOpt3.trim()}`,
+    ];
+
+    const updatedQ: Question = {
+      ...editingQuestion,
+      text: editQText.trim(),
+      options: updatedOptions,
+      correctAnswerIndex: editQCorrectIndex,
+      explanation: editQExplanation.trim(),
+    };
+
+    setLoading(true);
+    try {
+      await databaseService.updateQuestion(updatedQ);
+      setNotice({ type: 'success', msg: 'Đã cập nhật câu hỏi thành công!' });
+      setEditingQuestion(null);
+      await loadData();
+    } catch (err) {
+      console.error("Lỗi khi cập nhật câu hỏi:", err);
+      setNotice({ type: 'error', msg: 'Có lỗi xảy ra khi cập nhật câu hỏi.' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Notifications and badge calculations
   const pendingUsersCount = users.filter(u => u.status?.toLowerCase() === 'pending').length;
   const approvedUsersCount = users.filter(u => u.status?.toLowerCase() === 'approved').length;
@@ -1012,17 +1136,63 @@ export default function AdminDashboard({
       });
 
       const sortedUsers = [...dedupedRaw].sort((a, b) => {
-        const isALNT = (a.name || '').trim().normalize('NFC').toLowerCase().includes('lê nhật trường') || a.phone?.trim() === '0907767304';
-        const isBLNT = (b.name || '').trim().normalize('NFC').toLowerCase().includes('lê nhật trường') || b.phone?.trim() === '0907767304';
-        
-        if (isALNT && !isBLNT) return -1;
-        if (!isALNT && isBLNT) return 1;
+        const todayLocal = new Date();
+        const year = todayLocal.getFullYear();
+        const month = String(todayLocal.getMonth() + 1).padStart(2, '0');
+        const day = String(todayLocal.getDate()).padStart(2, '0');
+        const todayStr = `${year}-${month}-${day}`;
 
-        const aPending = a.status?.toLowerCase() === 'pending';
-        const bPending = b.status?.toLowerCase() === 'pending';
-        if (aPending && !bPending) return -1;
-        if (!aPending && bPending) return 1;
-        return 0;
+        const getPriorityWeight = (u: User) => {
+          const isLNT = (u.name || '').trim().normalize('NFC').toLowerCase().includes('lê nhật trường') || u.phone?.trim() === '0907767304' || u.role === 'admin';
+          if (isLNT) return 1;
+
+          const dept = (u.department || '').trim().normalize('NFC').toLowerCase();
+          if (u.role === 'executive' || dept.includes('tổng giám đốc')) return 2;
+
+          if (dept.includes('ban giám đốc') && !dept.includes('tổng giám đốc')) return 3;
+
+          if (u.role === 'approver') return 4;
+
+          const isApprovedToday = (u.status || '').toLowerCase() === 'approved' && u.createdAt && u.createdAt.startsWith(todayStr);
+          if (isApprovedToday) return 5;
+
+          const isOnline = u.lastActive && Math.abs(Date.now() - u.lastActive) <= 240000;
+          if (isOnline) return 6;
+
+          return 7;
+        };
+
+        const weightA = getPriorityWeight(a);
+        const weightB = getPriorityWeight(b);
+
+        if (weightA !== weightB) {
+          return weightA - weightB;
+        }
+
+        if (weightA === 2) {
+          const getExecutiveOrder = (name: string) => {
+            const norm = (name || '').trim().normalize('NFC').toUpperCase();
+            if (norm.includes('TRẦN ĐỨC HUY')) return 1;
+            if (norm.includes('PHAN ANH TUẤN')) return 2;
+            if (norm.includes('NGÔ ĐỨC TRUNG')) return 3;
+            if (norm.includes('NGUYỄN THỊ THOẠI')) return 4;
+            return 999;
+          };
+          const ordA = getExecutiveOrder(a.name || '');
+          const ordB = getExecutiveOrder(b.name || '');
+          if (ordA !== ordB) {
+            return ordA - ordB;
+          }
+        }
+
+        const aApproved = (a.status || '').toLowerCase() === 'approved';
+        const bApproved = (b.status || '').toLowerCase() === 'approved';
+        if (aApproved && !bApproved) return -1;
+        if (!aApproved && bApproved) return 1;
+
+        const timeA = a.createdAt || '';
+        const timeB = b.createdAt || '';
+        return timeB.localeCompare(timeA);
       });
 
       const exportRows = sortedUsers.map(u => ({
@@ -1639,6 +1809,132 @@ export default function AdminDashboard({
                   </div>
                 </div>
 
+                {/* Bộ lọc tìm kiếm tiện ích */}
+                {(() => {
+                  const uniqueBranches = Array.from(new Set(users.map(u => u.branch).filter(Boolean))) as string[];
+                  const uniqueDepartments = Array.from(new Set(users.map(u => u.department).filter(Boolean))) as string[];
+                  const hasActiveFilters = userSearchQuery || userRoleFilter !== 'all' || userStatusFilter !== 'all' || userBranchFilter !== 'all' || userDeptFilter !== 'all';
+
+                  return (
+                    <div className="p-3 bg-slate-50 border-b border-gray-100 flex flex-col gap-2 font-sans">
+                      <div className="grid grid-cols-1 md:grid-cols-12 gap-2 items-center">
+                        {/* Thanh tìm kiếm chính */}
+                        <div className="md:col-span-4 relative">
+                          <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-gray-400">
+                            <Search className="h-3.5 w-3.5" />
+                          </span>
+                          <input
+                            type="text"
+                            placeholder="Tìm tên, SĐT, mã số..."
+                            value={userSearchQuery}
+                            onChange={(e) => setUserSearchQuery(e.target.value)}
+                            className="w-full pl-8 pr-7 py-1 bg-white border border-gray-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-gray-400 font-sans"
+                          />
+                          {userSearchQuery && (
+                            <button
+                              onClick={() => setUserSearchQuery('')}
+                              className="absolute inset-y-0 right-0 pr-2 flex items-center text-gray-400 hover:text-gray-600"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Các bộ lọc dropdown */}
+                        <div className="md:col-span-8 grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                          {/* Vai trò */}
+                          <div className="relative">
+                            <select
+                              value={userRoleFilter}
+                              onChange={(e) => setUserRoleFilter(e.target.value)}
+                              className="w-full pl-2 pr-5 py-1 text-xs bg-white border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 appearance-none font-sans cursor-pointer truncate"
+                            >
+                              <option value="all">Mọi vai trò</option>
+                              <option value="admin">Chủ Admin</option>
+                              <option value="executive">Ban TGĐ (Đặc cách)</option>
+                              <option value="approver">Duyệt viên</option>
+                              <option value="employee">CBNV</option>
+                            </select>
+                            <span className="absolute inset-y-0 right-0 flex items-center pr-1.5 pointer-events-none text-gray-400">
+                              <ChevronDown className="h-3 w-3" />
+                            </span>
+                          </div>
+
+                          {/* Trạng thái */}
+                          <div className="relative">
+                            <select
+                              value={userStatusFilter}
+                              onChange={(e) => setUserStatusFilter(e.target.value)}
+                              className="w-full pl-2 pr-5 py-1 text-xs bg-white border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 appearance-none font-sans cursor-pointer truncate"
+                            >
+                              <option value="all">Mọi trạng thái</option>
+                              <option value="approved">Đã hoạt động</option>
+                              <option value="pending">Chờ duyệt / Khóa</option>
+                            </select>
+                            <span className="absolute inset-y-0 right-0 flex items-center pr-1.5 pointer-events-none text-gray-400">
+                              <ChevronDown className="h-3 w-3" />
+                            </span>
+                          </div>
+
+                          {/* Chi nhánh */}
+                          <div className="relative">
+                            <select
+                              value={userBranchFilter}
+                              onChange={(e) => setUserBranchFilter(e.target.value)}
+                              className="w-full pl-2 pr-5 py-1 text-xs bg-white border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 appearance-none font-sans cursor-pointer truncate"
+                            >
+                              <option value="all">Mọi chi nhánh</option>
+                              {uniqueBranches.map((br) => (
+                                <option key={br} value={br}>{br}</option>
+                              ))}
+                            </select>
+                            <span className="absolute inset-y-0 right-0 flex items-center pr-1.5 pointer-events-none text-gray-400">
+                              <ChevronDown className="h-3 w-3" />
+                            </span>
+                          </div>
+
+                          {/* Bộ phận */}
+                          <div className="relative">
+                            <select
+                              value={userDeptFilter}
+                              onChange={(e) => setUserDeptFilter(e.target.value)}
+                              className="w-full pl-2 pr-5 py-1 text-xs bg-white border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 appearance-none font-sans cursor-pointer truncate"
+                            >
+                              <option value="all">Mọi bộ phận</option>
+                              {uniqueDepartments.map((dp) => (
+                                <option key={dp} value={dp}>{dp}</option>
+                              ))}
+                            </select>
+                            <span className="absolute inset-y-0 right-0 flex items-center pr-1.5 pointer-events-none text-gray-400">
+                              <ChevronDown className="h-3 w-3" />
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Thông tin lọc active */}
+                      {hasActiveFilters && (
+                        <div className="flex items-center gap-2 text-[10px] text-gray-500 border-t border-gray-100/60 pt-1.5 mt-0.5">
+                          <span>Đang lọc danh sách thành viên:</span>
+                          <button
+                            onClick={() => {
+                              setUserSearchQuery('');
+                              setUserRoleFilter('all');
+                              setUserStatusFilter('all');
+                              setUserBranchFilter('all');
+                              setUserDeptFilter('all');
+                            }}
+                            className="flex items-center gap-1 text-[10px] font-semibold text-rose-500 hover:text-rose-600 transition-colors bg-rose-50 hover:bg-rose-100 px-1.5 py-0.5 rounded cursor-pointer"
+                          >
+                            <X className="h-2.5 w-2.5" />
+                            <span>Xóa tất cả bộ lọc</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-sm border-collapse">
                     <thead>
@@ -1653,8 +1949,8 @@ export default function AdminDashboard({
                     <tbody className="divide-y divide-gray-100 text-xs">
                       {(() => {
                         const seenKeys = new Set<string>();
-                        // 1. Deduplicate users by Name & Phone to ensure exact unique entries, and automatically clean trash / empty IDs / blank fields
-                        const deduped = users.filter((item) => {
+                        // 1. Deduplicate users by Name & Phone to ensure exact unique entries
+                        const dedupedRaw = users.filter((item) => {
                           if (!item || !item.id || !item.name || !item.phone) return false;
                           const nameTrim = item.name.trim();
                           const phoneTrim = item.phone.trim();
@@ -1665,26 +1961,126 @@ export default function AdminDashboard({
                           seenKeys.add(uniqueKey);
                           return true;
                         });
-                        // 2. Sort: Admin Lê Nhật Trường (supreme admin) first, then pending requests, then other users
-                        const sorted = [...deduped].sort((a, b) => {
-                          const isALNT = (a.name || '').trim().normalize('NFC').toLowerCase().includes('lê nhật trường') || a.phone?.trim() === '0907767304';
-                          const isBLNT = (b.name || '').trim().normalize('NFC').toLowerCase().includes('lê nhật trường') || b.phone?.trim() === '0907767304';
-                          
-                          if (isALNT && !isBLNT) return -1;
-                          if (!isALNT && isBLNT) return 1;
 
-                          const aPending = a.status?.toLowerCase() === 'pending';
-                          const bPending = b.status?.toLowerCase() === 'pending';
-                          if (aPending && !bPending) return -1;
-                          if (!aPending && bPending) return 1;
-                          return 0;
+                        // 1.5 Apply Filters & Search
+                        const filtered = dedupedRaw.filter((item) => {
+                          if (userSearchQuery.trim()) {
+                            const q = userSearchQuery.trim().toLowerCase();
+                            const matchesName = (item.name || '').toLowerCase().includes(q);
+                            const matchesPhone = (item.phone || '').toLowerCase().includes(q);
+                            const matchesEmpId = (item.employeeId || '').toLowerCase().includes(q);
+                            const matchesDept = (item.department || '').toLowerCase().includes(q);
+                            const matchesBranch = (item.branch || '').toLowerCase().includes(q);
+                            
+                            if (!matchesName && !matchesPhone && !matchesEmpId && !matchesDept && !matchesBranch) {
+                              return false;
+                            }
+                          }
+
+                          if (userRoleFilter !== 'all') {
+                            if (item.role !== userRoleFilter) return false;
+                          }
+
+                          if (userStatusFilter !== 'all') {
+                            const status = (item.status || '').toLowerCase();
+                            if (userStatusFilter === 'approved') {
+                              if (status !== 'approved') return false;
+                            } else if (userStatusFilter === 'pending') {
+                              if (status !== 'pending' && status !== 'rejected' && status !== 'blocked') return false;
+                            }
+                          }
+
+                          if (userBranchFilter !== 'all') {
+                            if (item.branch !== userBranchFilter) return false;
+                          }
+
+                          if (userDeptFilter !== 'all') {
+                            if (item.department !== userDeptFilter) return false;
+                          }
+
+                          return true;
+                        });
+
+                        // 2. Sort order according to priority:
+                        // 1. Admin
+                        // 2. Ban Tổng Giám Đốc
+                        // 3. Ban Giám Đốc
+                        // 4. Trưởng Bộ Phận (Duyệt viên)
+                        // 5. CBNV mới được duyệt (Approved in the today)
+                        // 6. Nhân viên đang online (Active within last 240 seconds - priority 6)
+                        // 7. CBNV khác
+                        const todayLocal = new Date();
+                        const year = todayLocal.getFullYear();
+                        const month = String(todayLocal.getMonth() + 1).padStart(2, '0');
+                        const day = String(todayLocal.getDate()).padStart(2, '0');
+                        const todayStr = `${year}-${month}-${day}`;
+
+                        const getPriorityWeight = (u: User) => {
+                          const isLNT = (u.name || '').trim().normalize('NFC').toLowerCase().includes('lê nhật trường') || u.phone?.trim() === '0907767304' || u.role === 'admin';
+                          if (isLNT) return 1;
+
+                          const dept = (u.department || '').trim().normalize('NFC').toLowerCase();
+                          if (u.role === 'executive' || dept.includes('tổng giám đốc')) return 2;
+
+                          if (dept.includes('ban giám đốc') && !dept.includes('tổng giám đốc')) return 3;
+
+                          if (u.role === 'approver') return 4;
+
+                          const isApprovedToday = (u.status || '').toLowerCase() === 'approved' && u.createdAt && u.createdAt.startsWith(todayStr);
+                          if (isApprovedToday) return 5;
+
+                          const isOnline = u.lastActive && Math.abs(Date.now() - u.lastActive) <= 240000;
+                          if (isOnline) return 6;
+
+                          return 7;
+                        };
+
+                        const sorted = [...filtered].sort((a, b) => {
+                          const weightA = getPriorityWeight(a);
+                          const weightB = getPriorityWeight(b);
+
+                          if (weightA !== weightB) {
+                            return weightA - weightB;
+                          }
+
+                          if (weightA === 2) {
+                            const getExecutiveOrder = (name: string) => {
+                              const norm = (name || '').trim().normalize('NFC').toUpperCase();
+                              if (norm.includes('TRẦN ĐỨC HUY')) return 1;
+                              if (norm.includes('PHAN ANH TUẤN')) return 2;
+                              if (norm.includes('NGÔ ĐỨC TRUNG')) return 3;
+                              if (norm.includes('NGUYỄN THỊ THOẠI')) return 4;
+                              return 999;
+                            };
+                            const ordA = getExecutiveOrder(a.name || '');
+                            const ordB = getExecutiveOrder(b.name || '');
+                            if (ordA !== ordB) {
+                              return ordA - ordB;
+                            }
+                          }
+
+                          // Same group: put approved before pending/rejected (crucial for "CBNV mới được duyệt" to appear higher)
+                          const aApproved = (a.status || '').toLowerCase() === 'approved';
+                          const bApproved = (b.status || '').toLowerCase() === 'approved';
+                          if (aApproved && !bApproved) return -1;
+                          if (!aApproved && bApproved) return 1;
+
+                          // Then sort by registration date descending (newest first)
+                          const timeA = a.createdAt || '';
+                          const timeB = b.createdAt || '';
+                          return timeB.localeCompare(timeA);
                         });
 
                         if (sorted.length === 0) {
+                          const hasFilters = userSearchQuery || userRoleFilter !== 'all' || userStatusFilter !== 'all' || userBranchFilter !== 'all' || userDeptFilter !== 'all';
                           return (
                             <tr>
-                              <td colSpan={5} className="py-8 text-center text-gray-300 italic">
-                                <span translate="no" className="notranslate">Chưa có dữ liệu CBNV đăng ký.</span>
+                              <td colSpan={5} className="py-8 text-center text-gray-400 italic">
+                                <span translate="no" className="notranslate">
+                                  {hasFilters 
+                                    ? "Không có CBNV nào khớp với bộ lọc & tìm kiếm hiện tại." 
+                                    : "Chưa có dữ liệu CBNV đăng ký."}
+                                </span>
                               </td>
                             </tr>
                           );
@@ -1709,27 +2105,48 @@ export default function AdminDashboard({
                                     </span>
                                   )}
                                 </div>
-                                <span translate="no" className="notranslate block font-sans text-gray-400 font-normal mt-0.5">{item.phone}</span>
+                                <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                                  <span translate="no" className="notranslate block font-sans text-gray-400 font-normal">{item.phone}</span>
+                                  {(() => {
+                                    const isOnline = item.lastActive && Math.abs(Date.now() - item.lastActive) <= 240000;
+                                    const isApprovedToday = (item.status || '').toLowerCase() === 'approved' && item.createdAt && item.createdAt.startsWith(todayStr);
+                                    return (
+                                      <>
+                                        {isOnline && (
+                                          <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-green-600 animate-pulse bg-green-50 px-1 py-0.5 rounded border border-green-200 uppercase tracking-wider">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-ping inline-block"></span>
+                                            <span>online</span>
+                                          </span>
+                                        )}
+                                        {isApprovedToday && (
+                                          <span className="inline-flex items-center gap-0.5 text-[9px] font-black text-red-600 animate-pulse bg-red-50 border border-red-200 px-1.5 py-0.5 rounded uppercase tracking-wide">
+                                            <span className="w-1 h-1 rounded-full bg-red-600 inline-block animate-ping"></span>
+                                            <span>New</span>
+                                          </span>
+                                        )}
+                                      </>
+                                    );
+                                  })()}
+                                </div>
                               </td>
                               <td className="py-3 px-4">
                                 <span translate="no" className="notranslate">{item.department}</span>
                                 <span translate="no" className="notranslate block font-sans text-gray-450 mt-0.5">{item.branch}</span>
                               </td>
                               <td className="py-3 px-4">
-                                <div className="flex flex-col gap-1 items-start">
-                                  <span className={`px-2 py-0.5 rounded-full font-bold text-[11px] ${
-                                    item.role === 'admin' ? 'bg-purple-50 text-purple-700 border border-purple-100' :
-                                    item.role === 'approver' ? 'bg-yellow-50 text-yellow-700 border border-yellow-105' :
-                                    'bg-gray-100 text-gray-700'
+                                <div className="flex items-center justify-start">
+                                  <span className={`w-24 h-5 inline-flex items-center justify-center rounded border text-[9px] font-black tracking-wider uppercase ${
+                                    item.role === 'admin' ? 'bg-purple-50 text-purple-700 border-purple-200' :
+                                    item.role === 'executive' ? 'bg-orange-50 text-[#E8590C] border-orange-200' :
+                                    item.role === 'approver' ? 'bg-yellow-50 text-yellow-700 border-yellow-250' :
+                                    'bg-gray-50 text-gray-600 border-gray-200'
                                   }`}>
-                                    <span translate="no" className="notranslate">{item.role === 'admin' ? 'Chủ Admin' : item.role === 'approver' ? 'Duyệt viên (Trưởng BP)' : 'CBNV'}</span>
-                                  </span>
-                                  {item.canViewStats && (
-                                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border border-emerald-150 text-[9px] font-black bg-emerald-50 text-emerald-800 tracking-tight mt-1">
-                                      <BarChart3 className="h-3 w-3 text-emerald-600 shrink-0" />
-                                      <span>XEM THỐNG KÊ</span>
+                                    <span translate="no" className="notranslate">
+                                      {item.role === 'admin' ? 'CHỦ ADMIN' : 
+                                       item.role === 'executive' ? 'BAN TGĐ' :
+                                       item.role === 'approver' ? 'DUYỆT VIÊN' : 'CBNV'}
                                     </span>
-                                  )}
+                                  </span>
                                 </div>
                               </td>
                               <td className="py-3 px-4">
@@ -1745,76 +2162,98 @@ export default function AdminDashboard({
                                 </span>
                               </td>
                               <td className="py-3 px-4 text-right whitespace-nowrap">
-                                <div className="flex items-center justify-end gap-2 font-sans">
+                                <div className="flex items-center justify-end gap-1 font-sans">
                                   {item.id !== 'admin_lenhattruong' && item.name !== 'Lê Nhật Trường' && (
                                     <>
+                                      {/* Đặc cách Ban Tổng Giám Đốc */}
+                                      <button
+                                        onClick={() => handleToggleExecutive(item.id, item.role)}
+                                        className={`p-1 rounded-md border transition-all flex items-center justify-center hover:scale-105 active:scale-95 shadow-xs cursor-pointer ${
+                                          item.role === 'executive' 
+                                            ? "text-[#E8590C] bg-orange-100 border-[#E8590C]/50 hover:bg-orange-200" 
+                                            : "text-slate-400 bg-slate-50 border-slate-200 hover:text-[#E8590C] hover:bg-orange-50 hover:border-orange-200"
+                                        }`}
+                                        title={item.role === 'executive' ? "Hủy đặc cách Ban Tổng Giám Đốc" : "Đặc cách vào Ban Tổng Giám Đốc"}
+                                      >
+                                        <Zap className={`h-3.5 w-3.5 ${item.role === 'executive' ? 'fill-[#E8590C]' : ''}`} />
+                                      </button>
+
                                       {/* Approve / Reject Actions */}
                                       {item.status?.toLowerCase() !== 'approved' ? (
                                         <button
                                           onClick={() => handleApproveUser(item.id)}
-                                          className="p-1.5 rounded-lg border text-emerald-600 bg-emerald-50 border-emerald-200 hover:bg-emerald-100 hover:text-emerald-700 transition-all flex items-center justify-center hover:scale-105 active:scale-95 shadow-sm cursor-pointer"
+                                          className="p-1 rounded-md border text-emerald-600 bg-emerald-50 border-emerald-200 hover:bg-emerald-100 hover:text-emerald-700 transition-all flex items-center justify-center hover:scale-105 active:scale-95 shadow-xs cursor-pointer"
                                           title="Phê duyệt tài khoản hoạt động"
                                         >
-                                          <CheckCircle2 className="h-4 w-4" />
+                                          <CheckCircle2 className="h-3.5 w-3.5" />
                                         </button>
                                       ) : (
                                         <button
                                           onClick={() => handleRejectUser(item.id)}
-                                          className="p-1.5 rounded-lg border text-amber-600 bg-amber-50 border-amber-250 hover:bg-amber-100 hover:text-amber-700 transition-all flex items-center justify-center hover:scale-105 active:scale-95 shadow-sm cursor-pointer"
+                                          className="p-1 rounded-md border text-amber-600 bg-amber-50 border-amber-250 hover:bg-amber-100 hover:text-amber-700 transition-all flex items-center justify-center hover:scale-105 active:scale-95 shadow-xs cursor-pointer"
                                           title="Tạm khóa tài khoản"
                                         >
-                                          <Lock className="h-4 w-4" />
+                                          <Lock className="h-3.5 w-3.5" />
                                         </button>
                                       )}
 
                                       {/* Edit button */}
                                       <button
                                         onClick={() => handleOpenEdit(item)}
-                                        className="p-1.5 rounded-lg border text-blue-600 bg-blue-50 border-blue-200 hover:bg-blue-100 hover:text-blue-700 transition-all flex items-center justify-center hover:scale-105 active:scale-95 shadow-sm cursor-pointer"
+                                        className="p-1 rounded-md border text-blue-600 bg-blue-50 border-blue-200 hover:bg-blue-100 hover:text-blue-700 transition-all flex items-center justify-center hover:scale-105 active:scale-95 shadow-xs cursor-pointer"
                                         title="Sửa thông tin tài khoản"
                                       >
-                                        <Pencil className="h-4 w-4" />
+                                        <Pencil className="h-3.5 w-3.5" />
                                       </button>
 
                                       {/* Toggle role operator */}
                                       {item.role === 'employee' ? (
                                         <button
                                           onClick={() => handleToggleRole(item.id, item.role)}
-                                          className="p-1.5 rounded-lg border text-indigo-600 bg-indigo-50 border-indigo-200 hover:bg-indigo-100 hover:text-indigo-700 transition-all flex items-center justify-center hover:scale-105 active:scale-95 shadow-sm cursor-pointer"
+                                          className="p-1 rounded-md border text-indigo-600 bg-indigo-50 border-indigo-200 hover:bg-indigo-100 hover:text-indigo-700 transition-all flex items-center justify-center hover:scale-105 active:scale-95 shadow-xs cursor-pointer"
                                           title="Đặt làm Trưởng bộ phận (Duyệt viên)"
                                         >
-                                          <UserCheck className="h-4 w-4" />
+                                          <UserCheck className="h-3.5 w-3.5" />
                                         </button>
-                                      ) : (
+                                      ) : item.role === 'approver' ? (
                                         <button
                                           onClick={() => handleToggleRole(item.id, item.role)}
-                                          className="p-1.5 rounded-lg border text-slate-600 bg-slate-50 border-slate-200 hover:bg-slate-100 hover:text-slate-700 transition-all flex items-center justify-center hover:scale-105 active:scale-95 shadow-sm cursor-pointer"
+                                          className="p-1 rounded-md border text-slate-600 bg-slate-50 border-slate-200 hover:bg-slate-100 hover:text-slate-700 transition-all flex items-center justify-center hover:scale-105 active:scale-95 shadow-xs cursor-pointer"
                                           title="Hạ cấp xuống Cán bộ nhân viên"
                                         >
-                                          <UserMinus className="h-4 w-4" />
+                                          <UserMinus className="h-3.5 w-3.5" />
+                                        </button>
+                                      ) : (
+                                        /* For other high roles (executive), we can disable/hide or offer demotion */
+                                        <button
+                                          disabled
+                                          className="p-1 rounded-md border text-slate-300 bg-slate-50 border-slate-100 transition-all flex items-center justify-center cursor-not-allowed opacity-50"
+                                          title="Không khả dụng cho vai trò này"
+                                        >
+                                          <UserCheck className="h-3.5 w-3.5" />
                                         </button>
                                       )}
 
                                       {/* Toggle Stats view permission */}
                                       <button
                                         onClick={() => handleToggleStatsPermission(item.id, !!item.canViewStats)}
-                                        className={`p-1.5 rounded-lg border transition-all flex items-center justify-center hover:scale-105 active:scale-95 shadow-sm cursor-pointer ${
+                                        className={`p-1 rounded-md border transition-all flex items-center justify-center hover:scale-105 active:scale-95 shadow-xs cursor-pointer ${
                                           item.canViewStats 
                                             ? "text-teal-700 bg-teal-50 border-teal-300 hover:bg-teal-100 hover:text-teal-800" 
                                             : "text-slate-400 bg-slate-50 border-slate-200 hover:bg-slate-100 hover:text-slate-600"
                                         }`}
                                         title={item.canViewStats ? "Thu hồi quyền xem Thống Kê" : "Cấp quyền xem Thống Kê"}
                                       >
-                                        <BarChart3 className="h-4 w-4" />
+                                        <BarChart3 className="h-3.5 w-3.5" />
                                       </button>
 
                                       {/* Delete button */}
                                       <button
                                         onClick={() => setUserToDelete(item)}
-                                        className="p-1.5 rounded-lg border text-rose-600 bg-rose-50 border-rose-200 hover:bg-rose-100 hover:text-rose-700 transition-all flex items-center justify-center hover:scale-105 active:scale-95 shadow-sm cursor-pointer"
+                                        className="p-1 rounded-md border text-rose-600 bg-rose-50 border-rose-200 hover:bg-rose-100 hover:text-rose-700 transition-all flex items-center justify-center hover:scale-105 active:scale-95 shadow-xs cursor-pointer"
                                         title="Xóa tài khoản vĩnh viễn"
                                       >
-                                        <Trash2 className="h-4 w-4" />
+                                        <Trash2 className="h-3.5 w-3.5" />
                                       </button>
                                     </>
                                   )}
@@ -1965,40 +2404,102 @@ export default function AdminDashboard({
 
               {/* Active list table */}
               <div className="bg-white border border-gray-150 rounded-md shadow-sm overflow-hidden">
-                <div className="p-4 border-b border-gray-105 bg-gray-50">
-                  <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest"><span translate="no" className="notranslate">Ngân hàng đề hiện có ({questions.length} câu)</span></h3>
+                <div className="p-3 border-b border-gray-105 bg-gray-50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest shrink-0">
+                    <span translate="no" className="notranslate">Ngân hàng đề hiện có ({questions.length} câu)</span>
+                  </h3>
+                  
+                  {/* Tìm kiếm câu hỏi */}
+                  <div className="relative w-full sm:max-w-xs font-sans">
+                    <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-gray-400">
+                      <Search className="h-3.5 w-3.5" />
+                    </span>
+                    <input
+                      type="text"
+                      placeholder="Tìm kiếm câu hỏi, đáp án, dặn dò..."
+                      value={questionSearchQuery}
+                      onChange={(e) => setQuestionSearchQuery(e.target.value)}
+                      className="w-full pl-8 pr-7 py-1 bg-white border border-gray-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-gray-400 text-gray-750"
+                    />
+                    {questionSearchQuery && (
+                      <button
+                        onClick={() => setQuestionSearchQuery('')}
+                        className="absolute inset-y-0 right-0 pr-2 flex items-center text-gray-400 hover:text-gray-600 cursor-pointer"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm text-left border-collapse">
+                  <table className="w-full text-sm text-left border-collapse font-sans">
                     <tbody className="divide-y divide-gray-100 text-xs">
-                      {questions.map((q, qIdx) => (
-                        <tr key={q.id} className="hover:bg-gray-50/20">
-                          <td className="p-4 space-y-2">
-                            <div className="flex justify-between items-start gap-3">
-                              <span className="text-[10px] font-bold bg-blue-50 text-blue-700 px-2.5 py-0.5 rounded-full uppercase">Câu {qIdx + 1}</span>
-                              <button 
-                                onClick={() => handleDeleteQuestion(q.id)}
-                                className="text-red-600 hover:bg-red-50 p-1 rounded-md transition-all shrink-0"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
-                            </div>
-                            <h4 className="font-bold text-gray-800 text-sm">{q.text}</h4>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 pl-2">
-                              {q.options.map((opt, oIdx) => (
-                                <div key={oIdx} className={`rounded p-2 border ${
-                                  oIdx === q.correctAnswerIndex ? 'bg-green-50/50 border-green-200 text-green-900 font-semibold' : 'bg-gray-50/50 border-gray-100 text-gray-500'
-                                }`}>
-                                  {String.fromCharCode(65 + oIdx)}. {cleanOptionText(opt)}
+                      {(() => {
+                        const filteredQuestions = questions.filter(q => {
+                          if (!questionSearchQuery.trim()) return true;
+                          const query = questionSearchQuery.toLowerCase().trim();
+                          const matchesText = (q.text || '').toLowerCase().includes(query);
+                          const matchesExplanation = (q.explanation || '').toLowerCase().includes(query);
+                          const matchesOptions = q.options?.some(opt => (opt || '').toLowerCase().includes(query));
+                          return matchesText || matchesExplanation || matchesOptions;
+                        });
+
+                        if (filteredQuestions.length === 0) {
+                          return (
+                            <tr>
+                              <td className="p-8 text-center text-gray-400 italic">
+                                Không tìm thấy câu hỏi phù hợp với từ khóa tìm kiếm.
+                              </td>
+                            </tr>
+                          );
+                        }
+
+                        return filteredQuestions.map((q) => {
+                          const originalIndex = questions.indexOf(q);
+                          return (
+                            <tr key={q.id} className="hover:bg-gray-50/20">
+                              <td className="p-4 space-y-2">
+                                <div className="flex justify-between items-start gap-3">
+                                  <span className="text-[10px] font-bold bg-blue-50 text-blue-700 px-2.5 py-0.5 rounded-full uppercase">Câu {originalIndex + 1}</span>
+                                  
+                                  <div className="flex items-center gap-1.5">
+                                    {/* Nút Chỉnh sửa */}
+                                    <button 
+                                      onClick={() => handleOpenEditQuestion(q)}
+                                      className="text-blue-600 hover:bg-blue-105 p-1 rounded-md transition-all shrink-0 cursor-pointer border border-blue-100 hover:border-blue-200 bg-blue-50/50"
+                                      title="Chỉnh sửa nội dung câu hỏi"
+                                    >
+                                      <Pencil className="h-3.5 w-3.5" />
+                                    </button>
+
+                                    {/* Nút Xóa */}
+                                    <button 
+                                      onClick={() => handleDeleteQuestion(q.id)}
+                                      className="text-red-605 hover:bg-red-105 p-1 rounded-md transition-all shrink-0 cursor-pointer border border-red-100 hover:border-red-200 bg-red-50/50"
+                                      title="Xóa câu hỏi khỏi hệ thống"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  </div>
                                 </div>
-                              ))}
-                            </div>
-                            <div className="bg-blue-50/30 p-2.5 rounded-md text-blue-700 text-[11px] leading-relaxed">
-                              <span translate="no" className="notranslate"><strong>Dặn dò:</strong> {q.explanation}</span>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
+                                <h4 className="font-bold text-gray-800 text-sm leading-snug">{q.text}</h4>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 pl-2">
+                                  {q.options.map((opt, oIdx) => (
+                                    <div key={oIdx} className={`rounded p-2 border ${
+                                      oIdx === q.correctAnswerIndex ? 'bg-green-50/50 border-green-205 text-green-905 font-bold shadow-2xs' : 'bg-gray-50/50 border-gray-100 text-gray-500'
+                                    }`}>
+                                      {String.fromCharCode(65 + oIdx)}. {cleanOptionText(opt)}
+                                    </div>
+                                  ))}
+                                </div>
+                                <div className="bg-blue-50/30 border border-blue-100/50 p-2.5 rounded-md text-blue-700 text-[11px] leading-relaxed">
+                                  <span translate="no" className="notranslate"><strong>Dặn dò:</strong> {q.explanation}</span>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        });
+                      })()}
                     </tbody>
                   </table>
                 </div>
@@ -2432,8 +2933,34 @@ export default function AdminDashboard({
                                   : 'bg-gray-50/50 border-gray-200 text-gray-700 hover:bg-gray-50'
                               }`}
                             >
-                              <span className="truncate">{br.name}</span>
-                              <div className="flex items-center gap-0.5">
+                              <span className="truncate pr-1">{br.name}</span>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <label className="inline-flex items-center gap-1 px-1.5 py-0.5 border border-gray-250 bg-white hover:bg-gray-50 rounded text-[10px] text-gray-500 font-bold select-none cursor-pointer" onClick={(e) => e.stopPropagation()}>
+                                  <input
+                                    type="checkbox"
+                                    checked={br.excludeFromStats !== true}
+                                    onChange={async (e) => {
+                                      const updated = companyMappings.map(co => {
+                                        if (co.id === selectedCoId) {
+                                          return {
+                                            ...co,
+                                            branches: co.branches.map(b => {
+                                              if (b.id === br.id) {
+                                                return { ...b, excludeFromStats: !e.target.checked };
+                                              }
+                                              return b;
+                                            })
+                                          };
+                                        }
+                                        return co;
+                                      });
+                                      await databaseService.saveCompanyMappings(updated);
+                                      setCompanyMappings(updated);
+                                    }}
+                                    className="rounded border-gray-300 text-blue-650 focus:ring-blue-500 h-3 w-3 cursor-pointer"
+                                  />
+                                  <span>Tính điểm</span>
+                                </label>
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
@@ -2514,8 +3041,42 @@ export default function AdminDashboard({
                               key={dept.id}
                               className="p-3 rounded-md border border-gray-200 bg-gray-50/50 text-gray-700 text-xs flex justify-between items-center transition-all hover:bg-gray-50"
                             >
-                              <span className="truncate">{dept.name}</span>
-                              <div className="flex items-center gap-0.5">
+                              <span className="truncate pr-1">{dept.name}</span>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <label className="inline-flex items-center gap-1 px-1.5 py-0.5 border border-gray-250 bg-white hover:bg-gray-50 rounded text-[10px] text-gray-500 font-bold select-none cursor-pointer" onClick={(e) => e.stopPropagation()}>
+                                  <input
+                                    type="checkbox"
+                                    checked={dept.excludeFromStats !== true}
+                                    onChange={async (e) => {
+                                      const updated = companyMappings.map(co => {
+                                        if (co.id === selectedCoId) {
+                                          return {
+                                            ...co,
+                                            branches: co.branches.map(b => {
+                                              if (b.id === selectedBrId) {
+                                                return {
+                                                  ...b,
+                                                  departments: b.departments.map(d => {
+                                                    if (d.id === dept.id) {
+                                                      return { ...d, excludeFromStats: !e.target.checked };
+                                                    }
+                                                    return d;
+                                                  })
+                                                };
+                                              }
+                                              return b;
+                                            })
+                                          };
+                                        }
+                                        return co;
+                                        });
+                                        await databaseService.saveCompanyMappings(updated);
+                                        setCompanyMappings(updated);
+                                    }}
+                                    className="rounded border-gray-300 text-blue-650 focus:ring-blue-500 h-3 w-3 cursor-pointer"
+                                  />
+                                  <span>Tính điểm</span>
+                                </label>
                                 <button
                                   onClick={() => {
                                     setEditingMapping({
@@ -3080,6 +3641,139 @@ export default function AdminDashboard({
                   className="px-4 py-2 bg-[#1971C2] hover:bg-[#155d9e] text-white rounded-md font-bold transition-all shadow-xs"
                 >
                   <span translate="no" className="notranslate">Lưu thay đổi</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Question Modal */}
+      {editingQuestion && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center overflow-y-auto p-4 backdrop-blur-xs font-sans">
+          <div className="bg-white rounded-lg border border-gray-150 max-w-2xl w-full p-6 shadow-xl space-y-4 my-8">
+            <div className="flex justify-between items-center border-b border-gray-100 pb-3">
+              <h3 className="text-base font-bold text-gray-950 flex items-center gap-2">
+                <Pencil className="h-5 w-5 text-[#1971C2]" />
+                <span translate="no" className="notranslate">Chỉnh Sửa Câu Hỏi Trắc Nghiệm 3T</span>
+              </h3>
+              <button
+                onClick={() => setEditingQuestion(null)}
+                className="text-gray-400 hover:text-gray-700 text-lg font-bold cursor-pointer"
+              >
+                &times;
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveQuestionEdit} className="space-y-4 text-xs">
+              {/* Question Text */}
+              <div className="space-y-1.5">
+                <label className="block text-gray-750 font-bold"><span translate="no" className="notranslate">Nội dung câu hỏi</span></label>
+                <textarea
+                  value={editQText}
+                  onChange={(e) => setEditQText(e.target.value)}
+                  className="w-full border border-gray-200 rounded px-3 py-2 text-xs outline-none focus:border-[#1971C2] min-h-[70px] text-gray-800 font-medium"
+                  placeholder="Nhập nội dung câu hỏi..."
+                  required
+                />
+              </div>
+
+              {/* Options */}
+              <div className="space-y-2">
+                <h4 className="font-bold text-gray-750"><span translate="no" className="notranslate">Các lựa chọn trả lời</span></h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-bold text-gray-500">Lựa chọn A</label>
+                    <input
+                      type="text"
+                      value={editQOpt0}
+                      onChange={(e) => setEditQOpt0(e.target.value)}
+                      className="w-full border border-gray-200 rounded px-2.5 py-1.5 text-xs outline-none focus:border-[#1971C2] text-gray-800"
+                      placeholder="Nội dung lựa chọn A"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-bold text-gray-500">Lựa chọn B</label>
+                    <input
+                      type="text"
+                      value={editQOpt1}
+                      onChange={(e) => setEditQOpt1(e.target.value)}
+                      className="w-full border border-gray-200 rounded px-2.5 py-1.5 text-xs outline-none focus:border-[#1971C2] text-gray-800"
+                      placeholder="Nội dung lựa chọn B"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-bold text-gray-500">Lựa chọn C</label>
+                    <input
+                      type="text"
+                      value={editQOpt2}
+                      onChange={(e) => setEditQOpt2(e.target.value)}
+                      className="w-full border border-gray-200 rounded px-2.5 py-1.5 text-xs outline-none focus:border-[#1971C2] text-gray-800"
+                      placeholder="Nội dung lựa chọn C"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-bold text-gray-500">Lựa chọn D</label>
+                    <input
+                      type="text"
+                      value={editQOpt3}
+                      onChange={(e) => setEditQOpt3(e.target.value)}
+                      className="w-full border border-gray-200 rounded px-2.5 py-1.5 text-xs outline-none focus:border-[#1971C2] text-gray-800"
+                      placeholder="Nội dung lựa chọn D"
+                      required
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Correct Answer Selector */}
+              <div className="space-y-1.5">
+                <label className="block text-gray-750 font-bold"><span translate="no" className="notranslate">Đáp án đúng chính xác</span></label>
+                <select
+                  value={editQCorrectIndex}
+                  onChange={(e) => setEditQCorrectIndex(Number(e.target.value))}
+                  className="w-full border border-gray-200 rounded px-3 py-2 text-xs outline-none focus:border-[#1971C2] bg-white text-gray-800 font-medium"
+                >
+                  <option value={0} translate="no" className="notranslate">Lựa chọn A</option>
+                  <option value={1} translate="no" className="notranslate">Lựa chọn B</option>
+                  <option value={2} translate="no" className="notranslate">Lựa chọn C</option>
+                  <option value={3} translate="no" className="notranslate">Lựa chọn D</option>
+                </select>
+              </div>
+
+              {/* Explanation (Dặn dò thay đổi) */}
+              <div className="space-y-1.5">
+                <label className="block text-gray-750 font-bold"><span translate="no" className="notranslate">Dặn dò ghi nhớ / Lời khuyên của sếp</span></label>
+                <textarea
+                  value={editQExplanation}
+                  onChange={(e) => setEditQExplanation(e.target.value)}
+                  className="w-full border border-gray-200 rounded px-3 py-2 text-xs outline-none focus:border-[#1971C2] min-h-[60px] text-gray-800 font-medium"
+                  placeholder="Dặn dò CBNV khi gặp hoặc giải thích đáp án này..."
+                  required
+                />
+              </div>
+
+              <div className="flex justify-end gap-2.5 pt-3 border-t border-gray-100 font-sans col-span-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingQuestion(null)}
+                  className="px-4 py-2 bg-gray-50 hover:bg-gray-150 border border-gray-250 rounded-md font-bold text-gray-650 transition-colors cursor-pointer"
+                >
+                  <span translate="no" className="notranslate">Hủy bỏ</span>
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="px-4 py-2 bg-[#1971C2] hover:bg-[#155d9e] text-white rounded-md font-bold transition-all shadow-xs cursor-pointer disabled:opacity-50"
+                >
+                  {loading ? (
+                    <span translate="no" className="notranslate">Đang cập nhật...</span>
+                  ) : (
+                    <span translate="no" className="notranslate">Cập nhật câu hỏi</span>
+                  )}
                 </button>
               </div>
             </form>

@@ -35,7 +35,7 @@ export default function EmployeeDashboard({
   const [approvalSearchTerm, setApprovalSearchTerm] = useState('');
 
   useEffect(() => {
-    if ((isAdminReview && user.role === 'admin') || user.role === 'approver' || user.canViewStats) {
+    if ((isAdminReview && (user.role === 'admin' || user.role === 'executive')) || user.role === 'approver' || user.canViewStats) {
       try {
         const unsubscribe = databaseService.subscribeUsers((allUsers) => {
           if (user.role === 'admin') {
@@ -504,19 +504,39 @@ export default function EmployeeDashboard({
   const [allResults, setAllResults] = useState<QuizResult[]>([]);
 
   // Dynamic level:
-  // Cấp 1: 5 lượt liên tiếp đạt 30/30 -> Cấp 2
-  // Cấp 2: 5 lượt liên tiếp đạt 30/30 -> Cấp 3; 5 lượt liên tiếp < 20 -> Cấp 1; Còn lại giữ nguyên
-  // Cấp 3: 5 lượt liên tiếp < 20 -> Cấp 2; Còn lại giữ nguyên
+  // Cấp 1 (Tân Binh): 5 lượt liên tiếp đạt 30/30 -> Cấp 2. Hạ cấp: Giữ nguyên.
+  // Cấp 2 (Chiến Binh): 5 lượt liên tiếp đạt 30/30 -> Cấp 3. Hạ cấp: Điểm < 20 không liên tiếp 2 lần (lần 1 cảnh báo) -> Cấp 1.
+  // Cấp 3 (Thống Lĩnh): 5 lượt liên tiếp đạt 30/30 -> Cấp 4. Hạ cấp: Điểm < 26 không liên tiếp 2 lần (lần 1 cảnh báo) -> Cấp 2.
+  // Cấp 4 (Tối Cao): 5 lượt liên tiếp đạt 30/30 -> Cấp 5. Hạ cấp: Điểm < 27 không liên tiếp 2 lần (lần 1 cảnh báo) -> Cấp 3.
+  // Cấp 5 (Huyền Thoại): Thăng cấp: Đạt điểm tuyệt đối 30 điểm liên tục -> Giữ nguyên. Hạ cấp: Điểm < 28 không liên tiếp 2 lần (lần 1 cảnh báo) -> Cấp 4.
   const difficultyState = useMemo(() => {
     const chronologicalResults = [...results].sort((a, b) => a.timestamp - b.timestamp);
     
     let currentLevel = 1;
     let consecutiveMaxAtLevel = 0;
-    let consecutiveLowAtLevel = 0;
+    let lowScoreCountAtLevel = 0;
 
-    for (const res of chronologicalResults) {
+    let latestFeedbackMessage: string | null = null;
+    let latestFeedbackType: 'promotion' | 'demotion' | 'warning' | null = null;
+
+    const levelNames: Record<number, string> = {
+      1: 'Tân Binh (Cấp 1)',
+      2: 'Chiến Binh (Cấp 2)',
+      3: 'Thống Lĩnh (Cấp 3)',
+      4: 'Tối Cao (Cấp 4)',
+      5: 'Huyền Thoại (Cấp 5)'
+    };
+
+    for (let i = 0; i < chronologicalResults.length; i++) {
+      const res = chronologicalResults[i];
       const score = res.score;
-      
+      const isLatestResult = i === chronologicalResults.length - 1;
+
+      if (isLatestResult) {
+        latestFeedbackMessage = null;
+        latestFeedbackType = null;
+      }
+
       if (currentLevel === 1) {
         if (score === 30) {
           consecutiveMaxAtLevel++;
@@ -527,45 +547,135 @@ export default function EmployeeDashboard({
         if (consecutiveMaxAtLevel >= 5) {
           currentLevel = 2;
           consecutiveMaxAtLevel = 0;
-          consecutiveLowAtLevel = 0;
+          lowScoreCountAtLevel = 0;
+          
+          if (isLatestResult) {
+            latestFeedbackType = 'promotion';
+            latestFeedbackMessage = `Chúc mừng! Bạn đã xuất sắc thăng cấp lên ${levelNames[2]}!`;
+          }
         }
       } else if (currentLevel === 2) {
         if (score === 30) {
           consecutiveMaxAtLevel++;
-          consecutiveLowAtLevel = 0;
-        } else if (score < 20) {
-          consecutiveLowAtLevel++;
-          consecutiveMaxAtLevel = 0;
         } else {
           consecutiveMaxAtLevel = 0;
-          consecutiveLowAtLevel = 0;
         }
-        
+
+        if (score < 20) {
+          lowScoreCountAtLevel++;
+        }
+
         if (consecutiveMaxAtLevel >= 5) {
           currentLevel = 3;
           consecutiveMaxAtLevel = 0;
-          consecutiveLowAtLevel = 0;
-        } else if (consecutiveLowAtLevel >= 5) {
+          lowScoreCountAtLevel = 0;
+          
+          if (isLatestResult) {
+            latestFeedbackType = 'promotion';
+            latestFeedbackMessage = `Chúc mừng! Bạn đã xuất sắc thăng cấp lên ${levelNames[3]}!`;
+          }
+        } else if (lowScoreCountAtLevel >= 2) {
           currentLevel = 1;
           consecutiveMaxAtLevel = 0;
-          consecutiveLowAtLevel = 0;
+          lowScoreCountAtLevel = 0;
+          
+          if (isLatestResult) {
+            latestFeedbackType = 'demotion';
+            latestFeedbackMessage = `Bạn đã bị tụt xuống ${levelNames[1]} do có 2 lần đạt điểm dưới 20 điểm.`;
+          }
+        } else if (score < 20 && lowScoreCountAtLevel === 1 && isLatestResult) {
+          latestFeedbackType = 'warning';
+          latestFeedbackMessage = `⚠️ CẢNH BÁO: Đây là lần thứ 1 bạn đạt điểm dưới tối thiểu (${score}/30đ) của cấp độ ${levelNames[2]}. Sẽ bị hạ cấp về ${levelNames[1]} nếu đạt thấp thêm lần nữa!`;
         }
       } else if (currentLevel === 3) {
         if (score === 30) {
           consecutiveMaxAtLevel++;
-          consecutiveLowAtLevel = 0;
-        } else if (score < 20) {
-          consecutiveLowAtLevel++;
-          consecutiveMaxAtLevel = 0;
         } else {
           consecutiveMaxAtLevel = 0;
-          consecutiveLowAtLevel = 0;
         }
-        
-        if (consecutiveLowAtLevel >= 5) {
+
+        if (score < 26) {
+          lowScoreCountAtLevel++;
+        }
+
+        if (consecutiveMaxAtLevel >= 5) {
+          currentLevel = 4;
+          consecutiveMaxAtLevel = 0;
+          lowScoreCountAtLevel = 0;
+          
+          if (isLatestResult) {
+            latestFeedbackType = 'promotion';
+            latestFeedbackMessage = `Chúc mừng! Bạn đã xuất sắc thăng cấp lên ${levelNames[4]}!`;
+          }
+        } else if (lowScoreCountAtLevel >= 2) {
           currentLevel = 2;
           consecutiveMaxAtLevel = 0;
-          consecutiveLowAtLevel = 0;
+          lowScoreCountAtLevel = 0;
+          
+          if (isLatestResult) {
+            latestFeedbackType = 'demotion';
+            latestFeedbackMessage = `Bạn đã bị tụt xuống ${levelNames[2]} do có 2 lần đạt điểm dưới 26 điểm.`;
+          }
+        } else if (score < 26 && lowScoreCountAtLevel === 1 && isLatestResult) {
+          latestFeedbackType = 'warning';
+          latestFeedbackMessage = `⚠️ CẢNH BÁO: Đây là lần thứ 1 bạn đạt điểm dưới tối thiểu (${score}/30đ) của cấp độ ${levelNames[3]}. Sẽ bị hạ cấp về ${levelNames[2]} nếu đạt thấp thêm lần nữa!`;
+        }
+      } else if (currentLevel === 4) {
+        if (score === 30) {
+          consecutiveMaxAtLevel++;
+        } else {
+          consecutiveMaxAtLevel = 0;
+        }
+
+        if (score < 27) {
+          lowScoreCountAtLevel++;
+        }
+
+        if (consecutiveMaxAtLevel >= 5) {
+          currentLevel = 5;
+          consecutiveMaxAtLevel = 0;
+          lowScoreCountAtLevel = 0;
+          
+          if (isLatestResult) {
+            latestFeedbackType = 'promotion';
+            latestFeedbackMessage = `Chúc mừng! Bạn đã xuất sắc thăng cấp lên ${levelNames[5]}!`;
+          }
+        } else if (lowScoreCountAtLevel >= 2) {
+          currentLevel = 3;
+          consecutiveMaxAtLevel = 0;
+          lowScoreCountAtLevel = 0;
+          
+          if (isLatestResult) {
+            latestFeedbackType = 'demotion';
+            latestFeedbackMessage = `Bạn đã bị tụt xuống ${levelNames[3]} do có 2 lần đạt điểm dưới 27 điểm.`;
+          }
+        } else if (score < 27 && lowScoreCountAtLevel === 1 && isLatestResult) {
+          latestFeedbackType = 'warning';
+          latestFeedbackMessage = `⚠️ CẢNH BÁO: Đây là lần thứ 1 bạn đạt điểm dưới tối thiểu (${score}/30đ) của cấp độ ${levelNames[4]}. Sẽ bị hạ cấp về ${levelNames[3]} nếu đạt thấp thêm lần nữa!`;
+        }
+      } else if (currentLevel === 5) {
+        if (score === 30) {
+          consecutiveMaxAtLevel++;
+        } else {
+          consecutiveMaxAtLevel = 0;
+        }
+
+        if (score < 28) {
+          lowScoreCountAtLevel++;
+        }
+
+        if (lowScoreCountAtLevel >= 2) {
+          currentLevel = 4;
+          consecutiveMaxAtLevel = 0;
+          lowScoreCountAtLevel = 0;
+          
+          if (isLatestResult) {
+            latestFeedbackType = 'demotion';
+            latestFeedbackMessage = `Bạn đã bị tụt xuống ${levelNames[4]} do có 2 lần đạt điểm dưới 28 điểm.`;
+          }
+        } else if (score < 28 && lowScoreCountAtLevel === 1 && isLatestResult) {
+          latestFeedbackType = 'warning';
+          latestFeedbackMessage = `⚠️ CẢNH BÁO: Đây là lần thứ 1 bạn đạt điểm dưới tối thiểu (${score}/30đ) của cấp độ ${levelNames[5]}. Sẽ bị hạ cấp về ${levelNames[4]} nếu đạt thấp thêm lần nữa!`;
         }
       }
     }
@@ -573,7 +683,9 @@ export default function EmployeeDashboard({
     return {
       level: currentLevel,
       consecutiveMax: consecutiveMaxAtLevel,
-      consecutiveLow: consecutiveLowAtLevel
+      consecutiveLow: lowScoreCountAtLevel,
+      latestFeedbackType,
+      latestFeedbackMessage
     };
   }, [results]);
 
@@ -681,7 +793,7 @@ export default function EmployeeDashboard({
   };
 
   const renderMobileUsersPanel = () => {
-    const filteredUsers = deptUsers.filter((u) => {
+    const rawFilteredUsers = deptUsers.filter((u) => {
       const s = approvalSearchTerm.toLowerCase();
       const matchesSearch = 
         u.name?.toLowerCase().includes(s) || 
@@ -699,6 +811,71 @@ export default function EmployeeDashboard({
         u.role?.toLowerCase() === userRoleFilter.toLowerCase();
 
       return matchesSearch && matchesStatus && matchesRole;
+    });
+
+    const todayLocal = new Date();
+    const year = todayLocal.getFullYear();
+    const month = String(todayLocal.getMonth() + 1).padStart(2, '0');
+    const day = String(todayLocal.getDate()).padStart(2, '0');
+    const todayStr = `${year}-${month}-${day}`;
+
+    const getPriorityWeight = (u: User) => {
+      const isLNT = (u.name || '').trim().normalize('NFC').toLowerCase().includes('lê nhật trường') || u.phone?.trim() === '0907767304' || u.role === 'admin';
+      if (isLNT) return 1;
+
+      const dept = (u.department || '').trim().normalize('NFC').toLowerCase();
+      if (u.role === 'executive' || dept.includes('tổng giám đốc')) return 2;
+
+      if (dept.includes('ban giám đốc') && !dept.includes('tổng giám đốc')) return 3;
+
+      if (u.role === 'approver') return 4;
+
+      const isApprovedToday = (u.status || '').toLowerCase() === 'approved' && u.createdAt && u.createdAt.startsWith(todayStr);
+      if (isApprovedToday) return 5;
+
+      const isOnline = u.lastActive && Math.abs(Date.now() - u.lastActive) <= 240000;
+      if (isOnline) return 6;
+
+      return 7;
+    };
+
+    const filteredUsers = [...rawFilteredUsers].sort((a, b) => {
+      const weightA = getPriorityWeight(a);
+      const weightB = getPriorityWeight(b);
+
+      if (weightA !== weightB) {
+        return weightA - weightB;
+      }
+
+      if (weightA === 2) {
+        const getExecutiveOrder = (name: string) => {
+          const norm = (name || '').trim().normalize('NFC').toUpperCase();
+          if (norm.includes('TRẦN ĐỨC HUY')) return 1;
+          if (norm.includes('PHAN ANH TUẤN')) return 2;
+          if (norm.includes('NGÔ ĐỨC TRUNG')) return 3;
+          if (norm.includes('NGUYỄN THỊ THOẠI')) return 4;
+          return 999;
+        };
+        const ordA = getExecutiveOrder(a.name || '');
+        const ordB = getExecutiveOrder(b.name || '');
+        if (ordA !== ordB) {
+          return ordA - ordB;
+        }
+      }
+
+      const aApproved = (a.status || '').toLowerCase() === 'approved';
+      const bApproved = (b.status || '').toLowerCase() === 'approved';
+      if (aApproved && !bApproved) return -1;
+      if (!aApproved && bApproved) return 1;
+
+      const isOnlineA = a.lastActive && Math.abs(Date.now() - a.lastActive) <= 240000;
+      const isOnlineB = b.lastActive && Math.abs(Date.now() - b.lastActive) <= 240000;
+      if (isOnlineA && !isOnlineB) return -1;
+      if (!isOnlineA && isOnlineB) return 1;
+
+      const dateA = a.createdAt || '';
+      const dateB = b.createdAt || '';
+      return dateB.localeCompare(dateA);
     });
 
     return (
@@ -783,13 +960,42 @@ export default function EmployeeDashboard({
                   <div>
                     <h4 className="text-xs font-extrabold text-[#0B3A60] flex items-center gap-1.5">
                       {item.name}
-                      {item.role === 'admin' ? (
-                        <span className="bg-purple-105 text-purple-800 text-[8px] font-bold px-1.5 py-0.5 rounded-full uppercase">Admin</span>
-                      ) : item.role === 'approver' ? (
-                        <span className="bg-orange-105 text-orange-800 text-[8px] font-bold px-1.5 py-0.5 rounded-full uppercase">Duyệt viên</span>
-                      ) : null}
+                      <span className={`px-1.5 h-4.5 inline-flex items-center justify-center rounded border text-[8px] font-black tracking-wider uppercase shrink-0 ${
+                        item.role === 'admin' ? 'bg-purple-50 text-purple-700 border-purple-200' :
+                        item.role === 'executive' ? 'bg-orange-50 text-[#E8590C] border-orange-200 font-bold' :
+                        item.role === 'approver' ? 'bg-yellow-50 text-yellow-700 border-yellow-250 font-bold' :
+                        'bg-gray-50 text-gray-500 border-gray-200 font-medium'
+                      }`}>
+                        <span translate="no" className="notranslate">
+                          {item.role === 'admin' ? 'CHỦ ADMIN' : 
+                           item.role === 'executive' ? 'BAN TGĐ' :
+                           item.role === 'approver' ? 'DUYỆT VIÊN' : 'CBNV'}
+                        </span>
+                      </span>
                     </h4>
-                    <p className="text-[10px] text-gray-500 font-bold mt-0.5">{item.phone} {item.employeeId ? `| MNV: ${item.employeeId}` : ''}</p>
+                    <p className="text-[10px] text-gray-500 font-bold mt-0.5 flex flex-wrap items-center gap-1.5">
+                      <span>{item.phone} {item.employeeId ? `| MNV: ${item.employeeId}` : ''}</span>
+                      {(() => {
+                        const isOnline = item.lastActive && Math.abs(Date.now() - item.lastActive) <= 240000;
+                        const isApprovedToday = (item.status || '').toLowerCase() === 'approved' && item.createdAt && item.createdAt.startsWith(todayStr);
+                        return (
+                          <>
+                            {isOnline && (
+                              <span className="inline-flex items-center gap-0.5 text-[8px] font-bold text-green-600 animate-pulse bg-green-50 px-1 py-0.5 rounded border border-green-200 uppercase tracking-wider">
+                                <span className="w-1 h-1 rounded-full bg-green-500 animate-ping inline-block"></span>
+                                <span>online</span>
+                              </span>
+                            )}
+                            {isApprovedToday && (
+                              <span className="inline-flex items-center gap-0.5 text-[8px] font-black text-red-600 animate-pulse bg-red-50 border border-red-200 px-1 py-0.5 rounded uppercase tracking-wide">
+                                <span className="w-1 h-1 rounded-full bg-red-600 inline-block animate-ping"></span>
+                                <span>New</span>
+                              </span>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </p>
                   </div>
 
                   {/* Status label badge */}
@@ -1105,7 +1311,32 @@ export default function EmployeeDashboard({
                       }`}
                     >
                       <span className="truncate pr-2">{br.name}</span>
-                      <div className="flex items-center gap-1 shrink-0">
+                      <div className="flex items-center gap-1 shrink-0 bg-transparent" onClick={(e) => e.stopPropagation()}>
+                        <label className="inline-flex items-center gap-1 px-1.5 py-0.5 border border-gray-250 bg-white hover:bg-gray-50 rounded text-[9px] text-gray-500 font-bold select-none cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={br.excludeFromStats !== true}
+                            onChange={async (e) => {
+                              const updated = companyMappings.map(co => {
+                                if (co.id === selectedCoId) {
+                                  return {
+                                    ...co,
+                                    branches: co.branches.map(b => {
+                                      if (b.id === br.id) {
+                                        return { ...b, excludeFromStats: !e.target.checked };
+                                      }
+                                      return b;
+                                    })
+                                  };
+                                }
+                                return co;
+                              });
+                              await databaseService.saveCompanyMappings(updated);
+                            }}
+                            className="rounded border-gray-200 text-blue-600 focus:ring-blue-500 h-3 w-3 cursor-pointer"
+                          />
+                          <span>Tính điểm</span>
+                        </label>
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -1114,7 +1345,7 @@ export default function EmployeeDashboard({
                               handleMobileEditMappingDirectly('branch', selectedCoId, br.id, undefined, br.name, name);
                             }
                           }}
-                          className="text-blue-600 hover:bg-blue-50 p-1 rounded-lg cursor-pointer inline-flex items-center justify-center"
+                          className="text-blue-600 hover:bg-blue-50 p-1 rounded-lg cursor-pointer inline-flex items-center justify-center animate-none"
                         >
                           <Pencil className="h-3.5 w-3.5" />
                         </button>
@@ -1178,6 +1409,39 @@ export default function EmployeeDashboard({
                     >
                       <span className="truncate pr-2 font-sans">{dept.name}</span>
                       <div className="flex items-center gap-1 shrink-0">
+                        <label className="inline-flex items-center gap-1 px-1.5 py-0.5 border border-gray-250 bg-white hover:bg-gray-50 rounded text-[9px] text-gray-500 font-bold select-none cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={dept.excludeFromStats !== true}
+                            onChange={async (e) => {
+                              const updated = companyMappings.map(co => {
+                                if (co.id === selectedCoId) {
+                                  return {
+                                    ...co,
+                                    branches: co.branches.map(b => {
+                                      if (b.id === selectedBrId) {
+                                        return {
+                                          ...b,
+                                          departments: b.departments.map(d => {
+                                            if (d.id === dept.id) {
+                                              return { ...d, excludeFromStats: !e.target.checked };
+                                            }
+                                            return d;
+                                          })
+                                        };
+                                      }
+                                      return b;
+                                    })
+                                  };
+                                }
+                                return co;
+                              });
+                              await databaseService.saveCompanyMappings(updated);
+                            }}
+                            className="rounded border-gray-200 text-blue-600 focus:ring-blue-500 h-3 w-3 cursor-pointer"
+                          />
+                          <span>Tính điểm</span>
+                        </label>
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -1452,8 +1716,8 @@ export default function EmployeeDashboard({
           let width = img.width;
           let height = img.height;
           
-          // Max dimension scaling constraint
-          const MAX_SIZE = 1024;
+          // Max dimension scaling constraint (optimized to 800px for faster mobile uploads and higher success rate)
+          const MAX_SIZE = 800;
           if (width > height) {
             if (width > MAX_SIZE) {
               height *= MAX_SIZE / width;
@@ -1471,7 +1735,7 @@ export default function EmployeeDashboard({
           const ctx = canvas.getContext('2d');
           if (ctx) {
             ctx.drawImage(img, 0, 0, width, height);
-            const dataUrl = canvas.toDataURL('image/jpeg', 0.65);
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.60);
             const base64Chunk = dataUrl.split(',')[1];
             resolve(base64Chunk);
           } else {
@@ -1525,15 +1789,50 @@ export default function EmployeeDashboard({
       });
 
       if (!response.ok) {
-        const errResult = await response.json();
-        throw new Error(errResult.error || "Gặp lỗi trong tiến trình giải mã hình ảnh.");
+        let errorMsg = "Gặp lỗi trong tiến trình giải mã hình ảnh.";
+        const contentType = response.headers.get("content-type") || "";
+        if (contentType.includes("application/json")) {
+          try {
+            const errResult = await response.json();
+            errorMsg = errResult.error || errorMsg;
+          } catch (e) {
+            // Ignore parse error and keep default
+          }
+        } else {
+          try {
+            const rawText = await response.text();
+            if (rawText.length > 0) {
+              // Extract error description or show status code
+              const titleMatch = rawText.match(/<title>([\s\S]*?)<\/title>/i);
+              const titleText = titleMatch ? titleMatch[1].trim() : "";
+              errorMsg = `Lỗi máy chủ (${response.status}): ${titleText || rawText.substring(0, 100)}...`;
+            } else {
+              errorMsg = `Lỗi kết nối máy chủ (Mã trạng thái: ${response.status}).`;
+            }
+          } catch (e) {
+            errorMsg = `Lỗi kết nối HTTP status ${response.status}.`;
+          }
+        }
+        
+        throw new Error(
+          `${errorMsg}\n\n👉 Ý KIẾN KHẮC PHỤC:\n` +
+          `1. Có thể ảnh dung lượng quá lớn hoặc kết nối 4G/Wifi bị gián đoạn gây Hết thời gian chờ (Timeout).\n` +
+          `2. Bạn hãy thử CHỤP ẢNH MÀN HÌNH (Screenshot) hình ảnh này để tối ưu dung lượng siêu nhẹ, rồi chọn tải ảnh chụp màn hình đó lên để bóc tách lại.\n` +
+          `3. Nên thực hiện ở nơi sóng mạnh hoặc kết nối Wifi ổn định hơn.`
+        );
       }
 
-      const result = await response.json();
+      let result;
+      try {
+        result = await response.json();
+      } catch (e) {
+        throw new Error("Không thể đọc phản hồi JSON thành công từ máy chủ AI. Vui lòng thử lại bằng ảnh chụp màn hình gọn hơn.");
+      }
+
       const aiQuestions: Question[] = result.questions || [];
 
       if (aiQuestions.length === 0) {
-        setAiNotice({ type: 'error', msg: 'Không tìm thấy câu hỏi trắc nghiệm hợp lệ nào trong các hình ảnh đã chọn.' });
+        setAiNotice({ type: 'error', msg: 'Không tìm thấy câu hỏi trắc nghiệm hợp lệ nào trong các hình ảnh đã chọn. Bạn hãy chụp thẳng trục diện câu hỏi và thử lại.' });
         setExtracting(false);
         return;
       }
@@ -1559,7 +1858,10 @@ export default function EmployeeDashboard({
 
     } catch (err: any) {
       console.error(err);
-      setAiNotice({ type: 'error', msg: err.message || 'Lỗi bóc tách dữ liệu bằng AI.' });
+      setAiNotice({ 
+        type: 'error', 
+        msg: err.message || 'Lỗi bóc tách dữ liệu bằng AI. Vui lòng tải lại ảnh chụp nhỡ/bản chụp mờ hoặc kiểm tra lại mạng.' 
+      });
     } finally {
       setExtracting(false);
     }
@@ -1602,14 +1904,26 @@ export default function EmployeeDashboard({
   };
   
   const getMaxQuestionTimer = (level: number): number => {
-    if (level === 2) return 60;
+    if (level === 5) return 10;
+    if (level === 4) return 20;
     if (level === 3) return 30;
+    if (level === 2) return 60;
     return 90;
   };
 
   const getQuestionScore = (timeSpent: number, isCorrect: boolean, level: number): number => {
     if (!isCorrect) return 0;
-    if (level === 3) {
+    if (level === 5) {
+      if (timeSpent <= 4) return 10;
+      if (timeSpent <= 6) return 8;
+      if (timeSpent <= 8) return 6;
+      return 5;
+    } else if (level === 4) {
+      if (timeSpent <= 6) return 10;
+      if (timeSpent <= 10) return 8;
+      if (timeSpent <= 15) return 6;
+      return 5;
+    } else if (level === 3) {
       if (timeSpent <= 10) return 10;
       if (timeSpent <= 15) return 8;
       if (timeSpent <= 20) return 6;
@@ -2804,35 +3118,39 @@ export default function EmployeeDashboard({
                   <div className="flex flex-col items-center justify-center text-center space-y-4.5 sm:space-y-5 flex-1 w-full shrink-0">
                     
                     {/* Admin rapid action buttons */}
-                    {isAdminReview && user.role === 'admin' && (
+                    {isAdminReview && (user.role === 'admin' || user.role === 'executive') && (
                       <div className="w-full max-w-sm mx-auto bg-slate-50/90 border border-slate-200/60 rounded-xl p-2 shadow-xs mb-4 sm:mb-5">
                         <div className="text-[9px] font-extrabold text-[#0B3A60]/85 uppercase tracking-wider mb-2 text-center flex items-center justify-center gap-1.5 whitespace-nowrap">
                           <span>CÔNG CỤ QUẢN TRỊ HỆ THỐNG</span>
-                          <span className="flex items-center gap-1 bg-emerald-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full shadow-2xs shrink-0 normal-case">
-                            <span className="h-1 w-1 rounded-full bg-white block animate-ping" />
-                            <span>{onlineUsersCount} Online</span>
-                          </span>
+                          {(user.role === 'admin' || user.role === 'executive') && (
+                            <span className="flex items-center gap-1 bg-emerald-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full shadow-2xs shrink-0 normal-case">
+                              <span className="h-1 w-1 rounded-full bg-white block animate-ping" />
+                              <span>{onlineUsersCount} Online</span>
+                            </span>
+                          )}
                         </div>
-                        <div className="grid grid-cols-6 gap-0.5 px-0.5 mb-2">
-                          <button
-                            onClick={() => setAdminMobileTab('users')}
-                            className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group"
-                            title="Phê Duyệt & Phân Quyền"
-                          >
-                            <div className="h-7 w-7 rounded-lg bg-blue-50 border border-blue-100/60 flex items-center justify-center group-hover:bg-blue-100 transition-colors shrink-0 relative">
-                              <UserCheck className="h-3.5 w-3.5 text-[#1971C2]" />
-                              {pendingUsersCount > 0 && (
-                                <span className="absolute -top-1.5 -right-1.5 bg-red-600 text-white text-[9.5px] font-extrabold h-4 px-1 rounded-full border border-white flex items-center justify-center shadow-md min-w-[16px] leading-none animate-bounce">
-                                  {pendingUsersCount}
-                                </span>
-                              )}
-                            </div>
-                            <span className="text-[8.5px] font-bold leading-tight truncate w-full text-center text-gray-700">Phê Duyệt</span>
-                          </button>
+                        <div className={`grid ${user.role === 'executive' ? 'grid-cols-4' : 'grid-cols-6'} gap-0.5 px-0.5 mb-2`}>
+                          {(user.role === 'admin' || user.role === 'executive') && (
+                            <button
+                              onClick={() => setAdminMobileTab('users')}
+                              className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group"
+                              title="Phê Duyệt & Phân Quyền"
+                            >
+                              <div className="h-7 w-7 rounded-lg bg-blue-50 border border-blue-100/60 flex items-center justify-center group-hover:bg-blue-100 transition-colors shrink-0 relative">
+                                <UserCheck className="h-3.5 w-3.5 text-[#1971C2]" />
+                                {pendingUsersCount > 0 && (
+                                  <span className="absolute -top-1.5 -right-1.5 bg-red-650 text-white text-[9.5px] font-extrabold h-4 px-1 rounded-full border border-white flex items-center justify-center shadow-md min-w-[16px] leading-none animate-bounce">
+                                    {pendingUsersCount}
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-[8.5px] font-bold leading-tight truncate w-full text-center text-gray-700 font-sans">Phê Duyệt</span>
+                            </button>
+                          )}
 
                           <button
                             onClick={() => setActiveTab('ai_extract')}
-                            className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-705 font-sans cursor-pointer group"
+                            className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-750 font-sans cursor-pointer group"
                             title="Trích xuất Câu Hỏi AI (Hình Ảnh)"
                           >
                             <div className="h-7 w-7 rounded-lg bg-purple-50 border border-purple-100/60 flex items-center justify-center group-hover:bg-purple-100 transition-colors shrink-0">
@@ -2873,27 +3191,31 @@ export default function EmployeeDashboard({
                             <span className="text-[8.5px] font-bold leading-tight truncate w-full text-center text-gray-700">Thống Kê</span>
                           </button>
 
-                          <button
-                            onClick={() => setAdminMobileTab('encoding')}
-                            className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group"
-                            title="Trang Mã Hóa"
-                          >
-                            <div className="h-7 w-7 rounded-lg bg-amber-50 border border-amber-100/60 flex items-center justify-center group-hover:bg-amber-100 transition-colors shrink-0">
-                              <Lock className="h-3.5 w-3.5 text-amber-600" />
-                            </div>
-                            <span className="text-[8.5px] font-bold leading-tight truncate w-full text-center text-gray-700">Mã Hóa</span>
-                          </button>
+                          {user.role === 'admin' && (
+                            <button
+                              onClick={() => setAdminMobileTab('encoding')}
+                              className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group"
+                              title="Trang Mã Hóa"
+                            >
+                              <div className="h-7 w-7 rounded-lg bg-amber-50 border border-amber-100/60 flex items-center justify-center group-hover:bg-amber-100 transition-colors shrink-0">
+                                <Lock className="h-3.5 w-3.5 text-amber-600" />
+                              </div>
+                              <span className="text-[8.5px] font-bold leading-tight truncate w-full text-center text-gray-700">Mã Hóa</span>
+                            </button>
+                          )}
 
-                          <button
-                            onClick={() => setAdminMobileTab('firebase_data')}
-                            className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group"
-                            title="Dữ Liệu"
-                          >
-                            <div className="h-7 w-7 rounded-lg bg-cyan-50 border border-cyan-100/60 flex items-center justify-center group-hover:bg-cyan-100 transition-colors shrink-0">
-                              <Database className="h-3.5 w-3.5 text-[#0B7285]" />
-                            </div>
-                            <span className="text-[8.5px] font-bold leading-tight truncate w-full text-center text-gray-700">Dữ Liệu</span>
-                          </button>
+                          {user.role === 'admin' && (
+                            <button
+                              onClick={() => setAdminMobileTab('firebase_data')}
+                              className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group"
+                              title="Dữ Liệu"
+                            >
+                              <div className="h-7 w-7 rounded-lg bg-cyan-50 border border-cyan-100/60 flex items-center justify-center group-hover:bg-cyan-100 transition-colors shrink-0">
+                                <Database className="h-3.5 w-3.5 text-[#0B7285]" />
+                              </div>
+                              <span className="text-[8.5px] font-bold leading-tight truncate w-full text-center text-gray-700">Dữ Liệu</span>
+                            </button>
+                          )}
                         </div>
                         {/* Integrated exit button for mobile users where headers are hidden */}
                         {onBackToAdmin && (
@@ -2909,131 +3231,152 @@ export default function EmployeeDashboard({
                     )}
 
                     {/* 3T Logo replacing Trophy Icon */}
-                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-tr from-[#07243c] via-[#0B3A60] to-[#1d5985] border-2 border-blue-400/20 shadow-md ring-4 ring-blue-950/10 select-none shrink-0 relative overflow-hidden">
-                    {/* Glossy light effect */}
-                    <div className="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/10 to-transparent pointer-events-none transform -skew-y-12" />
-                    <div className="absolute -bottom-4 -right-4 w-10 h-10 bg-[#E8590C]/20 rounded-full blur-md pointer-events-none" />
-                    <span translate="no" className="notranslate text-3xl font-black tracking-tighter font-sans relative z-10 flex items-center justify-center">
-                      <motion.span 
-                        animate={{ 
-                          color: ["#E8590C", "#FFD700", "#FF5A5F", "#DE5499", "#E8590C"],
-                          scale: [1, 1.15, 0.95, 1],
-                          filter: [
-                            "drop-shadow(0 0 2px rgba(232,89,12,0.4))",
-                            "drop-shadow(0 0 10px rgba(255,215,0,0.85))",
-                            "drop-shadow(0 0 6px rgba(255,90,95,0.7))",
-                            "drop-shadow(0 0 10px rgba(222,84,153,0.8))",
-                            "drop-shadow(0 0 2px rgba(232,89,12,0.4))"
-                          ]
-                        }}
-                        transition={{ 
-                          duration: 4, 
-                          repeat: Infinity, 
-                          ease: "easeInOut" 
-                        }}
-                        className="drop-shadow-[0_1.5px_1.5px_rgba(0,0,0,0.45)]"
-                      >
-                        3
-                      </motion.span>
-                      <span className="text-white -ml-0.5 drop-shadow-[0_1.5px_1.5px_rgba(0,0,0,0.35)]">T</span>
-                    </span>
-                  </div>
-
-                  {/* VĂN HÓA 3T styled logo block */}
-                  <div className="space-y-1 w-full text-center shrink-0 animate-fade-in">
-                    <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight font-sans">
-                      <span className="text-[#0B3A60] translate-no notranslate">VĂN HÓA </span>
-                      <span className="text-[#E8590C] translate-no notranslate">3T</span>
-                    </h1>
-                    <h3 className="text-[10px] sm:text-xs font-bold tracking-[0.1em] text-gray-400 font-sans uppercase">
-                      <span translate="no" className="notranslate">{slogan}</span>
-                    </h3>
-                    <p className="text-xs sm:text-sm text-gray-500 max-w-xs mx-auto mt-1 leading-normal">
-                      <span translate="no" className="notranslate">
-                        Ứng Dụng Ôn Tập Quiz 3T Hàng Ngày
+                    <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#0B3A60] border-2 border-orange-500 shadow-md select-none shrink-0 relative overflow-hidden">
+                      <span translate="no" className="notranslate text-3xl font-black tracking-tighter text-orange-500 font-sans select-none">
+                        3<span className="text-white">T</span>
                       </span>
-                    </p>
-                  </div>
+                    </div>
 
-                  {/* Cấu hình Mức độ Khó được ẩn Segmented Tab ngang theo yêu cầu của người dùng, thay thế bằng Thể hiện Cấp độ ôn tập thông minh tự động ( stress-free, natural skill development) */}
-                  <div className="w-full max-w-sm mx-auto mb-2 bg-gradient-to-r from-blue-50/70 via-slate-50/50 to-orange-50/40 border border-slate-200/80 p-2.5 rounded-xl flex items-center justify-between text-left shadow-2xs shrink-0 font-sans">
-                    <div className="flex items-center gap-2">
-                      <div className="h-8 w-8 rounded-lg bg-white shadow-3xs border border-[#1971C2]/15 flex items-center justify-center shrink-0">
-                        <Sparkles className="h-4.5 w-4.5 text-[#1971C2] animate-pulse" />
+                    {/* VĂN HÓA 3T styled logo block */}
+                    <div className="space-y-1 w-full text-center shrink-0 animate-fade-in">
+                      <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight font-sans">
+                        <span className="text-[#0B3A60] translate-no notranslate">VĂN HÓA </span>
+                        <span className="text-[#E8590C] translate-no notranslate">3T</span>
+                      </h1>
+                      <h3 className="text-[10px] sm:text-xs font-bold tracking-[0.1em] text-gray-400 font-sans uppercase">
+                        <span translate="no" className="notranslate">{slogan}</span>
+                      </h3>
+                      <p className="text-xs sm:text-sm text-gray-500 max-w-xs mx-auto mt-1 leading-normal">
+                        <span translate="no" className="notranslate">
+                          Ứng Dụng Ôn Tập Quiz 3T Hàng Ngày
+                        </span>
+                      </p>
+                    </div>
+
+                    {/* Cấu hình Mức độ Khó tự dộng */}
+                    <div className="w-full max-w-sm mx-auto mb-2 bg-gradient-to-r from-blue-50/70 via-slate-50/50 to-orange-50/40 border border-slate-200/80 py-1.5 px-2.5 rounded-xl flex items-center justify-between text-left shadow-2xs shrink-0 font-sans">
+                      <div className="flex items-center gap-2">
+                        <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 shadow-3xs border ${
+                          difficulty === 5
+                            ? 'bg-rose-50 border-rose-200 text-rose-600'
+                            : difficulty === 4
+                            ? 'bg-amber-50 border-amber-200 text-amber-600'
+                            : difficulty === 3
+                            ? 'bg-emerald-50 border-emerald-200 text-emerald-600'
+                            : difficulty === 2
+                            ? 'bg-blue-50 border-blue-200 text-blue-600'
+                            : 'bg-slate-50 border-slate-200 text-slate-600'
+                        }`}>
+                          <Sparkles className={`h-4 w-4 ${difficulty >= 4 ? 'animate-bounce text-[#FF6B6B]' : 'text-[#1971C2] animate-pulse'}`} />
+                        </div>
+                        <div>
+                          <div className="text-[8px] font-extrabold text-[#1971C2] uppercase tracking-wider font-sans leading-none mb-0.5">CẤP ĐỘ ÔN LUYỆN TỰ ĐỘNG</div>
+                          <div className="text-xs font-black text-gray-800 font-sans leading-tight">
+                            {difficulty === 5 ? '🏆 Cấp 5: Huyền Thoại' :
+                             difficulty === 4 ? '🔥 Cấp 4: Tối Cao' :
+                             difficulty === 3 ? '⚔️ Cấp 3: Thống Lĩnh' :
+                             difficulty === 2 ? '🛡️ Cấp 2: Chiến Binh' :
+                             '🌱 Cấp 1: Tân Binh'}
+                          </div>
+                        </div>
                       </div>
-                      <div>
-                        <div className="text-[9px] font-extrabold text-[#1971C2] uppercase tracking-wider">CẤP ĐỘ ÔN LUYỆN TỰ ĐỘNG</div>
-                        <div className="text-xs font-black text-gray-800">
-                          Mức {difficulty} ({difficulty === 1 ? 'Dễ | 90s' : difficulty === 2 ? 'Vừa | 60s' : 'Khó | 30s'}/câu)
+                      <div className="text-right shrink-0">
+                        {difficulty === 1 && (
+                          <span className="text-[9px] font-extrabold text-blue-600 bg-blue-50 border border-blue-200/50 px-2 py-0.5 rounded-full shadow-2xs">
+                            {difficultyState.consecutiveMax > 0 ? `🎯 Đạt 30/30: ${difficultyState.consecutiveMax}/5` : '🎯 Thử thách 30/30'}
+                          </span>
+                        )}
+                        {difficulty === 2 && (
+                          <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full border shadow-2xs ${
+                            difficultyState.consecutiveLow > 0 
+                              ? 'text-rose-600 bg-rose-55 border-rose-250 animate-pulse' 
+                              : difficultyState.consecutiveMax > 0
+                              ? 'text-emerald-600 bg-emerald-50 border-emerald-200'
+                              : 'text-slate-650 bg-slate-100 border-slate-200'
+                          }`}>
+                            {difficultyState.consecutiveMax > 0 
+                              ? `🎯 Đạt 30/30: ${difficultyState.consecutiveMax}/5` 
+                              : difficultyState.consecutiveLow > 0
+                              ? `⚠️ Điểm < 20: ${difficultyState.consecutiveLow}/2`
+                              : 'Bền bỉ Cấp 2'
+                            }
+                          </span>
+                        )}
+                        {difficulty === 3 && (
+                          <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full border shadow-2xs ${
+                            difficultyState.consecutiveLow > 0 
+                              ? 'text-rose-700 bg-rose-55 border-rose-250 animate-pulse' 
+                              : difficultyState.consecutiveMax > 0
+                              ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                              : 'text-indigo-750 bg-indigo-55 border-indigo-200'
+                          }`}>
+                            {difficultyState.consecutiveMax > 0 
+                              ? `🎯 Đạt 30/30: ${difficultyState.consecutiveMax}/5` 
+                              : difficultyState.consecutiveLow > 0
+                              ? `⚠️ Điểm < 26: ${difficultyState.consecutiveLow}/2`
+                              : '👑 Cấp 3 Thống Lĩnh'
+                            }
+                          </span>
+                        )}
+                        {difficulty === 4 && (
+                          <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full border shadow-2xs ${
+                            difficultyState.consecutiveLow > 0 
+                              ? 'text-rose-700 bg-rose-55 border-rose-250 animate-pulse' 
+                              : difficultyState.consecutiveMax > 0
+                              ? 'text-amber-700 bg-amber-50 border-amber-200'
+                              : 'text-orange-750 bg-orange-55 border-orange-200'
+                          }`}>
+                            {difficultyState.consecutiveMax > 0 
+                              ? `🎯 Đạt 30/30: ${difficultyState.consecutiveMax}/5` 
+                              : difficultyState.consecutiveLow > 0
+                              ? `⚠️ Điểm < 27: ${difficultyState.consecutiveLow}/2`
+                              : '🔥 Cấp 4 Tối Cao'
+                            }
+                          </span>
+                        )}
+                        {difficulty === 5 && (
+                          <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full border shadow-2xs ${
+                            difficultyState.consecutiveLow > 0 
+                              ? 'text-rose-755 bg-rose-55 border-rose-250 animate-pulse' 
+                              : 'text-rose-600 bg-rose-50 border-rose-200 animate-bounce'
+                          }`}>
+                            {difficultyState.consecutiveLow > 0
+                              ? `⚠️ Điểm < 28: ${difficultyState.consecutiveLow}/2`
+                              : '👑 Cấp 5 Huyền Thoại'
+                            }
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {/* Condensed responsive grid */}
+                    <div className="bg-gray-50 border border-gray-150 p-3 sm:p-3.5 rounded-xl w-full max-w-sm grid grid-cols-2 gap-3 text-left text-xs sm:text-sm shrink-0 shadow-2xs">
+                      <div className="space-y-0.5">
+                        <div className="text-[10px] sm:text-xs text-gray-455 uppercase tracking-wider font-semibold">Số câu hỏi</div>
+                        <div className="font-bold text-gray-800">
+                          <span translate="no" className="notranslate">03 câu (Ngẫu nhiên)</span>
+                        </div>
+                      </div>
+                      <div className="space-y-0.5">
+                        <div className="text-[10px] sm:text-xs text-gray-455 uppercase tracking-wider font-semibold">Thời gian tính</div>
+                        <div className="font-bold text-gray-800">
+                          <span translate="no" className="notranslate font-sans">
+                            {difficulty === 5 ? '10 giây / câu' : difficulty === 4 ? '20 giây / câu' : difficulty === 3 ? '30 giây / câu' : difficulty === 2 ? '60 giây / câu' : '90 giây / câu'}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="space-y-0.5">
+                        <div className="text-[10px] sm:text-xs text-gray-455 uppercase tracking-wider font-semibold">Tổng điểm tối đa</div>
+                        <div className="font-bold text-gray-800">
+                          <span translate="no" className="notranslate">30 Điểm (10đ / câu)</span>
+                        </div>
+                      </div>
+                      <div className="space-y-0.5">
+                        <div className="text-[10px] sm:text-xs text-gray-455 uppercase tracking-wider font-semibold">Trạng thái</div>
+                        <div className="font-bold text-green-600">
+                          <span translate="no" className="notranslate">Đã duyệt học viên</span>
                         </div>
                       </div>
                     </div>
-                    <div className="text-right shrink-0">
-                      {difficulty === 1 && (
-                        <span className="text-[9px] font-extrabold text-blue-600 bg-blue-50 border border-blue-200/50 px-2 py-0.5 rounded-full shadow-2xs">
-                          {difficultyState.consecutiveMax > 0 ? `🎯 Đạt 30/30: ${difficultyState.consecutiveMax}/5` : '🎯 Thử thách 30/30'}
-                        </span>
-                      )}
-                      {difficulty === 2 && (
-                        <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full border shadow-2xs ${
-                          difficultyState.consecutiveLow > 0 
-                            ? 'text-rose-600 bg-rose-50 border-rose-200 animate-pulse' 
-                            : difficultyState.consecutiveMax > 0
-                            ? 'text-emerald-600 bg-emerald-50 border-emerald-200'
-                            : 'text-slate-650 bg-slate-100 border-slate-200'
-                        }`}>
-                          {difficultyState.consecutiveMax > 0 
-                            ? `🎯 Đạt 30/30: ${difficultyState.consecutiveMax}/5` 
-                            : difficultyState.consecutiveLow > 0
-                            ? `⚠️ Điểm < 20: ${difficultyState.consecutiveLow}/5`
-                            : 'Bền bỉ Cấp 2'
-                          }
-                        </span>
-                      )}
-                      {difficulty === 3 && (
-                        <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full border shadow-2xs ${
-                          difficultyState.consecutiveLow > 0 
-                            ? 'text-rose-650 bg-rose-50 border-rose-200 animate-pulse' 
-                            : 'text-emerald-700 bg-emerald-50 border-emerald-200'
-                        }`}>
-                          {difficultyState.consecutiveLow > 0
-                            ? `⚠️ Điểm < 20: ${difficultyState.consecutiveLow}/5`
-                            : '👑 Vua Tốc Độ Cấp 3'
-                          }
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Condensed responsive grid */}
-                  <div className="bg-gray-50 border border-gray-150 p-3 sm:p-3.5 rounded-xl w-full max-w-sm grid grid-cols-2 gap-3 text-left text-xs sm:text-sm shrink-0 shadow-2xs">
-                    <div className="space-y-0.5">
-                      <div className="text-[10px] sm:text-xs text-gray-455 uppercase tracking-wider font-semibold">Số câu hỏi</div>
-                      <div className="font-bold text-gray-800">
-                        <span translate="no" className="notranslate">03 câu (Ngẫu nhiên)</span>
-                      </div>
-                    </div>
-                    <div className="space-y-0.5">
-                      <div className="text-[10px] sm:text-xs text-gray-455 uppercase tracking-wider font-semibold">Thời gian tính</div>
-                      <div className="font-bold text-gray-800">
-                        <span translate="no" className="notranslate font-sans">
-                          {difficulty === 1 ? '90 giây / câu' : difficulty === 2 ? '60 giây / câu' : '30 giây / câu'}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="space-y-0.5">
-                      <div className="text-[10px] sm:text-xs text-gray-455 uppercase tracking-wider font-semibold">Tổng điểm tối đa</div>
-                      <div className="font-bold text-gray-800">
-                        <span translate="no" className="notranslate">30 Điểm (10đ / câu)</span>
-                      </div>
-                    </div>
-                    <div className="space-y-0.5">
-                      <div className="text-[10px] sm:text-xs text-gray-455 uppercase tracking-wider font-semibold">Trạng thái</div>
-                      <div className="font-bold text-green-600">
-                        <span translate="no" className="notranslate">Đã duyệt học viên</span>
-                      </div>
-                    </div>
-                  </div>
 
                   {/* High Quality Exam Tips section */}
                   <div className="w-full max-w-sm bg-blue-50/40 border border-blue-100 p-3 rounded-xl text-left text-xs sm:text-sm font-sans text-gray-650 space-y-1 shrink-0 shadow-3xs">

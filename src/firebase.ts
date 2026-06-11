@@ -218,22 +218,117 @@ const forceSeedSupremeAdmin = async () => {
       const adminRef = doc(db, 'user_profiles', 'admin_lenhattruong');
       const adminSnap = await getDocFromServer(adminRef).catch(() => null);
       
-      const adminData = {
-        id: 'admin_lenhattruong',
-        name: 'Lê Nhật Trường',
-        phone: '0907767304',
-        password: '111222',
-        role: 'admin',
-        status: 'approved',
-        company: 'TÂN PHÚ VIỆT NAM',
-        department: 'Phòng Quản lí chất lượng',
-        branch: 'Văn Phòng Công Ty (TPP-CTY)',
-        employeeId: '2018.00281',
-        createdAt: adminSnap && adminSnap.exists() ? (adminSnap.data()?.createdAt || new Date().toISOString()) : new Date().toISOString()
-      };
-      
-      await setDoc(adminRef, adminData, { merge: true });
-      console.log("Supreme Admin Lê Nhật Trường emergency seed successfully completed on Firebase!");
+      if (!adminSnap || !adminSnap.exists()) {
+        const adminData = {
+          id: 'admin_lenhattruong',
+          name: 'Lê Nhật Trường',
+          phone: '0907767304',
+          password: '111222',
+          role: 'admin',
+          status: 'approved',
+          company: 'TÂN PHÚ VIỆT NAM',
+          department: 'Phòng Quản lí chất lượng',
+          branch: 'Văn Phòng Công Ty (TPP-CTY)',
+          employeeId: '2018.00281',
+          createdAt: new Date().toISOString()
+        };
+        await setDoc(adminRef, adminData);
+        console.log("Supreme Admin Lê Nhật Trường emergency seed successfully completed on Firebase!");
+      } else {
+        console.log("Supreme Admin Lê Nhật Trường already exists, skipping seed.");
+      }
+
+      // Check if default executive accounts have been seeded historically
+      const seedStatusRef = doc(db, 'user_profiles', 'system_seed_status');
+      const seedStatusSnap = await getDocFromServer(seedStatusRef).catch(() => null);
+      const isAlreadySeeded = seedStatusSnap && seedStatusSnap.exists() && seedStatusSnap.data()?.executives_seeded === true;
+
+      if (!isAlreadySeeded) {
+        // Seed 5 Special Executive Accounts
+        const execUsers = [
+          {
+            id: 'exec_chutich',
+            name: 'Chủ Tịch HĐQT',
+            phone: '0901234561',
+            password: '123456',
+            role: 'executive' as const,
+            status: 'approved' as const,
+            company: 'TÂN PHÚ VIỆT NAM',
+            department: 'Ban Tổng Giám Đốc',
+            branch: 'Văn Phòng Công Ty (TPP-CTY)',
+            employeeId: 'EXEC_CHUTICH_01'
+          },
+          {
+            id: 'exec_tonggiamdoc',
+            name: 'Tổng Giám Đốc',
+            phone: '0901234562',
+            password: '123456',
+            role: 'executive' as const,
+            status: 'approved' as const,
+            company: 'TÂN PHÚ VIỆT NAM',
+            department: 'Ban Tổng Giám Đốc',
+            branch: 'Văn Phòng Công Ty (TPP-CTY)',
+            employeeId: 'EXEC_TGD_02'
+          },
+          {
+            id: 'exec_photonggiamdoc1',
+            name: 'Phó Tổng Giám Đốc 1',
+            phone: '0901234563',
+            password: '123456',
+            role: 'executive' as const,
+            status: 'approved' as const,
+            company: 'TÂN PHÚ VIỆT NAM',
+            department: 'Ban Tổng Giám Đốc',
+            branch: 'Văn Phòng Công Ty (TPP-CTY)',
+            employeeId: 'EXEC_PTGD_03'
+          },
+          {
+            id: 'exec_photonggiamdoc2',
+            name: 'Phó Tổng Giám Đốc 2',
+            phone: '0901234564',
+            password: '123456',
+            role: 'executive' as const,
+            status: 'approved' as const,
+            company: 'TÂN PHÚ VIỆT NAM',
+            department: 'Ban Tổng Giám Đốc',
+            branch: 'Văn Phòng Công Ty (TPP-CTY)',
+            employeeId: 'EXEC_PTGD_04'
+          },
+          {
+            id: 'exec_photonggiamdoc3',
+            name: 'Phó Tổng Giám Đốc 3',
+            phone: '0901234565',
+            password: '123456',
+            role: 'executive' as const,
+            status: 'approved' as const,
+            company: 'TÂN PHÚ VIỆT NAM',
+            department: 'Ban Tổng Giám Đốc',
+            branch: 'Văn Phòng Công Ty (TPP-CTY)',
+            employeeId: 'EXEC_PTGD_05'
+          }
+        ];
+
+        for (const exec of execUsers) {
+          const ref = doc(db, 'user_profiles', exec.id);
+          const snap = await getDocFromServer(ref).catch(() => null);
+          if (!snap || !snap.exists()) {
+            const data = {
+              ...exec,
+              createdAt: new Date().toISOString()
+            };
+            await setDoc(ref, data);
+            console.log(`Seeded executive account: ${exec.name}`);
+          } else {
+            console.log(`Executive account ${exec.name} already exists, skipping seed.`);
+          }
+        }
+
+        // Write status to secure that they will never be seeded again if deleted
+        await setDoc(seedStatusRef, { executives_seeded: true });
+        console.log("Successfully marked default executive accounts as permanently seeded on Firestore.");
+      } else {
+        console.log("Executive accounts have already been seeded previously. Skipping re-seeding to respect custom deletions.");
+      }
     } catch (seedErr) {
       console.error("Emergency admin seed to cloud failed:", seedErr);
     }
@@ -849,6 +944,25 @@ export const databaseService = {
   async saveQuestion(q: Question): Promise<void> {
     await initializeDatabase();
     return this.saveQuestions([q]);
+  },
+
+  async updateQuestion(q: Question): Promise<void> {
+    await initializeDatabase();
+    if (isFirebaseConfigured && db) {
+      try {
+        await setDoc(doc(db, 'questions', q.id), q);
+        incrementQuota('writes', 1);
+        await this.incrementQuestionVersion();
+      } catch (err) {
+        handleFirestoreError(err, OperationType.WRITE, `questions/${q.id}`);
+      }
+    }
+    const questions = getLocalData<Question[]>('3t_questions', INITIAL_QUESTIONS);
+    const updated = questions.map(item => item.id === q.id ? q : item);
+    if (!questions.some(item => item.id === q.id)) {
+      updated.push(q);
+    }
+    setLocalData('3t_questions', updated);
   },
 
   async deleteQuestion(id: string): Promise<void> {

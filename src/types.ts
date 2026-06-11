@@ -3,7 +3,7 @@ export interface User {
   name: string;
   phone: string;
   password?: string;
-  role: 'employee' | 'approver' | 'admin';
+  role: 'employee' | 'approver' | 'admin' | 'executive';
   company?: string;
   department: string;
   branch: string;
@@ -56,9 +56,11 @@ export interface CompanyMapping {
   branches: {
     id: string;
     name: string;
+    excludeFromStats?: boolean;
     departments: {
       id: string;
       name: string;
+      excludeFromStats?: boolean;
     }[];
   }[];
 }

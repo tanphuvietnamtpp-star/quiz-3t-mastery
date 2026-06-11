@@ -461,6 +461,8 @@ export default function App() {
                 )
               ) : currentUser.role === 'approver' ? (
                 <EmployeeDashboard user={currentUser} onLogout={handleLogout} slogan={slogan} difficulty={difficulty} onUpdateDifficulty={handleUpdateDifficulty} motivationalSlogans={motivationalSlogans} />
+              ) : currentUser.role === 'executive' ? (
+                <EmployeeDashboard user={currentUser} onLogout={handleLogout} slogan={slogan} difficulty={difficulty} onUpdateDifficulty={handleUpdateDifficulty} isAdminReview={true} motivationalSlogans={motivationalSlogans} />
               ) : (
                 <EmployeeDashboard user={currentUser} onLogout={handleLogout} slogan={slogan} difficulty={difficulty} onUpdateDifficulty={handleUpdateDifficulty} isAdminReview={false} motivationalSlogans={motivationalSlogans} />
               )}
