@@ -2769,7 +2769,7 @@ export default function EmployeeDashboard({
             <span translate="no" className="notranslate bg-amber-700 px-2 py-0.5 rounded text-[10px] text-white tracking-widest shrink-0 uppercase">Chế độ xem thử</span>
             <span translate="no" className="notranslate">Anh/Chị đang trải nghiệm giao diện CBNV để trực tiếp kiểm duyệt Thi thử, Học từ sai và Phân tích 3T!</span>
           </div>
-          {onBackToAdmin && (
+          {onBackToAdmin && user.role !== 'executive' && (
             <button 
               onClick={() => onBackToAdmin()}
               className="bg-white text-gray-900 hover:bg-gray-100 transition-all font-bold px-3 py-1 rounded shadow-sm font-sans shrink-0 text-xs cursor-pointer"
@@ -2971,30 +2971,8 @@ export default function EmployeeDashboard({
                     );
                   })()}
 
-                  {/* Foot navigation: Home and Back to top */}
-                  <div className="pt-2 flex items-center justify-between gap-3">
-                    <button
-                      onClick={() => {
-                        setShowLevelRules(false);
-                        innerViewportRef.current?.scrollTo({ top: 0, behavior: 'instant' });
-                      }}
-                      className="flex-1 py-2 px-4 bg-gradient-to-r from-blue-600 to-[#1971C2] hover:shadow-xs active:scale-98 transition-all text-white font-extrabold text-xs rounded-xl flex items-center justify-center gap-1.5 cursor-pointer"
-                    >
-                      <Home className="h-4 w-4" />
-                      <span>QUAY VỀ TRANG CHỦ</span>
-                    </button>
-                    
-                    {showScrollTop && (
-                      <button
-                        onClick={scrollToTop}
-                        className="py-2 px-3 bg-gray-100 hover:bg-gray-200 active:scale-95 transition-all text-gray-700 font-bold text-xs rounded-xl flex items-center justify-center gap-1 cursor-pointer border border-gray-200"
-                        title="Cuộn lên đầu trang"
-                      >
-                        <ChevronUp className="h-4 w-4 animate-bounce" />
-                        <span>TOP</span>
-                      </button>
-                    )}
-                  </div>
+                  {/* Elegant bottom spacing to prevent floating button overlapping */}
+                  <div className="h-16" />
                 </motion.div>
               )}
 
@@ -3783,17 +3761,6 @@ export default function EmployeeDashboard({
                           )}
 
                           <button
-                            onClick={() => setActiveTab('ai_extract')}
-                            className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-755 font-sans cursor-pointer group shrink-0"
-                            title="Trích xuất Câu Hỏi AI (Hình Ảnh)"
-                          >
-                            <div className="h-7 w-7 rounded-lg bg-purple-50 border border-purple-100/60 flex items-center justify-center group-hover:bg-purple-100 transition-colors shrink-0 font-sans">
-                              <ImagePlus className="h-3.5 w-3.5 text-purple-600" />
-                            </div>
-                            <span className="text-[8.5px] font-bold leading-tight truncate w-full text-center text-gray-700 font-sans">Picture</span>
-                          </button>
-
-                          <button
                             onClick={() => setAdminMobileTab('qr')}
                             className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group shrink-0"
                             title="Mã QR"
@@ -3852,7 +3819,7 @@ export default function EmployeeDashboard({
                           )}
                         </div>
                         {/* Integrated exit button for mobile users where headers are hidden */}
-                        {onBackToAdmin && (
+                        {onBackToAdmin && user.role !== 'executive' && (
                           <button
                             onClick={() => onBackToAdmin?.()}
                             className="w-full mt-1.5 px-3 py-1 bg-red-50 hover:bg-red-100 border border-red-250 text-red-650 active:scale-95 transition-all rounded-lg text-[9px] font-extrabold tracking-wider flex items-center justify-center gap-1 cursor-pointer shadow-3xs"
@@ -4904,7 +4871,7 @@ export default function EmployeeDashboard({
           </div>
 
           {/* Floating Action Buttons for Ôn Tập Tab (Scroll To Top & Back to Home) */}
-          {activeTab === 'practice' && !quizStarted && (
+          {activeTab === 'practice' && !quizStarted && !showLevelRules && (
             <div className="absolute bottom-18 right-5 z-45 flex flex-col gap-2.5">
               {/* Scroll to Top Button */}
               <AnimatePresence>
@@ -4941,7 +4908,7 @@ export default function EmployeeDashboard({
           )}
 
           {/* Floating Action Buttons for Phân Tích Tab (Scroll To Top & Back to Home) */}
-          {activeTab === 'history' && !quizStarted && (
+          {activeTab === 'history' && !quizStarted && !showLevelRules && (
             <div className="absolute bottom-18 right-5 z-45 flex flex-col gap-2.5">
               {/* Scroll to Top Button */}
               <AnimatePresence>
@@ -4978,7 +4945,7 @@ export default function EmployeeDashboard({
           )}
 
           {/* Floating Action Buttons for Admin Mobile Tabs (Phê Duyệt, Thống Kê, Mã Hóa) */}
-          {activeTab === 'quiz' && adminMobileTab !== 'home' && !quizStarted && (
+          {activeTab === 'quiz' && adminMobileTab !== 'home' && !quizStarted && !showLevelRules && (
             <div className="absolute bottom-18 right-5 z-45 flex flex-col gap-2.5">
               {/* Scroll to Top Button */}
               <AnimatePresence>
@@ -5008,6 +4975,43 @@ export default function EmployeeDashboard({
                 }}
                 className="w-11 h-11 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full flex items-center justify-center shadow-lg hover:shadow-xl border border-white/10 transition-all cursor-pointer group shrink-0"
                 title="Quay về Sảnh chính"
+              >
+                <Home className="h-5 w-5 group-hover:scale-110 transition-transform" />
+              </motion.button>
+            </div>
+          )}
+
+          {/* Special Floating Action Buttons for Quy Chế (Level Rules) Viewport */}
+          {showLevelRules && (
+            <div className="absolute bottom-6 right-5 z-45 flex flex-col gap-2.5">
+              {/* Scroll to Top Button */}
+              <AnimatePresence>
+                {showScrollTop && (
+                  <motion.button
+                    initial={{ scale: 0, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0, opacity: 0 }}
+                    whileTap={{ scale: 0.9 }}
+                    onClick={scrollToTop}
+                    className="w-11 h-11 bg-[#132d4e] hover:bg-slate-800 text-white rounded-full flex items-center justify-center shadow-lg hover:shadow-xl border border-white/20 transition-all cursor-pointer group shrink-0"
+                    title="Cuộn lên đầu trang"
+                  >
+                    <ArrowUp className="h-5.5 w-5.5 group-hover:-translate-y-0.5 transition-transform" />
+                  </motion.button>
+                )}
+              </AnimatePresence>
+
+              {/* Home Icon Button (Quay về Trang chủ) */}
+              <motion.button
+                initial={{ scale: 0, opacity: 0, y: 10 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={() => {
+                  setShowLevelRules(false);
+                  innerViewportRef.current?.scrollTo({ top: 0, behavior: 'instant' });
+                }}
+                className="w-11 h-11 bg-[#099268] hover:bg-[#087f5b] text-white rounded-full flex items-center justify-center shadow-lg hover:shadow-xl border border-white/10 transition-all cursor-pointer group shrink-0"
+                title="Quay về Trang chủ"
               >
                 <Home className="h-5 w-5 group-hover:scale-110 transition-transform" />
               </motion.button>
