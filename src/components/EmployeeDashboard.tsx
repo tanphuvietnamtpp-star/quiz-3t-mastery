@@ -3990,13 +3990,13 @@ export default function EmployeeDashboard({
                   </div>
                 ) : (
                   // Landing Screen for Practice Exams
-                  <div className="flex flex-col items-center justify-between text-center flex-1 h-full pt-0.5 pb-0.5 sm:pt-1 sm:pb-1 relative">
+                  <div className="flex flex-col items-center justify-between text-center flex-1 h-full pt-1 pb-0.5 sm:pt-1.5 sm:pb-1 relative">
                   {/* Centered Top & Mid content wrapper to keep them tight together */}
-                  <div className="flex flex-col items-center justify-center text-center space-y-2.5 sm:space-y-4 flex-1 w-full shrink-0">
+                  <div className="flex flex-col items-center justify-center text-center space-y-4.5 sm:space-y-5 flex-1 w-full shrink-0">
                     
                     {/* Admin rapid action buttons */}
                     {isAdminReview && (user.role === 'admin' || user.role === 'executive') && (
-                      <div className="w-full max-w-sm mx-auto bg-slate-50/90 border border-slate-200/60 rounded-xl p-2 shadow-xs mb-2 sm:mb-3">
+                      <div className="w-full max-w-sm mx-auto bg-slate-50/90 border border-slate-200/60 rounded-xl p-2 shadow-xs mb-4 sm:mb-5 font-sans">
                         <div className="text-[9px] font-extrabold text-[#0B3A60]/85 uppercase tracking-wider mb-2 text-center flex items-center justify-center gap-1.5 whitespace-nowrap">
                           <span>CÔNG CỤ QUẢN TRỊ HỆ THỐNG</span>
                           {(user.role === 'admin' || user.role === 'executive') && (
@@ -4097,22 +4097,22 @@ export default function EmployeeDashboard({
                     )}
 
                     {/* 3T Logo replacing Trophy Icon */}
-                    <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-[#0B3A60] border-2 border-orange-500 shadow-md select-none shrink-0 relative overflow-hidden animate-fade-in">
-                      <span translate="no" className="notranslate text-xl font-black tracking-tighter text-orange-500 font-sans select-none">
+                    <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#0B3A60] border-2 border-orange-500 shadow-md select-none shrink-0 relative overflow-hidden">
+                      <span translate="no" className="notranslate text-3xl font-black tracking-tighter text-orange-500 font-sans select-none">
                         3<span className="text-white">T</span>
                       </span>
                     </div>
 
                     {/* VĂN HÓA 3T styled logo block */}
-                    <div className="space-y-0.5 w-full text-center shrink-0 animate-fade-in">
-                      <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight font-sans leading-none">
+                    <div className="space-y-1 w-full text-center shrink-0 animate-fade-in">
+                      <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight font-sans">
                         <span className="text-[#0B3A60] translate-no notranslate">VĂN HÓA </span>
                         <span className="text-[#E8590C] translate-no notranslate">3T</span>
                       </h1>
-                      <h3 className="text-[9px] sm:text-[10px] font-bold tracking-[0.08em] text-gray-400 font-sans uppercase">
+                      <h3 className="text-[10px] sm:text-xs font-bold tracking-[0.1em] text-gray-400 font-sans uppercase">
                         <span translate="no" className="notranslate">{slogan}</span>
                       </h3>
-                      <p className="text-[10px] sm:text-xs text-gray-500 max-w-xs mx-auto mt-0.5 leading-tight">
+                      <p className="text-xs sm:text-sm text-gray-500 max-w-xs mx-auto mt-1 leading-normal">
                         <span translate="no" className="notranslate">
                           Ứng Dụng Ôn Tập Quiz 3T Hàng Ngày
                         </span>
@@ -4122,11 +4122,11 @@ export default function EmployeeDashboard({
                     {/* Cấu hình Mức độ Khó tự dộng */}
                     <div 
                       onClick={() => setShowLevelRules(true)}
-                      className="w-full max-w-sm mx-auto mb-1 bg-gradient-to-r from-blue-50/70 via-slate-50/50 to-orange-50/40 border border-blue-200/60 hover:border-blue-400 py-1 px-2.5 rounded-lg flex items-center justify-between text-left shadow-2xs shrink-0 font-sans cursor-pointer hover:shadow-xs active:scale-[0.995] transition-all relative group"
+                      className="w-full max-w-sm mx-auto mb-2 bg-gradient-to-r from-blue-50/70 via-slate-50/50 to-orange-50/40 border border-blue-200/60 hover:border-blue-400 py-1.5 px-2.5 rounded-xl flex items-center justify-between text-left shadow-2xs shrink-0 font-sans cursor-pointer hover:shadow-xs active:scale-[0.995] transition-all relative group"
                       title="Bấm để xem Quy chế Thăng/Hạ Cấp & Điểm Phản Xạ"
                     >
-                      <div className="flex items-center gap-1.5">
-                        <div className={`h-7 w-7 rounded-md flex items-center justify-center shrink-0 shadow-3xs border ${
+                      <div className="flex items-center gap-2">
+                        <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 shadow-3xs border ${
                           difficulty === 5
                             ? 'bg-rose-50 border-rose-200 text-rose-600'
                             : difficulty === 4
@@ -4137,11 +4137,11 @@ export default function EmployeeDashboard({
                             ? 'bg-blue-50 border-blue-200 text-blue-600'
                             : 'bg-slate-50 border-slate-200 text-slate-600'
                         }`}>
-                          <Sparkles className={`h-3.5 w-3.5 ${difficulty >= 4 ? 'animate-bounce text-[#FF6B6B]' : 'text-[#1971C2] animate-pulse'}`} />
+                          <Sparkles className={`h-4 w-4 ${difficulty >= 4 ? 'animate-bounce text-[#FF6B6B]' : 'text-[#1971C2] animate-pulse'}`} />
                         </div>
                         <div>
-                          <div className="text-[7.5px] font-extrabold text-[#1971C2] uppercase tracking-wider font-sans leading-none mb-0.5">CẤP ĐỘ ÔN LUYỆN TỰ ĐỘNG</div>
-                          <div className="text-[11px] font-black text-gray-800 font-sans leading-none flex items-center gap-1">
+                          <div className="text-[8px] font-extrabold text-[#1971C2] uppercase tracking-wider font-sans leading-none mb-0.5">CẤP ĐỘ ÔN LUYỆN TỰ ĐỘNG</div>
+                          <div className="text-xs font-black text-gray-800 font-sans leading-tight flex items-center gap-1">
                             <span>
                               {difficulty === 5 ? '🏆 Cấp 5: Huyền Thoại' :
                                difficulty === 4 ? '🔥 Cấp 4: Tối Cao' :
@@ -4222,37 +4222,37 @@ export default function EmployeeDashboard({
                     </div>
 
                     {/* Condensed responsive grid */}
-                    <div className="bg-gray-50 border border-gray-150 p-1.5 sm:p-2 rounded-lg w-full max-w-sm grid grid-cols-2 gap-1.5 sm:gap-2 text-left shrink-0 shadow-3xs animate-fade-in">
-                      <div className="space-y-0">
-                        <div className="text-[8px] sm:text-[9.5px] text-gray-400 uppercase tracking-tight font-extrabold leading-none">Số câu hỏi</div>
-                        <div className="font-extrabold text-[#0B3A60] text-[10.5px] sm:text-xs leading-tight mt-0.5">
+                    <div className="bg-gray-50 border border-gray-150 p-3 sm:p-3.5 rounded-xl w-full max-w-sm grid grid-cols-2 gap-3 text-left text-xs sm:text-sm shrink-0 shadow-2xs">
+                      <div className="space-y-0.5">
+                        <div className="text-[10px] sm:text-xs text-gray-455 uppercase tracking-wider font-semibold">Số câu hỏi</div>
+                        <div className="font-bold text-gray-800">
                           <span translate="no" className="notranslate">03 câu (Ngẫu nhiên)</span>
                         </div>
                       </div>
-                      <div className="space-y-0">
-                        <div className="text-[8px] sm:text-[9.5px] text-gray-400 uppercase tracking-tight font-extrabold leading-none">Thời gian tính</div>
-                        <div className="font-extrabold text-[#0B3A60] text-[10.5px] sm:text-xs leading-tight mt-0.5">
+                      <div className="space-y-0.5">
+                        <div className="text-[10px] sm:text-xs text-gray-455 uppercase tracking-wider font-semibold">Thời gian tính</div>
+                        <div className="font-bold text-gray-800">
                           <span translate="no" className="notranslate font-sans">
                             {difficulty === 5 ? '10 giây / câu' : difficulty === 4 ? '20 giây / câu' : difficulty === 3 ? '30 giây / câu' : difficulty === 2 ? '60 giây / câu' : '90 giây / câu'}
                           </span>
                         </div>
                       </div>
-                      <div className="space-y-0">
-                        <div className="text-[8px] sm:text-[9.5px] text-gray-400 uppercase tracking-tight font-extrabold leading-none">Tổng điểm tối đa</div>
-                        <div className="font-extrabold text-[#0B3A60] text-[10.5px] sm:text-xs leading-tight mt-0.5">
+                      <div className="space-y-0.5">
+                        <div className="text-[10px] sm:text-xs text-gray-455 uppercase tracking-wider font-semibold">Tổng điểm tối đa</div>
+                        <div className="font-bold text-gray-800">
                           <span translate="no" className="notranslate">30 Điểm (10đ / câu)</span>
                         </div>
                       </div>
-                      <div className="space-y-0">
-                        <div className="text-[8px] sm:text-[9.5px] text-gray-400 uppercase tracking-tight font-extrabold leading-none">Trạng thái</div>
-                        <div className="font-black text-[#099268] text-[10.5px] sm:text-xs leading-tight mt-0.5">
+                      <div className="space-y-0.5">
+                        <div className="text-[10px] sm:text-xs text-gray-455 uppercase tracking-wider font-semibold">Trạng thái</div>
+                        <div className="font-bold text-green-600">
                           <span translate="no" className="notranslate">Đã duyệt học viên</span>
                         </div>
                       </div>
                     </div>
 
                   {/* High Quality Board of Honor "BẢNG VÀNG VINH DANH" replacing Exam Tips */}
-                  <div className="w-full max-w-sm bg-gradient-to-br from-amber-50/70 via-[#FFFDF5]/90 to-amber-50/50 border-2 border-amber-300/60 p-1.5 sm:p-2.5 rounded-lg text-left text-xs font-sans text-gray-750 space-y-1 shrink-0 shadow-sm relative overflow-hidden flex flex-col justify-between select-none">
+                  <div className="w-full max-w-sm bg-gradient-to-br from-amber-50/70 via-[#FFFDF5]/90 to-amber-50/50 border-2 border-amber-300/60 p-2 sm:p-2.5 rounded-xl text-left text-xs font-sans text-gray-750 space-y-1.5 shrink-0 shadow-sm relative overflow-hidden flex flex-col justify-between select-none">
                     {/* Animated background highlights to act as congratulatory effects */}
                     <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-amber-300/15 via-transparent to-transparent pointer-events-none" />
                     
@@ -4442,41 +4442,41 @@ export default function EmployeeDashboard({
 
                   {/* Approver Department Action Card */}
                   {(user.role === 'approver' || user.canViewStats) && (
-                    <div className="w-full max-w-sm bg-purple-50/70 border border-purple-200/60 p-1.5 sm:p-2 rounded-lg text-left shrink-0 shadow-3xs relative overflow-hidden">
+                    <div className="w-full max-w-sm bg-purple-50/70 border border-purple-200/60 p-2.5 sm:p-3 rounded-xl text-left shrink-0 shadow-3xs relative overflow-hidden">
                       <div className="absolute top-0 right-0 h-14 w-14 bg-purple-500/5 rounded-full -mr-4 -mt-4 animate-pulse-slow font-sans" />
                       <div className="flex flex-col">
-                        <div className="space-y-0.5 relative z-10">
-                          <div className="flex items-center justify-between gap-1 flex-wrap">
-                            <h4 className="text-[11px] sm:text-xs font-extrabold text-[#0B3A60] leading-none">
+                        <div className="space-y-1 relative z-10">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <h4 className="text-xs sm:text-sm font-extrabold text-[#0B3A60] leading-none">
                               {user.role === 'approver' ? 'Hoạt Động Quản Lý' : 'Dữ Liệu Thống Kê'}
                             </h4>
-                            <span translate="no" className="notranslate bg-purple-250 text-purple-800 text-[7.5px] sm:text-[8px] font-extrabold uppercase tracking-wider px-1 rounded-full">
+                            <span translate="no" className="notranslate bg-purple-250 text-purple-800 text-[8.5px] sm:text-[9px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded-full">
                               {(() => {
                                 const deptNorm = (user.department || '').trim().toLowerCase();
-                                if (deptNorm === 'ban tổng giám đốc') return 'Ban TGĐ';
+                                if (deptNorm === 'ban tổng giám đốc') return 'Ban Tổng Giám Đốc';
                                 if (deptNorm === 'ban giám đốc') return 'Ban Giám Đốc';
                                 return 'DUYỆT VIÊN';
                               })()}
                             </span>
                           </div>
-                          <p className="text-[9px] sm:text-[10px] text-slate-500 mt-0.5 leading-snug">
+                          <p className="text-[10px] sm:text-[11px] text-slate-500 mt-1 leading-snug">
                             {user.role === 'approver' ? (
-                              <span>Có <strong className="text-purple-700 font-extrabold">{pendingUsersCount}</strong> nhân sự chờ duyệt.</span>
+                              <span>Có <strong className="text-purple-700 font-extrabold">{pendingUsersCount}</strong> nhân sự chờ duyệt thuộc cơ cấu của Anh/Chị.</span>
                             ) : (
-                              <span>Phân quyền xem báo cáo thống kê 3T phòng ban.</span>
+                              <span>Anh/Chị được phân quyền xem báo cáo thống kê rèn luyện học tập 3T của cơ quan/phòng ban.</span>
                             )}
                           </p>
                         </div>
                         
-                        <div className={`grid ${user.canViewStats ? 'grid-cols-2 gap-1.5' : 'grid-cols-1'} mt-1.5 pt-1.5 border-t border-purple-200/35 relative z-10`}>
+                        <div className={`grid ${user.canViewStats ? 'grid-cols-2 gap-2' : 'grid-cols-1'} mt-2.5 pt-2.5 border-t border-purple-200/35 relative z-10`}>
                           <button
                             onClick={() => setShowApprovalPanel(true)}
-                            className="flex items-center justify-center gap-1 py-1 px-2 bg-purple-600 hover:bg-purple-700 active:scale-95 text-white text-[9.5px] sm:text-[10.50px] font-extrabold rounded-md transition-all cursor-pointer shadow-3xs relative animate-fadeIn"
+                            className="flex items-center justify-center gap-1.5 py-1.5 px-2 bg-purple-600 hover:bg-purple-700 active:scale-95 text-white text-[10.5px] sm:text-[11px] font-extrabold rounded-lg transition-all cursor-pointer shadow-3xs relative animate-fadeIn"
                           >
-                            <UserCheck className="h-3 w-3 shrink-0" />
+                            <UserCheck className="h-3.5 w-3.5 shrink-0" />
                             <span>Duyệt Nhân Sự</span>
                             {pendingUsersCount > 0 && (
-                              <span className="bg-red-650 text-white text-[8px] font-black h-3 px-1 rounded-full border border-white flex items-center justify-center min-w-[12px] animate-pulse">
+                              <span className="bg-red-650 text-white text-[8px] font-black h-3.5 px-1 rounded-full border border-white flex items-center justify-center min-w-[14px] animate-pulse">
                                 {pendingUsersCount}
                               </span>
                             )}
@@ -4484,10 +4484,10 @@ export default function EmployeeDashboard({
                           {user.canViewStats && (
                             <button
                               onClick={() => setAdminMobileTab('stats')}
-                              className="flex items-center justify-center gap-1 py-1 px-2 bg-white hover:bg-violet-50 border border-purple-200 text-purple-700 text-[9.5px] sm:text-[10.50px] font-extrabold rounded-md transition-all cursor-pointer active:scale-95 shadow-3xs animate-fadeIn"
+                              className="flex items-center justify-center gap-1.5 py-1.5 px-2 bg-white hover:bg-violet-50 border border-purple-200 text-purple-700 text-[10.5px] sm:text-[11px] font-extrabold rounded-lg transition-all cursor-pointer active:scale-95 shadow-3xs animate-fadeIn"
                             >
-                              <BarChart3 className="h-3 w-3 shrink-0 text-purple-600" />
-                              <span>Thống Kê</span>
+                              <BarChart3 className="h-3.5 w-3.5 shrink-0 text-purple-600" />
+                              <span>Xem Thống Kê</span>
                             </button>
                           )}
                         </div>
@@ -4496,23 +4496,21 @@ export default function EmployeeDashboard({
                   )}
 
                   {/* Welcome Greeting Box for Employee */}
-                  <div className="w-full max-w-sm bg-blue-50/50 border border-blue-100 p-1.5 rounded-lg text-center shrink-0 shadow-3xs">
-                    <div className="flex items-center justify-between text-[8px] sm:text-[9.5px] text-[#1971C2] font-semibold uppercase tracking-wider leading-none">
-                      <span>Thành Viên Dự Thi</span>
-                      <span className="text-gray-450 normal-case font-normal truncate max-w-[150px]">BP: {user.department}</span>
-                    </div>
-                    <h4 className="text-[11px] sm:text-xs font-black text-[#0B3A60] mt-1 leading-none text-left">
+                  <div className="w-full max-w-sm bg-blue-50/50 border border-blue-100 p-3 rounded-xl text-center shrink-0 shadow-3xs">
+                    <p className="text-[10px] sm:text-xs text-[#1971C2] font-semibold uppercase tracking-wider leading-none">Thành Viên Dự Thi</p>
+                    <h4 className="text-xs sm:text-sm font-extrabold text-[#0B3A60] mt-1.5 leading-snug">
                       Chào mừng: <span className="text-[#E8590C]">{user.name}</span>
                     </h4>
+                    <p className="text-[10px] sm:text-xs text-gray-455 mt-1">Bộ phận: {user.department}</p>
                   </div>
 
                   {/* Elegant PWA Quick Installation Action Button */}
                   <div className="w-full flex justify-center shrink-0">
                     <button
                       onClick={handlePwaInstall}
-                      className="w-full max-w-sm flex items-center justify-center gap-1.5 py-1 px-2.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 hover:text-emerald-900 font-extrabold text-[10px] sm:text-[11px] rounded-lg shadow-3xs hover:scale-[1.01] active:scale-[0.99] transition-all cursor-pointer group"
+                      className="w-full max-w-sm flex items-center justify-center gap-2 py-2 px-4 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 hover:text-emerald-950 font-extrabold text-[11px] sm:text-xs rounded-xl shadow-3xs hover:scale-[1.01] active:scale-[0.99] transition-all cursor-pointer group"
                     >
-                      <Sparkles className="h-3 w-3 text-amber-500 animate-pulse shrink-0" />
+                      <Sparkles className="h-3.5 w-3.5 text-amber-500 animate-pulse shrink-0" />
                       <span>{pwaPrompt ? "CÀI ĐẶT APP 3T VỀ ĐIỆN THOẠI" : "HƯỚNG DẪN CÀI ĐẶT APP 3T"}</span>
                     </button>
                   </div>
@@ -4521,10 +4519,10 @@ export default function EmployeeDashboard({
                   <div className="w-full flex justify-center shrink-0">
                     <button
                       onClick={startQuiz}
-                      className="w-full max-w-sm flex items-center justify-center gap-1.5 py-1.5 sm:py-2 px-3 bg-[#1971C2] hover:bg-opacity-95 text-white font-extrabold text-[11px] sm:text-xs rounded-lg shadow-md transition-all active:scale-[0.98] cursor-pointer"
+                      className="w-full max-w-sm flex items-center justify-center gap-2 py-3 px-4 bg-[#1971C2] hover:bg-opacity-95 text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-md transition-all active:scale-[0.98] cursor-pointer"
                     >
                       <span translate="no" className="notranslate">Bắt Đầu Làm Bài Đánh Giá</span>
-                      <ArrowRight className="h-3 w-3 sm:h-3.5 sm:w-3.5 shrink-0" />
+                      <ArrowRight className="h-4 w-4 shrink-0" />
                     </button>
                   </div>
                   </div>
