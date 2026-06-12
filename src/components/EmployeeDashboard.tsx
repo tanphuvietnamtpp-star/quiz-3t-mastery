@@ -3992,7 +3992,7 @@ export default function EmployeeDashboard({
                   // Landing Screen for Practice Exams
                   <div className="flex flex-col items-center justify-between text-center flex-1 h-full pt-1 pb-0.5 sm:pt-1.5 sm:pb-1 relative">
                   {/* Centered Top & Mid content wrapper to keep them tight together */}
-                  <div className="flex flex-col items-center justify-center text-center space-y-4.5 sm:space-y-5 flex-1 w-full shrink-0">
+                  <div className="flex flex-col items-center justify-center text-center space-y-3 sm:space-y-4 flex-1 w-full shrink-0">
                     
                     {/* Admin rapid action buttons */}
                     {isAdminReview && (user.role === 'admin' || user.role === 'executive') && (
@@ -4122,7 +4122,7 @@ export default function EmployeeDashboard({
                     {/* Cấu hình Mức độ Khó tự dộng */}
                     <div 
                       onClick={() => setShowLevelRules(true)}
-                      className="w-full max-w-sm mx-auto mb-2 bg-gradient-to-r from-blue-50/70 via-slate-50/50 to-orange-50/40 border border-blue-200/60 hover:border-blue-400 py-1.5 px-2.5 rounded-xl flex items-center justify-between text-left shadow-2xs shrink-0 font-sans cursor-pointer hover:shadow-xs active:scale-[0.995] transition-all relative group"
+                      className="w-full max-w-sm mx-auto bg-gradient-to-r from-blue-50/70 via-slate-50/50 to-orange-50/40 border border-blue-200/60 hover:border-blue-400 py-1.5 px-2.5 rounded-xl flex items-center justify-between text-left shadow-2xs shrink-0 font-sans cursor-pointer hover:shadow-xs active:scale-[0.995] transition-all relative group"
                       title="Bấm để xem Quy chế Thăng/Hạ Cấp & Điểm Phản Xạ"
                     >
                       <div className="flex items-center gap-2">
@@ -4226,7 +4226,7 @@ export default function EmployeeDashboard({
                       <div className="space-y-0.5">
                         <div className="text-[10px] sm:text-xs text-gray-455 uppercase tracking-wider font-semibold">Số câu hỏi</div>
                         <div className="font-bold text-gray-800">
-                          <span translate="no" className="notranslate">03 câu (Ngẫu nhiên)</span>
+                           <span translate="no" className="notranslate">03 câu (Ngẫu nhiên)</span>
                         </div>
                       </div>
                       <div className="space-y-0.5">
@@ -4528,7 +4528,7 @@ export default function EmployeeDashboard({
                   </div>
 
                   {/* Bottom Navigation Row: Ôn Tập (left), Đăng Xuất (middle) and Phân Tích (right) */}
-                  <div className="w-full flex items-center justify-between pt-2 sm:pt-3 border-t border-gray-100 gap-1 shrink-0 mt-auto">
+                  <div className="w-full flex items-center justify-between pt-2 sm:pt-3 border-t border-gray-100 gap-1 shrink-0 mt-auto pb-5 sm:pb-1">
                     <button
                       onClick={() => {
                         setActiveTab('practice');
