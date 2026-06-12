@@ -1847,7 +1847,7 @@ export default function AdminDashboard({
           </button>
           <button
             onClick={() => { setActiveTab('encoding'); setNotice(null); }}
-            className={`pb-3 px-4 text-sm font-medium border-b-2 transition-all flex items-center gap-2 ${
+            className={`pb-3 px-4 text-sm font-medium border-b-2 transition-all md:flex hidden items-center gap-2 ${
               activeTab === 'encoding' ? 'border-[#1971C2] text-[#1971C2] font-bold' : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >

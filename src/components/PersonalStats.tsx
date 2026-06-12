@@ -11,6 +11,7 @@ import {
   CartesianGrid, Tooltip, Legend, BarChart, Bar, Cell 
 } from 'recharts';
 import * as XLSX from 'xlsx';
+import { formatDate } from '../utils/format';
 
 const DEFAULT_LEVEL_RULES: LevelRulesConfig = {
   introduction: "Hệ thống Quiz 3T Mastery áp dụng cơ chế phân hạng và thay đổi cấp độ tự động dựa trên thành tích luyện tập thực tế.",
@@ -96,9 +97,55 @@ export default function PersonalStats({ users, results, levelRulesFromCloud }: P
   // Set default selected user
   useEffect(() => {
     if (approvedUsers.length > 0 && !selectedUserId) {
+      const todayStr = formatDate(new Date());
+      let bestResult: QuizResult | null = null;
+
+      // 1. Check today's results
+      const todayResults = results.filter(r => r.date === todayStr);
+      if (todayResults.length > 0) {
+        bestResult = todayResults.reduce((best, curr) => {
+          if (!best) return curr;
+          if (curr.score > best.score) return curr;
+          if (curr.score === best.score) {
+            const currDuration = curr.duration || 99999;
+            const bestDuration = best.duration || 99999;
+            return currDuration < bestDuration ? curr : best;
+          }
+          return best;
+        }, null as QuizResult | null);
+      } else {
+        // 2. Walk backward: take the most recent date with records
+        const sortedResults = [...results].sort((a, b) => b.timestamp - a.timestamp);
+        if (sortedResults.length > 0) {
+          const mostRecentDate = sortedResults[0].date;
+          const mostRecentResults = results.filter(r => r.date === mostRecentDate);
+          bestResult = mostRecentResults.reduce((best, curr) => {
+            if (!best) return curr;
+            if (curr.score > best.score) return curr;
+            if (curr.score === best.score) {
+              const currDuration = curr.duration || 99999;
+              const bestDuration = best.duration || 99999;
+              return currDuration < bestDuration ? curr : best;
+            }
+            return best;
+          }, null as QuizResult | null);
+        }
+      }
+
+      if (bestResult) {
+        const foundUser = approvedUsers.find(u => 
+          u.id === bestResult!.userId || 
+          u.name.trim().toLowerCase() === bestResult!.userName.trim().toLowerCase()
+        );
+        if (foundUser) {
+          setSelectedUserId(foundUser.id);
+          return;
+        }
+      }
+
       setSelectedUserId(approvedUsers[0].id);
     }
-  }, [approvedUsers, selectedUserId]);
+  }, [approvedUsers, selectedUserId, results]);
 
   // Filter dynamic dropdown items based on query
   const filteredUsersForDropdown = useMemo(() => {
@@ -587,7 +634,7 @@ export default function PersonalStats({ users, results, levelRulesFromCloud }: P
                 </div>
                 <div className="flex items-center gap-1 mt-1 text-[9px] font-bold text-indigo-600">
                   <Clock className="h-3 w-3" />
-                  <span>Khoảng {Math.round(stats.avgDuration / 30)} giây/câu</span>
+                  <span>Khoảng {parseFloat((stats.avgDuration / 3).toFixed(1))} giây/câu</span>
                 </div>
               </div>
             </div>

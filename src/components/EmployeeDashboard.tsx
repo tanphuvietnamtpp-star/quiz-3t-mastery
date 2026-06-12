@@ -6,6 +6,7 @@ import { BookOpen, Trophy, Award, BarChart3, ChevronRight, CheckCircle2, XCircle
 import { motion, AnimatePresence } from 'motion/react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts';
 import StatsDashboard from './StatsDashboard';
+import PersonalStats from './PersonalStats';
 
 interface EmployeeDashboardProps {
   user: User;
@@ -100,8 +101,8 @@ export default function EmployeeDashboard({
             // Approver or authorized stats viewer: Check department to decide scope
             const deptNorm = (user.department || '').trim().toLowerCase();
             let filtered: User[] = [];
-            if (deptNorm === 'ban tổng giám đốc') {
-               // BTGĐ: Company-wide
+            if (deptNorm === 'ban tổng giám đốc' || user.role === 'executive') {
+               // BTGĐ / Executive: Company-wide
               filtered = allUsers;
             } else if (deptNorm === 'ban giám đốc') {
                // BGĐ: Branch-wide
@@ -260,7 +261,7 @@ export default function EmployeeDashboard({
   const [editableRules, setEditableRules] = useState<LevelRulesConfig | null>(null);
   
   // Admin mobile action states
-  const [adminMobileTab, setAdminMobileTab] = useState<'home' | 'users' | 'stats' | 'encoding' | 'qr' | 'firebase_data'>('home');
+  const [adminMobileTab, setAdminMobileTab] = useState<'home' | 'users' | 'stats' | 'encoding' | 'qr' | 'firebase_data' | 'personal'>('home');
   const [adminMobileNotice, setAdminMobileNotice] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
   
   // States for Mobile QR and Firebase Data tabs
@@ -782,6 +783,239 @@ export default function EmployeeDashboard({
 
   const difficulty = difficultyState.level;
 
+  // Board of Honor rotation period state
+  const [boardPeriod, setBoardPeriod] = useState<'day' | 'week' | 'month'>('day');
+  const [activeCandIdx, setActiveCandIdx] = useState(0);
+
+  // Automatic period rotation: day -> week -> month every 30 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setBoardPeriod(prev => {
+        if (prev === 'day') return 'week';
+        if (prev === 'week') return 'month';
+        return 'day';
+      });
+      setActiveCandIdx(0); // Reset candidate index on period change
+    }, 30000); // 30 seconds
+    return () => clearInterval(interval);
+  }, []);
+
+  // Automatic candidate rotation: next candidate every 10 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setActiveCandIdx(prev => prev + 1);
+    }, 10000); // 10 seconds
+    return () => clearInterval(interval);
+  }, []);
+
+  // Detailed dynamic Level calculation for all users to construct BẢNG VÀNG VINH DANH
+  const leaderboardCandidates = useMemo(() => {
+    if (allResults.length === 0) return { day: [], week: [], month: [], isDayFallback: true, isWeekFallback: true, isMonthFallback: true };
+
+    const groupedUsers: Record<string, {
+      userId: string;
+      userName: string;
+      department: string;
+      branch: string;
+      attempts: number;
+      bestScore: number;
+      totalScore: number;
+      lastAttempt: number;
+      totalDuration: number;
+      totalQuestions: number;
+    }> = {};
+
+    allResults.forEach(res => {
+      const key = res.userId || res.userName;
+      if (!groupedUsers[key]) {
+        groupedUsers[key] = {
+          userId: res.userId,
+          userName: (res.userName || 'Thành viên ẩn danh').toUpperCase(),
+          department: res.department || 'Hội sở',
+          branch: res.branch || 'Hội sở',
+          attempts: 0,
+          bestScore: 0,
+          totalScore: 0,
+          lastAttempt: 0,
+          totalDuration: 0,
+          totalQuestions: 0
+        };
+      }
+      groupedUsers[key].attempts += 1;
+      groupedUsers[key].totalScore += res.score;
+      groupedUsers[key].totalDuration += res.duration || 0;
+      groupedUsers[key].totalQuestions += res.totalQuestions || 3;
+      if (res.score > groupedUsers[key].bestScore) {
+        groupedUsers[key].bestScore = res.score;
+      }
+      if (res.timestamp > groupedUsers[key].lastAttempt) {
+        groupedUsers[key].lastAttempt = res.timestamp;
+      }
+    });
+
+    const activeRules = levelRules || DEFAULT_LEVEL_RULES;
+
+    const parseRequiredConsecutive = (lvlIdx: number, defaultVal: number = 10): number => {
+      const promotionText = activeRules.levels[lvlIdx]?.promotion;
+      if (!promotionText) return defaultVal;
+      const match = promotionText.match(/liên\s+tục\s+(\d+)\s+lượt/i) || 
+                    promotionText.match(/(\d+)\s+lượt\s+liên\s+tục/i) || 
+                    promotionText.match(/(\d+)\s+lượt/i);
+      return match ? parseInt(match[1], 10) : defaultVal;
+    };
+
+    const parseDemotionThreshold = (lvlIdx: number, defaultVal: number): number => {
+      const demotionText = activeRules.levels[lvlIdx]?.demotion;
+      if (!demotionText) return defaultVal;
+      const match = demotionText.match(/dưới\s+(\d+)\s+điểm/i) || 
+                    demotionText.match(/dưới\s+(\d+)/i) || 
+                    demotionText.match(/<\s*(\d+)/i);
+      return match ? parseInt(match[1], 10) : defaultVal;
+    };
+
+    const compiledParticipants = Object.values(groupedUsers).map(p => {
+      const userResults = allResults.filter(r => r.userId === p.userId || r.userName === p.userName);
+      const chronologicalResults = [...userResults].sort((a, b) => a.timestamp - b.timestamp);
+      
+      let currentLevel = 1;
+      let consecutiveMaxAtLevel = 0;
+      let consecutiveLowAtLevel = 0;
+
+      for (const res of chronologicalResults) {
+        const score = res.score;
+        
+        if (currentLevel === 1) {
+          if (score === 30) {
+            consecutiveMaxAtLevel++;
+          } else {
+            consecutiveMaxAtLevel = 0;
+          }
+          const reqConsecutive = parseRequiredConsecutive(0, 10);
+          if (consecutiveMaxAtLevel >= reqConsecutive) {
+            currentLevel = 2;
+            consecutiveMaxAtLevel = 0;
+            consecutiveLowAtLevel = 0;
+          }
+        } else if (currentLevel === 2) {
+          if (score === 30) {
+            consecutiveMaxAtLevel++;
+          } else {
+            consecutiveMaxAtLevel = 0;
+          }
+          const demotionMin = parseDemotionThreshold(1, 20);
+          if (score < demotionMin) {
+            consecutiveLowAtLevel++;
+          }
+          const reqConsecutive = parseRequiredConsecutive(1, 10);
+          if (consecutiveMaxAtLevel >= reqConsecutive) {
+            currentLevel = 3;
+            consecutiveMaxAtLevel = 0;
+            consecutiveLowAtLevel = 0;
+          } else if (consecutiveLowAtLevel >= 2) {
+            currentLevel = 1;
+            consecutiveMaxAtLevel = 0;
+            consecutiveLowAtLevel = 0;
+          }
+        } else if (currentLevel === 3) {
+          if (score === 30) {
+            consecutiveMaxAtLevel++;
+          } else {
+            consecutiveMaxAtLevel = 0;
+          }
+          const demotionMin = parseDemotionThreshold(2, 26);
+          if (score < demotionMin) {
+            consecutiveLowAtLevel++;
+          }
+          const reqConsecutive = parseRequiredConsecutive(2, 10);
+          if (consecutiveMaxAtLevel >= reqConsecutive) {
+            currentLevel = 4;
+            consecutiveMaxAtLevel = 0;
+            consecutiveLowAtLevel = 0;
+          } else if (consecutiveLowAtLevel >= 2) {
+            currentLevel = 2;
+            consecutiveMaxAtLevel = 0;
+            consecutiveLowAtLevel = 0;
+          }
+        } else if (currentLevel === 4) {
+          if (score === 30) {
+            consecutiveMaxAtLevel++;
+          } else {
+            consecutiveMaxAtLevel = 0;
+          }
+          const demotionMin = parseDemotionThreshold(3, 27);
+          if (score < demotionMin) {
+            consecutiveLowAtLevel++;
+          }
+          const reqConsecutive = parseRequiredConsecutive(3, 10);
+          if (consecutiveMaxAtLevel >= reqConsecutive) {
+            currentLevel = 5;
+            consecutiveMaxAtLevel = 0;
+            consecutiveLowAtLevel = 0;
+          } else if (consecutiveLowAtLevel >= 2) {
+            currentLevel = 3;
+            consecutiveMaxAtLevel = 0;
+            consecutiveLowAtLevel = 0;
+          }
+        } else if (currentLevel === 5) {
+          if (score === 30) {
+            consecutiveMaxAtLevel++;
+          } else {
+            consecutiveMaxAtLevel = 0;
+          }
+          const demotionMin = parseDemotionThreshold(4, 28);
+          if (score < demotionMin) {
+            consecutiveLowAtLevel++;
+          }
+          if (consecutiveLowAtLevel >= 2) {
+            currentLevel = 4;
+            consecutiveMaxAtLevel = 0;
+            consecutiveLowAtLevel = 0;
+          }
+        }
+      }
+
+      const totalDur = p.totalDuration || 0;
+      const totalQues = p.totalQuestions || 1;
+      const avgTimeSpent = Math.max(1, Math.round(totalDur / totalQues));
+
+      return {
+        ...p,
+        level: currentLevel,
+        avgScore: p.attempts > 0 ? parseFloat((p.totalScore / p.attempts).toFixed(1)) : 0,
+        avgTimeSpent
+      };
+    });
+
+    const now = new Date();
+    const nowMs = now.getTime();
+    const startOfTodayMs = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const startOfWeekMs = nowMs - 7 * 24 * 60 * 60 * 1000;
+    const startOfMonthMs = nowMs - 30 * 24 * 60 * 60 * 1000;
+
+    const filterAndSort = (candidatesList: typeof compiledParticipants, sinceMs: number) => {
+      return candidatesList
+        .filter(c => c.level >= 2 && c.lastAttempt >= sinceMs)
+        .sort((a, b) => b.level - a.level || b.bestScore - a.bestScore || b.avgScore - a.avgScore || b.attempts - a.attempts);
+    };
+
+    const dayList = filterAndSort(compiledParticipants, startOfTodayMs);
+    const weekList = filterAndSort(compiledParticipants, startOfWeekMs);
+    const monthList = filterAndSort(compiledParticipants, startOfMonthMs);
+
+    const allTimeLevel2Plus = compiledParticipants
+      .filter(c => c.level >= 2)
+      .sort((a, b) => b.level - a.level || b.bestScore - a.bestScore || b.attempts - a.attempts);
+
+    return {
+      day: dayList.length > 0 ? dayList : allTimeLevel2Plus.slice(0, 5),
+      week: weekList.length > 0 ? weekList : allTimeLevel2Plus.slice(0, 10),
+      month: monthList.length > 0 ? monthList : allTimeLevel2Plus.slice(0, 15),
+      isDayFallback: dayList.length === 0,
+      isWeekFallback: weekList.length === 0,
+      isMonthFallback: monthList.length === 0
+    };
+  }, [allResults, levelRules]);
+
   // Calculate stats for today's participants
   const participantsTodayCount = useMemo(() => {
     const todayStr = formatDate(new Date());
@@ -1225,6 +1459,36 @@ export default function EmployeeDashboard({
             onBackToHome={() => setAdminMobileTab('home')}
             companyMappings={companyMappings}
             isAdmin={user.role === 'admin'}
+          />
+        </div>
+      </div>
+    );
+  };
+
+  const renderMobilePersonalPanel = () => {
+    return (
+      <div className="flex-1 flex flex-col min-h-0 bg-white border border-gray-150 rounded-xl p-3 shadow-xs overflow-hidden">
+        {/* Panel Header */}
+        <div className="flex items-center justify-between border-b border-gray-100 pb-2.5 mb-3 shrink-0">
+          <button
+            onClick={() => setAdminMobileTab('home')}
+            className="flex items-center gap-1 text-xs font-bold text-gray-500 hover:text-gray-700 p-1 rounded-lg hover:bg-gray-100"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span>Sảnh chính</span>
+          </button>
+          <span className="text-[13px] font-extrabold text-[#0B3A60] uppercase tracking-wide">
+            TIẾN ĐỘ CÁ NHÂN
+          </span>
+          <div className="w-10" />
+        </div>
+
+        {/* Content Body with overflow scrolling */}
+        <div className="flex-1 overflow-y-auto pr-0.5 pb-4">
+          <PersonalStats 
+            users={deptUsers} 
+            results={allResults} 
+            levelRulesFromCloud={levelRules} 
           />
         </div>
       </div>
@@ -3722,16 +3986,17 @@ export default function EmployeeDashboard({
                     {adminMobileTab === 'encoding' && renderMobileEncodingPanel()}
                     {adminMobileTab === 'qr' && renderMobileQrPanel()}
                     {adminMobileTab === 'firebase_data' && renderMobileFirebaseDataPanel()}
+                    {adminMobileTab === 'personal' && renderMobilePersonalPanel()}
                   </div>
                 ) : (
                   // Landing Screen for Practice Exams
-                  <div className="flex flex-col items-center justify-between text-center flex-1 h-full pt-1 pb-0.5 sm:pt-1.5 sm:pb-1 relative">
+                  <div className="flex flex-col items-center justify-between text-center flex-1 h-full pt-0.5 pb-0.5 sm:pt-1 sm:pb-1 relative">
                   {/* Centered Top & Mid content wrapper to keep them tight together */}
-                  <div className="flex flex-col items-center justify-center text-center space-y-4.5 sm:space-y-5 flex-1 w-full shrink-0">
+                  <div className="flex flex-col items-center justify-center text-center space-y-2.5 sm:space-y-4 flex-1 w-full shrink-0">
                     
                     {/* Admin rapid action buttons */}
                     {isAdminReview && (user.role === 'admin' || user.role === 'executive') && (
-                      <div className="w-full max-w-sm mx-auto bg-slate-50/90 border border-slate-200/60 rounded-xl p-2 shadow-xs mb-4 sm:mb-5">
+                      <div className="w-full max-w-sm mx-auto bg-slate-50/90 border border-slate-200/60 rounded-xl p-2 shadow-xs mb-2 sm:mb-3">
                         <div className="text-[9px] font-extrabold text-[#0B3A60]/85 uppercase tracking-wider mb-2 text-center flex items-center justify-center gap-1.5 whitespace-nowrap">
                           <span>CÔNG CỤ QUẢN TRỊ HỆ THỐNG</span>
                           {(user.role === 'admin' || user.role === 'executive') && (
@@ -3792,16 +4057,16 @@ export default function EmployeeDashboard({
                             <span className="text-[8.5px] font-bold leading-tight truncate w-full text-center text-gray-700">Thống Kê</span>
                           </button>
 
-                          {user.role === 'admin' && (
+                          {(user.role === 'admin' || user.role === 'executive') && (
                             <button
-                              onClick={() => setAdminMobileTab('encoding')}
+                              onClick={() => setAdminMobileTab('personal')}
                               className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group shrink-0"
-                              title="Trang Mã Hóa"
+                              title="Tiến độ cá nhân"
                             >
-                              <div className="h-7 w-7 rounded-lg bg-amber-50 border border-amber-100/60 flex items-center justify-center group-hover:bg-amber-100 transition-colors shrink-0">
-                                <Lock className="h-3.5 w-3.5 text-amber-600" />
+                              <div className="h-7 w-7 rounded-lg bg-orange-50 border border-orange-100 flex items-center justify-center group-hover:bg-orange-100 transition-colors shrink-0">
+                                <UserCheck className="h-3.5 w-3.5 text-orange-600" />
                               </div>
-                              <span className="text-[8.5px] font-bold leading-tight truncate w-full text-center text-gray-700">Mã Hóa</span>
+                              <span className="text-[8.5px] font-bold leading-tight truncate w-full text-center text-gray-700">Cá Nhân</span>
                             </button>
                           )}
 
@@ -3832,22 +4097,22 @@ export default function EmployeeDashboard({
                     )}
 
                     {/* 3T Logo replacing Trophy Icon */}
-                    <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#0B3A60] border-2 border-orange-500 shadow-md select-none shrink-0 relative overflow-hidden">
-                      <span translate="no" className="notranslate text-3xl font-black tracking-tighter text-orange-500 font-sans select-none">
+                    <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-[#0B3A60] border-2 border-orange-500 shadow-md select-none shrink-0 relative overflow-hidden animate-fade-in">
+                      <span translate="no" className="notranslate text-xl font-black tracking-tighter text-orange-500 font-sans select-none">
                         3<span className="text-white">T</span>
                       </span>
                     </div>
 
                     {/* VĂN HÓA 3T styled logo block */}
-                    <div className="space-y-1 w-full text-center shrink-0 animate-fade-in">
-                      <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight font-sans">
+                    <div className="space-y-0.5 w-full text-center shrink-0 animate-fade-in">
+                      <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight font-sans leading-none">
                         <span className="text-[#0B3A60] translate-no notranslate">VĂN HÓA </span>
                         <span className="text-[#E8590C] translate-no notranslate">3T</span>
                       </h1>
-                      <h3 className="text-[10px] sm:text-xs font-bold tracking-[0.1em] text-gray-400 font-sans uppercase">
+                      <h3 className="text-[9px] sm:text-[10px] font-bold tracking-[0.08em] text-gray-400 font-sans uppercase">
                         <span translate="no" className="notranslate">{slogan}</span>
                       </h3>
-                      <p className="text-xs sm:text-sm text-gray-500 max-w-xs mx-auto mt-1 leading-normal">
+                      <p className="text-[10px] sm:text-xs text-gray-500 max-w-xs mx-auto mt-0.5 leading-tight">
                         <span translate="no" className="notranslate">
                           Ứng Dụng Ôn Tập Quiz 3T Hàng Ngày
                         </span>
@@ -3857,11 +4122,11 @@ export default function EmployeeDashboard({
                     {/* Cấu hình Mức độ Khó tự dộng */}
                     <div 
                       onClick={() => setShowLevelRules(true)}
-                      className="w-full max-w-sm mx-auto mb-2 bg-gradient-to-r from-blue-50/70 via-slate-50/50 to-orange-50/40 border border-blue-200/60 hover:border-blue-400 py-1.5 px-2.5 rounded-xl flex items-center justify-between text-left shadow-2xs shrink-0 font-sans cursor-pointer hover:shadow-xs active:scale-[0.995] transition-all relative group"
+                      className="w-full max-w-sm mx-auto mb-1 bg-gradient-to-r from-blue-50/70 via-slate-50/50 to-orange-50/40 border border-blue-200/60 hover:border-blue-400 py-1 px-2.5 rounded-lg flex items-center justify-between text-left shadow-2xs shrink-0 font-sans cursor-pointer hover:shadow-xs active:scale-[0.995] transition-all relative group"
                       title="Bấm để xem Quy chế Thăng/Hạ Cấp & Điểm Phản Xạ"
                     >
-                      <div className="flex items-center gap-2">
-                        <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 shadow-3xs border ${
+                      <div className="flex items-center gap-1.5">
+                        <div className={`h-7 w-7 rounded-md flex items-center justify-center shrink-0 shadow-3xs border ${
                           difficulty === 5
                             ? 'bg-rose-50 border-rose-200 text-rose-600'
                             : difficulty === 4
@@ -3872,11 +4137,11 @@ export default function EmployeeDashboard({
                             ? 'bg-blue-50 border-blue-200 text-blue-600'
                             : 'bg-slate-50 border-slate-200 text-slate-600'
                         }`}>
-                          <Sparkles className={`h-4 w-4 ${difficulty >= 4 ? 'animate-bounce text-[#FF6B6B]' : 'text-[#1971C2] animate-pulse'}`} />
+                          <Sparkles className={`h-3.5 w-3.5 ${difficulty >= 4 ? 'animate-bounce text-[#FF6B6B]' : 'text-[#1971C2] animate-pulse'}`} />
                         </div>
                         <div>
-                          <div className="text-[8px] font-extrabold text-[#1971C2] uppercase tracking-wider font-sans leading-none mb-0.5">CẤP ĐỘ ÔN LUYỆN TỰ ĐỘNG</div>
-                          <div className="text-xs font-black text-gray-800 font-sans leading-tight flex items-center gap-1">
+                          <div className="text-[7.5px] font-extrabold text-[#1971C2] uppercase tracking-wider font-sans leading-none mb-0.5">CẤP ĐỘ ÔN LUYỆN TỰ ĐỘNG</div>
+                          <div className="text-[11px] font-black text-gray-800 font-sans leading-none flex items-center gap-1">
                             <span>
                               {difficulty === 5 ? '🏆 Cấp 5: Huyền Thoại' :
                                difficulty === 4 ? '🔥 Cấp 4: Tối Cao' :
@@ -3955,88 +4220,263 @@ export default function EmployeeDashboard({
                         )}
                       </div>
                     </div>
+
                     {/* Condensed responsive grid */}
-                    <div className="bg-gray-50 border border-gray-150 p-3 sm:p-3.5 rounded-xl w-full max-w-sm grid grid-cols-2 gap-3 text-left text-xs sm:text-sm shrink-0 shadow-2xs">
-                      <div className="space-y-0.5">
-                        <div className="text-[10px] sm:text-xs text-gray-455 uppercase tracking-wider font-semibold">Số câu hỏi</div>
-                        <div className="font-bold text-gray-800">
+                    <div className="bg-gray-50 border border-gray-150 p-1.5 sm:p-2 rounded-lg w-full max-w-sm grid grid-cols-2 gap-1.5 sm:gap-2 text-left shrink-0 shadow-3xs animate-fade-in">
+                      <div className="space-y-0">
+                        <div className="text-[8px] sm:text-[9.5px] text-gray-400 uppercase tracking-tight font-extrabold leading-none">Số câu hỏi</div>
+                        <div className="font-extrabold text-[#0B3A60] text-[10.5px] sm:text-xs leading-tight mt-0.5">
                           <span translate="no" className="notranslate">03 câu (Ngẫu nhiên)</span>
                         </div>
                       </div>
-                      <div className="space-y-0.5">
-                        <div className="text-[10px] sm:text-xs text-gray-455 uppercase tracking-wider font-semibold">Thời gian tính</div>
-                        <div className="font-bold text-gray-800">
+                      <div className="space-y-0">
+                        <div className="text-[8px] sm:text-[9.5px] text-gray-400 uppercase tracking-tight font-extrabold leading-none">Thời gian tính</div>
+                        <div className="font-extrabold text-[#0B3A60] text-[10.5px] sm:text-xs leading-tight mt-0.5">
                           <span translate="no" className="notranslate font-sans">
                             {difficulty === 5 ? '10 giây / câu' : difficulty === 4 ? '20 giây / câu' : difficulty === 3 ? '30 giây / câu' : difficulty === 2 ? '60 giây / câu' : '90 giây / câu'}
                           </span>
                         </div>
                       </div>
-                      <div className="space-y-0.5">
-                        <div className="text-[10px] sm:text-xs text-gray-455 uppercase tracking-wider font-semibold">Tổng điểm tối đa</div>
-                        <div className="font-bold text-gray-800">
+                      <div className="space-y-0">
+                        <div className="text-[8px] sm:text-[9.5px] text-gray-400 uppercase tracking-tight font-extrabold leading-none">Tổng điểm tối đa</div>
+                        <div className="font-extrabold text-[#0B3A60] text-[10.5px] sm:text-xs leading-tight mt-0.5">
                           <span translate="no" className="notranslate">30 Điểm (10đ / câu)</span>
                         </div>
                       </div>
-                      <div className="space-y-0.5">
-                        <div className="text-[10px] sm:text-xs text-gray-455 uppercase tracking-wider font-semibold">Trạng thái</div>
-                        <div className="font-bold text-green-600">
+                      <div className="space-y-0">
+                        <div className="text-[8px] sm:text-[9.5px] text-gray-400 uppercase tracking-tight font-extrabold leading-none">Trạng thái</div>
+                        <div className="font-black text-[#099268] text-[10.5px] sm:text-xs leading-tight mt-0.5">
                           <span translate="no" className="notranslate">Đã duyệt học viên</span>
                         </div>
                       </div>
                     </div>
 
-                  {/* High Quality Exam Tips section */}
-                  <div className="w-full max-w-sm bg-blue-50/40 border border-blue-100 p-3 rounded-xl text-left text-xs sm:text-sm font-sans text-gray-650 space-y-1 shrink-0 shadow-3xs">
-                    <div className="font-bold text-[#1971C2] flex items-center gap-1">
-                      <span translate="no" className="notranslate">💡 Mẹo làm bài hiệu quả:</span>
+                  {/* High Quality Board of Honor "BẢNG VÀNG VINH DANH" replacing Exam Tips */}
+                  <div className="w-full max-w-sm bg-gradient-to-br from-amber-50/70 via-[#FFFDF5]/90 to-amber-50/50 border-2 border-amber-300/60 p-1.5 sm:p-2.5 rounded-lg text-left text-xs font-sans text-gray-750 space-y-1 shrink-0 shadow-sm relative overflow-hidden flex flex-col justify-between select-none">
+                    {/* Animated background highlights to act as congratulatory effects */}
+                    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-amber-300/15 via-transparent to-transparent pointer-events-none" />
+                    
+                    <motion.div
+                      animate={{ rotate: 360 }}
+                      transition={{ repeat: Infinity, duration: 25, ease: 'linear' }}
+                      className="absolute -top-6 -right-6 text-amber-500/10 pointer-events-none"
+                    >
+                      <Sparkles className="w-12 h-12" />
+                    </motion.div>
+
+                    <motion.div
+                      animate={{ y: [0, -3, 0] }}
+                      transition={{ repeat: Infinity, duration: 4, ease: 'easeInOut' }}
+                      className="absolute bottom-1 right-1 text-yellow-500/10 pointer-events-none"
+                    >
+                      <Trophy className="w-10 h-10" />
+                    </motion.div>
+
+                    {/* Ribbon Header with modern selection tabs */}
+                    <div className="flex items-center justify-between gap-1 relative z-10">
+                      <div className="flex items-center gap-1 shrink-0">
+                        <span className="text-amber-500 animate-pulse text-xs">🏆</span>
+                        <span className="font-extrabold uppercase bg-gradient-to-r from-amber-700 to-yellow-600 bg-clip-text text-transparent tracking-wider text-[10px] sm:text-xs">
+                          Bảng Vàng Vinh Danh
+                        </span>
+                      </div>
+
+                      {/* Filter selection buttons */}
+                      <div className="flex items-center bg-amber-100/50 p-0.5 rounded-lg border border-amber-200/40 text-[9px] font-bold shrink-0">
+                        {(['day', 'week', 'month'] as const).map((period) => (
+                          <button
+                            key={period}
+                            onClick={() => {
+                              setBoardPeriod(period);
+                              setActiveCandIdx(0);
+                            }}
+                            className={`px-1.5 py-0.5 rounded transition-all cursor-pointer ${
+                              boardPeriod === period 
+                                ? 'bg-amber-600 text-white shadow-3xs scale-102 font-extrabold' 
+                                : 'text-amber-800/70 hover:text-amber-900 hover:bg-amber-200/30'
+                            }`}
+                          >
+                            {period === 'day' ? 'Ngày' : period === 'week' ? 'Tuần' : 'Tháng'}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                    <ul className="list-disc pl-4 space-y-0.5 leading-snug font-medium text-[11px] sm:text-xs">
-                      <li>
-                        <span translate="no" className="notranslate">Đọc kỹ giải thích chi tiết đáp án để khắc cốt ghi tâm.</span>
-                      </li>
-                      <li>
-                        <span translate="no" className="notranslate">Chủ động rèn luyện, ứng dụng 3T hàng ngày.</span>
-                      </li>
-                    </ul>
+
+                    {/* Category Label with fallbacks / status details */}
+                    {(() => {
+                      const textLabel = boardPeriod === 'day' ? 'HÔM NAY' : boardPeriod === 'week' ? 'TUẦN NÀY' : 'THÁNG NÀY';
+
+                      return (
+                        <div className="flex justify-between items-center text-[9px] font-extrabold text-[#744210] px-1 relative z-10 shrink-0">
+                          <span className="flex items-center gap-1 tracking-wider bg-amber-100/45 px-2 py-0.5 rounded-full border border-amber-200/30">
+                            ✨ DANH SÁCH VINH DANH {textLabel}
+                          </span>
+                          <span className="text-[#099268] flex items-center gap-0.5 text-[8px]">
+                            <span className="h-1 w-1 bg-[#099268] rounded-full animate-ping inline-block" />
+                            Thời gian thực
+                          </span>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Elite Candidates Display Area (1 candidate rotating) */}
+                    <div className="flex-1 w-full flex flex-col justify-center relative z-10 font-sans min-h-0">
+                      <AnimatePresence mode="wait">
+                        {(() => {
+                          const list = boardPeriod === 'day' 
+                            ? leaderboardCandidates.day 
+                            : boardPeriod === 'week' 
+                            ? leaderboardCandidates.week 
+                            : leaderboardCandidates.month;
+
+                          if (list.length === 0) {
+                            return (
+                              <motion.div
+                                key="empty"
+                                initial={{ opacity: 0, scale: 0.95 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0 }}
+                                className="flex flex-col items-center justify-center text-center p-2 text-[10px] text-amber-800/80 italic space-y-0.5"
+                              >
+                                <span>🎯 Đang chờ đón Chiến Binh bứt phá...</span>
+                                <div className="text-[8.5px] font-medium text-amber-700/60 not-italic leading-normal">
+                                  Ôn luyện đạt Cấp 2 trở lên để được vinh danh tại đây hàng ngày!
+                                </div>
+                              </motion.div>
+                            );
+                          }
+
+                          const idxInList = activeCandIdx % list.length;
+                          const cand = list[idxInList];
+                          const medalEmoji = idxInList === 0 ? '🏆' : idxInList === 1 ? '🥇' : idxInList === 2 ? '🥈' : '🥉';
+                          const isCurrentUser = cand.userId === user.id || cand.userName?.trim().toUpperCase() === user.name?.trim().toUpperCase();
+                          const levelText = cand.level === 5 
+                            ? 'CẤP 5: HUYỀN THOẠI' 
+                            : cand.level === 4 
+                            ? 'CẤP 4: TỐI CAO' 
+                            : cand.level === 3 
+                            ? 'CẤP 3: THỐNG LĨNH' 
+                            : 'CẤP 2: CHIẾN BINH';
+
+                          return (
+                            <motion.div
+                              key={`${boardPeriod}-${idxInList}-${cand.userId || cand.userName}`}
+                              initial={{ opacity: 0, scale: 0.96, y: 3 }}
+                              animate={{ opacity: 1, scale: 1, y: 0 }}
+                              exit={{ opacity: 0, scale: 0.96, y: -3 }}
+                              transition={{ duration: 0.3, ease: 'easeOut' }}
+                              className="py-0.5"
+                            >
+                              <div 
+                                className={`flex items-center justify-between gap-1.5 px-2.5 py-1 rounded-lg border transition-all ${
+                                  isCurrentUser 
+                                    ? 'bg-gradient-to-r from-yellow-100 to-amber-100/90 border-yellow-400 shadow-3xs scale-101 relative overflow-hidden' 
+                                    : 'bg-white/85 border-amber-100/40 hover:bg-white hover:shadow-4xs'
+                                }`}
+                              >
+                                {isCurrentUser && (
+                                  <div className="absolute top-0 right-0 h-full w-12 bg-gradient-to-l from-amber-400/10 pointer-events-none" />
+                                )}
+
+                                {/* Medal and Left stats */}
+                                <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                                  <span className="text-sm shrink-0">{medalEmoji}</span>
+                                  <div className="flex flex-col min-w-0 flex-1 justify-center">
+                                    <span className={`font-black tracking-tight text-[11px] uppercase truncate block leading-tight ${
+                                      isCurrentUser ? 'text-amber-900 font-black underline decoration-amber-400 decoration-1' : 'text-gray-800'
+                                    }`}>
+                                      {cand.userName}
+                                    </span>
+                                    <span className="text-[8.5px] text-gray-500 font-semibold leading-normal mt-0.5 truncate whitespace-nowrap block max-w-full">
+                                      {(() => {
+                                        const dept = (cand.department || '').trim();
+                                        const branch = (cand.branch || '').trim();
+                                        if (!dept) return branch;
+                                        if (!branch) return dept;
+                                        const match = branch.match(/\(([^)]+)\)/);
+                                        if (match) {
+                                          return `${dept} ${match[0]}`;
+                                        }
+                                        return `${dept} • ${branch}`;
+                                      })()}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* Right side: Stats pill top, level row bottom */}
+                                <div className="flex flex-col items-end shrink-0 justify-center">
+                                  {/* Dynamic stats aligned inline horizontally with name */}
+                                  <div className="flex items-center font-mono text-[9.5px] font-bold text-amber-800 bg-amber-100/40 border border-amber-200/50 px-2 py-0.5 rounded-md">
+                                    <span className="text-amber-900 font-black" title="Điểm số trung bình">{cand.avgScore}</span>
+                                    <span className="mx-0.5 text-amber-300/60 font-medium">|</span>
+                                    <span className="text-amber-800" title="Số lượt">{cand.attempts}L</span>
+                                    <span className="mx-0.5 text-amber-300/60 font-medium">|</span>
+                                    <span className="text-amber-700" title="Thời gian làm bài trung bình">{cand.avgTimeSpent}s</span>
+                                  </div>
+
+                                  {/* Level Row placed directly under stats */}
+                                  <span className="text-[9px] font-extrabold text-[#9c5a14] leading-none mt-0.5 flex items-center gap-0.5 whitespace-nowrap">
+                                    🔮 {levelText}
+                                  </span>
+                                </div>
+                              </div>
+                            </motion.div>
+                          );
+                        })()}
+                      </AnimatePresence>
+                    </div>
+
+                    {/* Progress feedback bar detailing the loop timing */}
+                    <div className="w-full shrink-0 relative z-10 pt-0.5">
+                      <div className="w-full h-0.5 bg-amber-200/30 rounded-full overflow-hidden">
+                        <motion.div 
+                          key={boardPeriod}
+                          initial={{ width: "0%" }}
+                          animate={{ width: "100%" }}
+                          transition={{ duration: 30, ease: "linear" }}
+                          className="h-full bg-gradient-to-r from-amber-500 to-yellow-500"
+                        />
+                      </div>
+                    </div>
                   </div>
 
                   {/* Approver Department Action Card */}
                   {(user.role === 'approver' || user.canViewStats) && (
-                    <div className="w-full max-w-sm bg-purple-50/70 border border-purple-200/60 p-2.5 sm:p-3 rounded-xl text-left shrink-0 shadow-3xs relative overflow-hidden">
+                    <div className="w-full max-w-sm bg-purple-50/70 border border-purple-200/60 p-1.5 sm:p-2 rounded-lg text-left shrink-0 shadow-3xs relative overflow-hidden">
                       <div className="absolute top-0 right-0 h-14 w-14 bg-purple-500/5 rounded-full -mr-4 -mt-4 animate-pulse-slow font-sans" />
                       <div className="flex flex-col">
-                        <div className="space-y-1 relative z-10">
-                          <div className="flex items-center justify-between gap-2 flex-wrap">
-                            <h4 className="text-xs sm:text-sm font-extrabold text-[#0B3A60] leading-none">
+                        <div className="space-y-0.5 relative z-10">
+                          <div className="flex items-center justify-between gap-1 flex-wrap">
+                            <h4 className="text-[11px] sm:text-xs font-extrabold text-[#0B3A60] leading-none">
                               {user.role === 'approver' ? 'Hoạt Động Quản Lý' : 'Dữ Liệu Thống Kê'}
                             </h4>
-                            <span translate="no" className="notranslate bg-purple-250 text-purple-800 text-[8.5px] sm:text-[9px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded-full">
+                            <span translate="no" className="notranslate bg-purple-250 text-purple-800 text-[7.5px] sm:text-[8px] font-extrabold uppercase tracking-wider px-1 rounded-full">
                               {(() => {
                                 const deptNorm = (user.department || '').trim().toLowerCase();
-                                if (deptNorm === 'ban tổng giám đốc') return 'Ban Tổng Giám Đốc';
+                                if (deptNorm === 'ban tổng giám đốc') return 'Ban TGĐ';
                                 if (deptNorm === 'ban giám đốc') return 'Ban Giám Đốc';
                                 return 'DUYỆT VIÊN';
                               })()}
                             </span>
                           </div>
-                          <p className="text-[10px] sm:text-[11px] text-slate-500 mt-1 leading-snug">
+                          <p className="text-[9px] sm:text-[10px] text-slate-500 mt-0.5 leading-snug">
                             {user.role === 'approver' ? (
-                              <span>Có <strong className="text-purple-700 font-extrabold">{pendingUsersCount}</strong> nhân sự chờ duyệt thuộc cơ cấu của Anh/Chị.</span>
+                              <span>Có <strong className="text-purple-700 font-extrabold">{pendingUsersCount}</strong> nhân sự chờ duyệt.</span>
                             ) : (
-                              <span>Anh/Chị được phân quyền xem báo cáo thống kê rèn luyện học tập 3T của cơ quan/phòng ban.</span>
+                              <span>Phân quyền xem báo cáo thống kê 3T phòng ban.</span>
                             )}
                           </p>
                         </div>
                         
-                        <div className={`grid ${user.canViewStats ? 'grid-cols-2 gap-2' : 'grid-cols-1'} mt-2.5 pt-2.5 border-t border-purple-200/35 relative z-10`}>
+                        <div className={`grid ${user.canViewStats ? 'grid-cols-2 gap-1.5' : 'grid-cols-1'} mt-1.5 pt-1.5 border-t border-purple-200/35 relative z-10`}>
                           <button
                             onClick={() => setShowApprovalPanel(true)}
-                            className="flex items-center justify-center gap-1.5 py-1.5 px-2 bg-purple-600 hover:bg-purple-700 active:scale-95 text-white text-[10.5px] sm:text-[11px] font-extrabold rounded-lg transition-all cursor-pointer shadow-3xs relative animate-fadeIn"
+                            className="flex items-center justify-center gap-1 py-1 px-2 bg-purple-600 hover:bg-purple-700 active:scale-95 text-white text-[9.5px] sm:text-[10.50px] font-extrabold rounded-md transition-all cursor-pointer shadow-3xs relative animate-fadeIn"
                           >
-                            <UserCheck className="h-3 w-3 sm:h-3.5 sm:w-3.5 shrink-0" />
+                            <UserCheck className="h-3 w-3 shrink-0" />
                             <span>Duyệt Nhân Sự</span>
                             {pendingUsersCount > 0 && (
-                              <span className="bg-red-650 text-white text-[8px] font-black h-3.5 px-1 rounded-full border border-white flex items-center justify-center min-w-[14px] animate-pulse">
+                              <span className="bg-red-650 text-white text-[8px] font-black h-3 px-1 rounded-full border border-white flex items-center justify-center min-w-[12px] animate-pulse">
                                 {pendingUsersCount}
                               </span>
                             )}
@@ -4044,10 +4484,10 @@ export default function EmployeeDashboard({
                           {user.canViewStats && (
                             <button
                               onClick={() => setAdminMobileTab('stats')}
-                              className="flex items-center justify-center gap-1.5 py-1.5 px-2 bg-white hover:bg-violet-50 border border-purple-200 text-purple-700 text-[10.5px] sm:text-[11px] font-extrabold rounded-lg transition-all cursor-pointer active:scale-95 shadow-3xs animate-fadeIn"
+                              className="flex items-center justify-center gap-1 py-1 px-2 bg-white hover:bg-violet-50 border border-purple-200 text-purple-700 text-[9.5px] sm:text-[10.50px] font-extrabold rounded-md transition-all cursor-pointer active:scale-95 shadow-3xs animate-fadeIn"
                             >
-                              <BarChart3 className="h-3 w-3 sm:h-3.5 sm:w-3.5 shrink-0 text-purple-600" />
-                              <span>Xem Thống Kê</span>
+                              <BarChart3 className="h-3 w-3 shrink-0 text-purple-600" />
+                              <span>Thống Kê</span>
                             </button>
                           )}
                         </div>
@@ -4056,21 +4496,23 @@ export default function EmployeeDashboard({
                   )}
 
                   {/* Welcome Greeting Box for Employee */}
-                  <div className="w-full max-w-sm bg-blue-50/50 border border-blue-100 p-3 rounded-xl text-center shrink-0 shadow-3xs">
-                    <p className="text-[10px] sm:text-xs text-[#1971C2] font-semibold uppercase tracking-wider leading-none">Thành Viên Dự Thi</p>
-                    <h4 className="text-xs sm:text-sm font-extrabold text-[#0B3A60] mt-1.5 leading-snug">
+                  <div className="w-full max-w-sm bg-blue-50/50 border border-blue-100 p-1.5 rounded-lg text-center shrink-0 shadow-3xs">
+                    <div className="flex items-center justify-between text-[8px] sm:text-[9.5px] text-[#1971C2] font-semibold uppercase tracking-wider leading-none">
+                      <span>Thành Viên Dự Thi</span>
+                      <span className="text-gray-450 normal-case font-normal truncate max-w-[150px]">BP: {user.department}</span>
+                    </div>
+                    <h4 className="text-[11px] sm:text-xs font-black text-[#0B3A60] mt-1 leading-none text-left">
                       Chào mừng: <span className="text-[#E8590C]">{user.name}</span>
                     </h4>
-                    <p className="text-[10px] sm:text-xs text-gray-450 mt-1">Bộ phận: {user.department}</p>
                   </div>
 
                   {/* Elegant PWA Quick Installation Action Button */}
                   <div className="w-full flex justify-center shrink-0">
                     <button
                       onClick={handlePwaInstall}
-                      className="w-full max-w-sm flex items-center justify-center gap-2 py-2 px-4 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 hover:text-emerald-900 font-extrabold text-[11px] sm:text-xs rounded-xl shadow-3xs hover:scale-[1.01] active:scale-[0.99] transition-all cursor-pointer group"
+                      className="w-full max-w-sm flex items-center justify-center gap-1.5 py-1 px-2.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 hover:text-emerald-900 font-extrabold text-[10px] sm:text-[11px] rounded-lg shadow-3xs hover:scale-[1.01] active:scale-[0.99] transition-all cursor-pointer group"
                     >
-                      <Sparkles className="h-3.5 w-3.5 text-amber-500 animate-pulse shrink-0" />
+                      <Sparkles className="h-3 w-3 text-amber-500 animate-pulse shrink-0" />
                       <span>{pwaPrompt ? "CÀI ĐẶT APP 3T VỀ ĐIỆN THOẠI" : "HƯỚNG DẪN CÀI ĐẶT APP 3T"}</span>
                     </button>
                   </div>
@@ -4079,10 +4521,10 @@ export default function EmployeeDashboard({
                   <div className="w-full flex justify-center shrink-0">
                     <button
                       onClick={startQuiz}
-                      className="w-full max-w-sm flex items-center justify-center gap-2 py-3 px-4 bg-[#1971C2] hover:bg-opacity-95 text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-md transition-all active:scale-[0.98] cursor-pointer"
+                      className="w-full max-w-sm flex items-center justify-center gap-1.5 py-1.5 sm:py-2 px-3 bg-[#1971C2] hover:bg-opacity-95 text-white font-extrabold text-[11px] sm:text-xs rounded-lg shadow-md transition-all active:scale-[0.98] cursor-pointer"
                     >
                       <span translate="no" className="notranslate">Bắt Đầu Làm Bài Đánh Giá</span>
-                      <ArrowRight className="h-4 w-4 shrink-0" />
+                      <ArrowRight className="h-3 w-3 sm:h-3.5 sm:w-3.5 shrink-0" />
                     </button>
                   </div>
                   </div>
