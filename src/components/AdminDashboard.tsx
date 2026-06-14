@@ -555,6 +555,13 @@ export default function AdminDashboard({
       setUsers(updatedUsers);
     });
 
+    // Subscribe to system announcement in real-time
+    const unsubscribeSystem = databaseService.subscribeSystemAnnouncement((text) => {
+      if (text) {
+        setSystemAnnouncement(text);
+      }
+    });
+
     // Create a periodic visual ticker running every 20 seconds to make sure that as Date.now() increments,
     // the online user filters dynamically re-evaluate and stay completely accurate
     const tickerInterval = setInterval(() => {
@@ -563,6 +570,7 @@ export default function AdminDashboard({
 
     return () => {
       unsubscribeUsers();
+      unsubscribeSystem();
       clearInterval(tickerInterval);
     };
   }, []);
@@ -3888,14 +3896,16 @@ export default function AdminDashboard({
                           <button
                             onClick={async () => {
                               if (!announcementEditText.trim()) return;
+                              const trimmedText = announcementEditText.trim();
                               try {
-                                await databaseService.saveSystemAnnouncement(announcementEditText.trim());
+                                await databaseService.saveSystemAnnouncement(trimmedText);
+                                setSystemAnnouncement(trimmedText);
                                 // Log to database
                                 await databaseService.saveAnnouncement({
                                   id: 'ann_sys_' + Date.now(),
                                   userName: user.name,
                                   type: 'admin_broadcast',
-                                  detail: announcementEditText.trim(),
+                                  detail: trimmedText,
                                   timestamp: Date.now()
                                 });
                                 setIsEditingAnnouncement(false);

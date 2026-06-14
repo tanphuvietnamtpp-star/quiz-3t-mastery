@@ -2650,14 +2650,16 @@ export default function EmployeeDashboard({
                   <button
                     onClick={async () => {
                       if (!announcementEditText.trim()) return;
+                      const trimmedText = announcementEditText.trim();
                       try {
-                        await databaseService.saveSystemAnnouncement(announcementEditText.trim());
+                        await databaseService.saveSystemAnnouncement(trimmedText);
+                        setSystemAnnouncement(trimmedText);
                         // Add log to announcements
                         await databaseService.saveAnnouncement({
                           id: 'ann_sys_' + Date.now(),
                           userName: user.name,
                           type: 'admin_broadcast',
-                          detail: announcementEditText.trim(),
+                          detail: trimmedText,
                           timestamp: Date.now()
                         });
                         setIsEditingAnnouncement(false);
