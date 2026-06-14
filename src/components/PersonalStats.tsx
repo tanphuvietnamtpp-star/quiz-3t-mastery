@@ -1115,27 +1115,26 @@ export default function PersonalStats({ users, results, levelRulesFromCloud }: P
         </div>
 
         {/* Segmented Control Switcher */}
-        <div className="flex bg-slate-100 p-1 rounded-xl shadow-3xs border border-gray-200 self-center lg:self-auto gap-1">
+        <div className="flex bg-slate-100 p-1 rounded-xl shadow-3xs border border-gray-200 self-center lg:self-auto gap-1 shrink-0">
           <button
             onClick={() => setPanelTab('personal')}
-            className={`py-1.5 px-4 rounded-lg font-black text-xs tracking-wider transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer ${
+            className={`py-1.5 px-4 rounded-lg font-black text-xs tracking-wider transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap hover:scale-[1.02] active:scale-95 ${
               panelTab === 'personal'
                 ? 'bg-white text-[#0B3A60] shadow-xs'
                 : 'text-gray-500 hover:text-gray-800'
             }`}
           >
-            <Users className="h-3.5 w-3.5" />
+            <Users className="h-3.5 w-3.5 shrink-0" />
             <span>CÁ NHÂN</span>
           </button>
           <button
             onClick={() => setPanelTab('records')}
-            className={`py-1.5 px-4 rounded-lg font-black text-xs tracking-wider transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer ${
+            className={`py-1.5 px-4 rounded-lg font-black text-xs tracking-wider transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap hover:scale-[1.02] active:scale-95 ${
               panelTab === 'records'
-                ? 'bg-amber-500 text-white shadow-xs animate-pulse'
+                ? 'bg-amber-500 text-white shadow-xs'
                 : 'text-gray-500 hover:text-gray-800'
             }`}
           >
-            <Trophy className="h-3.5 w-3.5" />
             <span>🏆 KỶ LỤC 3T</span>
           </button>
         </div>

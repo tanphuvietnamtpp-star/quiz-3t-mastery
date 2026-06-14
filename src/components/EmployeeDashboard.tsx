@@ -85,16 +85,24 @@ export default function EmployeeDashboard({
   motivationalSlogans = []
 }: EmployeeDashboardProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [onlineTick, setOnlineTick] = useState(0);
   const [pendingUsersCount, setPendingUsersCount] = useState(0);
   const [deptUsers, setDeptUsers] = useState<User[]>([]);
   const [showApprovalPanel, setShowApprovalPanel] = useState(false);
   const [approvalSearchTerm, setApprovalSearchTerm] = useState('');
 
   useEffect(() => {
+    // Tick timer running every 20 seconds to make sure online user status is recalculated as Date.now() ticks forward
+    const tickerInterval = setInterval(() => {
+      setOnlineTick(t => t + 1);
+    }, 20000);
+    return () => clearInterval(tickerInterval);
+  }, []);
+
+  useEffect(() => {
     if ((isAdminReview && (user.role === 'admin' || user.role === 'executive')) || user.role === 'approver' || user.canViewStats) {
-      let active = true;
-      databaseService.getUsers().then((allUsers) => {
-        if (!active || !allUsers) return;
+      const unsubscribe = databaseService.subscribeUsers((allUsers) => {
+        if (!allUsers) return;
         if (user.role === 'admin') {
           setDeptUsers(allUsers);
           const pending = allUsers.filter(u => u.status?.toLowerCase() === 'pending');
@@ -117,12 +125,8 @@ export default function EmployeeDashboard({
           const pending = filtered.filter(u => u.status?.toLowerCase() === 'pending');
           setPendingUsersCount(pending.length);
         }
-      }).catch(err => {
-        console.error("Lỗi khi tải dữ liệu người dùng bộ phận:", err);
       });
-      return () => {
-        active = false;
-      };
+      return () => unsubscribe();
     }
   }, [isAdminReview, user.role, user.branch, user.department]);
 

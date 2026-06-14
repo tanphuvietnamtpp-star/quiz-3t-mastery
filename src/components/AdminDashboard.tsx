@@ -139,6 +139,8 @@ export default function AdminDashboard({
   const [allAnnouncements, setAllAnnouncements] = useState<any[]>([]);
   const [newAnnouncementText, setNewAnnouncementText] = useState('');
   const [newAnnouncementType, setNewAnnouncementType] = useState<'admin_broadcast' | 'congrats'>('admin_broadcast');
+  const [announcementToDelete, setAnnouncementToDelete] = useState<any | null>(null);
+  const [onlineTick, setOnlineTick] = useState<number>(0);
   
   // Search and filter states for User Registration List
   const [userSearchQuery, setUserSearchQuery] = useState('');
@@ -547,6 +549,22 @@ export default function AdminDashboard({
 
   useEffect(() => {
     loadData();
+    
+    // Subscribe to users collection in real-time to ensure online tracking is always 100% accurate without manual refresh
+    const unsubscribeUsers = databaseService.subscribeUsers((updatedUsers) => {
+      setUsers(updatedUsers);
+    });
+
+    // Create a periodic visual ticker running every 20 seconds to make sure that as Date.now() increments,
+    // the online user filters dynamically re-evaluate and stay completely accurate
+    const tickerInterval = setInterval(() => {
+      setOnlineTick(t => t + 1);
+    }, 20000);
+
+    return () => {
+      unsubscribeUsers();
+      clearInterval(tickerInterval);
+    };
   }, []);
 
   // Seed question action
@@ -3949,13 +3967,16 @@ export default function AdminDashboard({
                             return;
                           }
                           try {
-                            await databaseService.saveAnnouncement({
-                              id: 'ann_' + Date.now(),
+                            const newId = 'ann_' + Date.now();
+                            const newAnn = {
+                              id: newId,
                               userName: user.name,
                               type: newAnnouncementType,
                               detail: newAnnouncementText.trim(),
                               timestamp: Date.now()
-                            });
+                            };
+                            await databaseService.saveAnnouncement(newAnn);
+                            setAllAnnouncements(prev => [newAnn, ...prev]);
                             setNewAnnouncementText('');
                             alert("Đăng tin thông báo mới thành công!");
                           } catch (err) {
@@ -4020,16 +4041,8 @@ export default function AdminDashboard({
                                     {formatDate(new Date(ann.timestamp))}
                                   </span>
                                   <button
-                                    onClick={async () => {
-                                      if (window.confirm("Bạn có chắc chắn muốn xóa thông báo này? Hành động này không thể hoàn tác.")) {
-                                        try {
-                                          await databaseService.deleteAnnouncement(ann.id);
-                                          alert("Đã xóa thông báo thành công!");
-                                        } catch (err) {
-                                          console.error("Lỗi xóa thông báo:", err);
-                                          alert("Lỗi khi xóa thông báo.");
-                                        }
-                                      }
+                                    onClick={() => {
+                                      setAnnouncementToDelete(ann);
                                     }}
                                     className="p-1 text-slate-400 hover:text-red-500 rounded transition-all active:scale-90 cursor-pointer"
                                     title="Xóa thông báo"
@@ -4056,6 +4069,53 @@ export default function AdminDashboard({
 
         </AnimatePresence>
       </main>
+
+      {/* Delete Announcement Modal Confirmation */}
+      {announcementToDelete && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-lg border border-gray-150 max-w-sm w-full p-6 shadow-xl space-y-4">
+            <div className="flex items-center gap-3 text-red-655 font-sans">
+              <div className="p-2 bg-red-50 rounded-full">
+                <AlertTriangle className="h-6 w-6 text-red-600" />
+              </div>
+              <h3 className="text-base font-bold text-gray-900"><span translate="no" className="notranslate">Xác nhận xóa bảng tin</span></h3>
+            </div>
+            
+            <p className="text-xs text-gray-650 leading-relaxed font-sans font-normal">
+              <span translate="no" className="notranslate">Bạn có chắc chắn muốn xóa tin tức này? Hành động này không thể hoàn tác!</span>
+            </p>
+
+            <div className="bg-slate-50 p-2.5 rounded text-xs select-none border border-slate-150 font-medium italic text-slate-600 line-clamp-3">
+              "{announcementToDelete.detail}"
+            </div>
+
+            <div className="flex justify-end gap-2.5 pt-2 font-sans">
+              <button
+                type="button"
+                onClick={() => setAnnouncementToDelete(null)}
+                className="px-3 py-1.5 bg-gray-50 hover:bg-gray-150 border border-gray-250 rounded-md text-xs font-bold text-gray-650 transition-colors cursor-pointer"
+              >
+                <span translate="no" className="notranslate">Hủy bỏ</span>
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await databaseService.deleteAnnouncement(announcementToDelete.id);
+                    setAllAnnouncements(prev => prev.filter(ann => ann.id !== announcementToDelete.id));
+                    setAnnouncementToDelete(null);
+                  } catch (err) {
+                    console.error("Lỗi xóa thông báo:", err);
+                  }
+                }}
+                className="px-3 py-1.5 bg-red-650 hover:bg-red-700 text-white rounded-md text-xs font-bold transition-all shadow-xs cursor-pointer"
+              >
+                <span translate="no" className="notranslate">Xác nhận Xóa</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete User Modal Confirmation */}
       {userToDelete && (
