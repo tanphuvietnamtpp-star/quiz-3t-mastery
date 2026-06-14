@@ -2092,6 +2092,24 @@ export default function EmployeeDashboard({
     return allResults.filter(r => r.date === todayStr).length;
   }, [allResults]);
 
+  const deptAttemptsTodayCount = useMemo(() => {
+    const todayStr = formatDate(new Date());
+    const todayResults = allResults.filter(r => r.date === todayStr);
+    
+    if (user.role === 'admin') {
+      return todayResults.length;
+    }
+    
+    const deptNorm = (user.department || '').trim().toLowerCase();
+    if (deptNorm === 'ban tổng giám đốc' || user.role === 'executive') {
+      return todayResults.length;
+    } else if (deptNorm === 'ban giám đốc') {
+      return todayResults.filter(r => r.branch === user.branch).length;
+    } else {
+      return todayResults.filter(r => r.branch === user.branch && r.department === user.department).length;
+    }
+  }, [allResults, user.role, user.branch, user.department]);
+
   // AI Image extraction states (simulated inside smartphone viewport for admins)
   const [selectedImages, setSelectedImages] = useState<{ file: File; compressedBase64: string }[]>([]);
   const [aiLoading, setAiLoading] = useState(false);
@@ -5556,6 +5574,16 @@ export default function EmployeeDashboard({
                           >
                             <div className="h-7 w-7 rounded-lg bg-emerald-50 border border-emerald-100/60 flex items-center justify-center group-hover:bg-emerald-100 transition-colors shrink-0 relative">
                               <BarChart3 className="h-3.5 w-3.5 text-emerald-600" />
+                              {attemptsTodayCount > 0 && (
+                                <span className="absolute -top-1.5 -left-2.5 bg-[#12B886] text-white text-[8px] font-extrabold h-4 px-1 rounded-full border border-white flex items-center justify-center shadow-md min-w-[15px] leading-none animate-bounce z-10" title="Tổng số lượt làm trong hôm nay">
+                                  {attemptsTodayCount}
+                                </span>
+                              )}
+                              {participantsTodayCount > 0 && (
+                                <span className="absolute -top-1.5 -right-1.5 bg-[#1C7ED6] text-white text-[8px] font-extrabold h-4 px-1 rounded-full border border-white flex items-center justify-center shadow-md min-w-[15px] leading-none animate-bounce z-10" title="Tổng số người tham gia ôn tập trong hôm nay">
+                                  {participantsTodayCount}
+                                </span>
+                              )}
                             </div>
                             <span className="text-[8.5px] font-bold leading-tight truncate w-full text-center text-gray-700">Thống Kê</span>
                           </button>
@@ -5655,8 +5683,18 @@ export default function EmployeeDashboard({
                             className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-violet-600/10 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group shrink-0"
                             title="Thống Kê"
                           >
-                            <div className="h-7 w-7 rounded-lg bg-violet-50 border border-violet-100/65 flex items-center justify-center group-hover:bg-violet-100 transition-colors shrink-0">
+                            <div className="h-7 w-7 rounded-lg bg-violet-50 border border-violet-100/65 flex items-center justify-center group-hover:bg-violet-100 transition-colors shrink-0 relative">
                               <BarChart3 className="h-3.5 w-3.5 text-violet-700" />
+                              {attemptsTodayCount > 0 && (
+                                <span className="absolute -top-1.5 -left-2.5 bg-[#12B886] text-white text-[8px] font-extrabold h-4 px-1 rounded-full border border-white flex items-center justify-center shadow-md min-w-[15px] leading-none animate-bounce z-10" title="Tổng số lượt làm trong hôm nay">
+                                  {attemptsTodayCount}
+                                </span>
+                              )}
+                              {participantsTodayCount > 0 && (
+                                <span className="absolute -top-1.5 -right-1.5 bg-[#1C7ED6] text-white text-[8px] font-extrabold h-4 px-1 rounded-full border border-white flex items-center justify-center shadow-md min-w-[15px] leading-none animate-bounce z-10" title="Tổng số người tham gia ôn tập trong hôm nay">
+                                  {participantsTodayCount}
+                                </span>
+                              )}
                             </div>
                             <span className="text-[8.5px] font-extrabold leading-tight truncate text-center text-gray-700">Thống Kê</span>
                           </button>

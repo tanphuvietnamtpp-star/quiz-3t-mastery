@@ -2571,7 +2571,7 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
               ) : (
                 <div className="space-y-1 px-0.5 font-sans">
                   {/* Header của bảng */}
-                  <div className="grid grid-cols-12 gap-1 sm:gap-2 pb-2 mb-1 border-b border-gray-200 text-[10px] font-extrabold text-gray-400 uppercase tracking-wider font-sans px-2 sticky top-0 bg-white z-10">
+                  <div className="hidden md:grid grid-cols-12 gap-1 sm:gap-2 pb-2 mb-1 border-b border-gray-200 text-[10px] font-extrabold text-gray-400 uppercase tracking-wider font-sans px-2 sticky top-0 bg-white z-10">
                     <div className="col-span-4">HỌ VÀ TÊN</div>
                     <div className="col-span-3 text-center">Thăng Cấp</div>
                     <div className="col-span-2 text-center">Vị Thế</div>
@@ -2600,9 +2600,10 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
 
                     return (
                       <div key={userStats.userId + idx} className="border-b border-gray-100 last:border-none py-1">
+                        {/* Desktop grid layout */}
                         <div 
                           onClick={() => setExpandedLegend(isExpanded ? null : userStats.userId)}
-                          className="grid grid-cols-12 gap-1 sm:gap-2 items-center py-1.5 px-2 hover:bg-gray-50 rounded-lg transition-all cursor-pointer select-none"
+                          className="hidden md:grid grid-cols-12 gap-1 sm:gap-2 items-center py-1.5 px-2 hover:bg-gray-50 rounded-lg transition-all cursor-pointer select-none"
                         >
                           {/* Cột Tên kèm STT và bong bóng số thăng hạng */}
                           <div className="col-span-4 flex items-center gap-1.5 min-w-0">
@@ -2653,6 +2654,61 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
                               <span>{userStats.totalAttempts}L</span>
                               <span className="mx-0.5 text-amber-200">|</span>
                               <span>{Math.round(userStats.overallAvgDurationPerQuestion)}s</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Mobile block/card layout */}
+                        <div 
+                          onClick={() => setExpandedLegend(isExpanded ? null : userStats.userId)}
+                          className="flex flex-col md:hidden py-2.5 px-3 hover:bg-gray-55/80 border border-gray-100 rounded-xl mb-1.5 bg-white shadow-3xs cursor-pointer select-none transition-all"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="text-amber-500 font-mono text-[11px] font-bold shrink-0">#{idx + 1}</span>
+                              <span className="font-extrabold text-xs uppercase text-gray-950 font-sans truncate" title={userStats.userName}>
+                                {userStats.userName}
+                              </span>
+                              {/* Coronation Counter Badge */}
+                              <span 
+                                className={`inline-flex items-center justify-center px-1.5 py-0.5 h-4 rounded-full ${
+                                  isDemoted 
+                                    ? "bg-slate-100 text-slate-500" 
+                                    : "bg-emerald-50 text-emerald-700 border border-emerald-100/80"
+                                } font-sans text-[8.5px] font-black shrink-0`}
+                                title={isDemoted ? `Đã từng thăng cấp 5: ${coronations.length} lần` : `Lượt thăng cấp 5: ${coronations.length} lần`}
+                              >
+                                👑 {coronations.length || 1}
+                              </span>
+                            </div>
+                            
+                            {/* Maintaining Status days */}
+                            <div className="shrink-0">
+                              {isDemoted ? (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-slate-50 text-slate-450 border border-slate-150 whitespace-nowrap">
+                                  {userStats.daysMaintaining}n ⏸️
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[9px] font-extrabold bg-amber-50 text-amber-800 border border-amber-200/55 whitespace-nowrap">
+                                  {userStats.daysMaintaining} ngày
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between gap-2 mt-2 pt-1.5 border-t border-gray-100/70 text-[10px] text-gray-500 font-sans">
+                            <div className="flex items-center gap-1">
+                              <span>Thăng cấp:</span>
+                              <span className="text-gray-800 font-bold font-mono">{formatPromoDate(userStats.promoTimestamp)}</span>
+                            </div>
+
+                            {/* Exercises stat badge */}
+                            <div className="shrink-0 bg-[#FAF9F6] border border-amber-200/40 px-1.5 py-0.5 rounded-md text-[9px] font-mono text-amber-950 font-bold whitespace-nowrap">
+                              <span>{userStats.avgScoreAtFirstLegend}đ</span>
+                              <span className="mx-1 text-amber-200">|</span>
+                              <span>{userStats.totalAttempts}L</span>
+                              <span className="mx-1 text-amber-200">|</span>
+                              <span>{Math.round(userStats.overallAvgDurationPerQuestion)}s/c</span>
                             </div>
                           </div>
                         </div>
@@ -2713,7 +2769,7 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
                                       const directionWord = isPromotion ? 'lên' : 'xuống';
                                       
                                       return (
-                                        <div key={tIdx} className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[11px] leading-tight">
+                                        <div key={tIdx} className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[11px] leading-tight font-sans">
                                           <div className="flex items-center gap-1">
                                             <span className="text-[9px]">{isPromotion ? '🟢' : '🔴'}</span>
                                             <span className={`font-semibold ${styleClass}`}>
@@ -2721,7 +2777,7 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
                                             </span>
                                           </div>
                                           <div className="text-right text-amber-900/80 font-mono text-[10px] sm:pl-4">
-                                            <span>Ngày <strong className="font-semibold text-amber-950">{t.dateStr}</strong></span>
+                                            <span>Ngày <strong className="font-semibold text-amber-955">{t.dateStr}</strong></span>
                                             <span className="mx-1 text-amber-300">|</span>
                                             <span className="italic">{t.attemptsCount} lượt</span>
                                           </div>
@@ -2798,7 +2854,7 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
                 onClick={() => setShowRule3T(!showRule3T)}
                 className="w-full flex items-center justify-between px-3 py-2 text-[11px] font-bold text-amber-900 hover:bg-amber-50/50 active:bg-amber-50/80 transition-colors cursor-pointer select-none"
               >
-                <div className="flex items-center gap-1.5 font-extrabold uppercase tracking-wider text-amber-950">
+                <div className="flex items-center gap-1.5 font-extrabold uppercase tracking-wider text-amber-955">
                   <span>📌 QUY CHẾ KỶ LỤC 3T</span>
                 </div>
                 <div className="flex items-center gap-1 text-gray-400">
@@ -2809,7 +2865,7 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
               
               {showRule3T && (
                 <div className="px-3 pb-2.5 pt-0.5 text-[11px] text-amber-900 leading-relaxed font-sans border-t border-amber-100/50 bg-amber-50/10">
-                  Tất cả kỷ lục hiện tại được đặt làm <strong className="text-amber-950 font-bold">thước đo tiêu chuẩn (benchmark)</strong>. Kỷ lục tiếp theo chỉ được ghi nhận và cập nhật khi có kết quả <strong className="text-amber-950 font-bold">bằng hoặc vượt qua</strong> kỷ lục trước đó.
+                  Tất cả kỷ lục hiện tại được đặt làm <strong className="text-amber-955 font-bold">thước đo tiêu chuẩn (benchmark)</strong>. Kỷ lục tiếp theo chỉ được ghi nhận và cập nhật khi có kết quả <strong className="text-amber-955 font-bold">bằng hoặc vượt qua</strong> kỷ lục trước đó.
                 </div>
               )}
             </div>
@@ -2823,7 +2879,7 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
               ) : (
                 <div className="space-y-1 px-0.5">
                   {/* Header của bảng */}
-                  <div className="grid grid-cols-12 gap-1 sm:gap-2 pb-2 mb-1 border-b border-gray-200 text-[10px] font-extrabold text-gray-400 uppercase tracking-wider font-sans px-2 sticky top-0 bg-white z-10">
+                  <div className="hidden md:grid grid-cols-12 gap-1 sm:gap-2 pb-2 mb-1 border-b border-gray-200 text-[10px] font-extrabold text-gray-400 uppercase tracking-wider font-sans px-2 sticky top-0 bg-white z-10">
                     <div className="col-span-5">KỶ LỤC</div>
                     <div className="col-span-2 text-center">XÁC LẬP</div>
                     <div className="col-span-2 text-center">VỊ THẾ</div>
@@ -2836,9 +2892,10 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
                     const metricStr = item.getMetric(item.data);
                     return (
                       <div key={item.key + idx} className="border-b border-gray-100 last:border-none py-1">
+                        {/* Desktop layout */}
                         <div 
                           onClick={() => item.data && setExpandedRecord(isExpanded ? null : item.key)}
-                          className={`grid grid-cols-12 gap-1 sm:gap-2 items-center py-1.5 px-2 hover:bg-gray-50 rounded-lg transition-all select-none ${item.data ? 'cursor-pointer' : 'opacity-60 cursor-not-allowed'}`}
+                          className={`hidden md:grid grid-cols-12 gap-1 sm:gap-2 items-center py-1.5 px-2 hover:bg-gray-55 rounded-lg transition-all select-none ${item.data ? 'cursor-pointer' : 'opacity-60 cursor-not-allowed'}`}
                         >
                           {/* Cột KỶ LỤC kèm icon & Tên đầy đủ */}
                           <div className="col-span-5 flex flex-col min-w-0 justify-center font-sans">
@@ -2881,6 +2938,53 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
                               {metricStr}
                             </div>
                           </div>
+                        </div>
+
+                        {/* Mobile block/card layout */}
+                        <div 
+                          onClick={() => item.data && setExpandedRecord(isExpanded ? null : item.key)}
+                          className={`flex flex-col md:hidden py-2.5 px-3 hover:bg-gray-55/80 border border-gray-100 rounded-xl mb-1.5 bg-white shadow-3xs select-none transition-all ${item.data ? 'cursor-pointer' : 'opacity-60 cursor-not-allowed'}`}
+                        >
+                          {/* Row 1: Icon + Title [Left] & Days [Right] */}
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="text-amber-500 text-xs font-bold shrink-0">{item.icon}</span>
+                              <span className="font-extrabold text-[11px] uppercase text-gray-900 tracking-wide font-sans truncate">
+                                {item.title}
+                              </span>
+                            </div>
+                            <div className="shrink-0">
+                              {item.data ? (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[9px] font-extrabold bg-amber-50 text-amber-800 border border-amber-200/55 whitespace-nowrap">
+                                  {getDaysHeld(item.data.date, item.data.timestamp)} ngày
+                                </span>
+                              ) : (
+                                <span className="text-[9px] font-mono text-gray-350 font-bold">—</span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Row 2: Holder name [Left] & Metric [Right] */}
+                          <div className="flex items-center justify-between gap-2 mt-2 px-0.5">
+                            <div className="min-w-0">
+                              <span className="text-xs text-blue-950 font-black font-sans uppercase truncate block">
+                                {holderName}
+                              </span>
+                            </div>
+                            <div className="shrink-0">
+                              <span className="bg-[#FAF9F6] border border-amber-200/40 px-1.5 py-0.5 rounded-md text-[9px] font-mono text-amber-955 font-bold inline-block">
+                                {metricStr}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Row 3: Setup Record date */}
+                          {item.data && item.data.date && (
+                            <div className="flex items-center gap-1 mt-2 pt-1.5 border-t border-gray-100/70 text-[10px] text-gray-500 font-sans font-medium">
+                              <span>Ngày xác lập:</span>
+                              <span className="text-gray-805 font-bold font-mono">{standardizeDateToDDMMYYYY(item.data.date, item.data.timestamp)}</span>
+                            </div>
+                          )}
                         </div>
 
                         {/* Collapsible section xổ ra bằng chứng kỷ lục (chân phương) */}
