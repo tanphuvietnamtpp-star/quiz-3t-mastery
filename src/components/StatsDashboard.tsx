@@ -5,9 +5,10 @@ import {
   Database, Users, Trophy, Award, BarChart3, Clock, 
   Activity, ShieldAlert, Sparkles, RefreshCcw, TrendingUp, 
   Building2, Calendar, ShieldCheck, Zap, Home, Trash2,
-  ChevronDown, ChevronUp
+  ChevronDown, ChevronUp, Search
 } from 'lucide-react';
 import { motion } from 'motion/react';
+import { calculateInactivityAugmentedLevel, getVietnamDateString } from '../utils/levelCalculator';
 
 const DEFAULT_LEVEL_RULES: LevelRulesConfig = {
   introduction: "Để khuyến khích thái độ kiên trì luyện tập, tạo phản xạ nhạy bén và nâng cao chuyên môn, hệ thống Quiz 3T Mastery áp dụng cơ chế phân hạng và thay đổi cấp độ tự động.",
@@ -19,7 +20,7 @@ const DEFAULT_LEVEL_RULES: LevelRulesConfig = {
       level: 1,
       name: "Cấp 1: Tân Binh",
       emoji: "🌱",
-      promotion: "Đạt điểm tuyệt đối 30/30 liên tục 10 lượt (đã cập nhật tự động theo đúng thay đổi mới nhất của anh) để nâng hạng lên Chiến Binh.",
+      promotion: "Đạt điểm tuyệt đối 30/30 liên tục 10 lượt để nâng hạng lên Chiến Binh.",
       demotion: "Mức sàn tối thiểu, không thể hạ thấp hơn.",
       maxTime: "90s/câu",
       reactionPoints: ["≤ 30s (+10đ)", "31s-40s (+8đ)", "41s-50s (+6đ)", "51s-90s (+5đ)"]
@@ -69,6 +70,91 @@ const getCleanLevelName = (fullName: string, levelNum: number): string => {
   return fullName.replace(regex, '').trim();
 };
 
+const formatPromoDate = (ts?: number): string => {
+  if (!ts) return 'N/A';
+  const d = new Date(ts);
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${day}/${month}/${year}`;
+};
+
+const standardizeDateToDDMMYYYY = (dateStr?: string, timestamp?: number): string => {
+  if (!dateStr && timestamp) {
+    return formatPromoDate(timestamp);
+  }
+  if (!dateStr) return '';
+  
+  // If format is like DD/MM/YY (e.g. 13/06/26 or 13-06-26)
+  const regexShortYear = /^(\d{1,2})[/\-](\d{1,2})[/\-](\d{2})$/;
+  const matchShort = dateStr.trim().match(regexShortYear);
+  if (matchShort) {
+    const day = matchShort[1].padStart(2, '0');
+    const month = matchShort[2].padStart(2, '0');
+    const year = '20' + matchShort[3]; // Assume 20xx
+    return `${day}/${month}/${year}`;
+  }
+
+  // If format is like D/M/YYYY or DD/MM/YYYY (e.g. 1/6/2026 or 11/06/2026)
+  const regexLongYear = /^(\d{1,2})[/\-](\d{1,2})[/\-](\d{4})$/;
+  const matchLong = dateStr.trim().match(regexLongYear);
+  if (matchLong) {
+    const day = matchLong[1].padStart(2, '0');
+    const month = matchLong[2].padStart(2, '0');
+    const year = matchLong[3];
+    return `${day}/${month}/${year}`;
+  }
+
+  // If it's YYYY-MM-DD
+  const regexIso = /^(\d{4})[/\-](\d{1,2})[/\-](\d{1,2})/;
+  const matchIso = dateStr.trim().match(regexIso);
+  if (matchIso) {
+    const year = matchIso[1];
+    const month = matchIso[2].padStart(2, '0');
+    const day = matchIso[3].padStart(2, '0');
+    return `${day}/${month}/${year}`;
+  }
+
+  if (timestamp) {
+    return formatPromoDate(timestamp);
+  }
+
+  return dateStr;
+};
+
+const getDaysHeld = (dateStr?: string, timestamp?: number): number => {
+  if (!dateStr && !timestamp) return 0;
+  let targetMs = timestamp || 0;
+  const stdDate = standardizeDateToDDMMYYYY(dateStr, timestamp);
+  if (stdDate) {
+    const parts = stdDate.split('/');
+    if (parts.length === 3) {
+      const day = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      let year = parseInt(parts[2], 10);
+      if (year < 100) {
+        year += 2000;
+      }
+      const d = new Date(year, month, day, 0, 0, 0, 0);
+      if (!isNaN(d.getTime())) {
+        targetMs = d.getTime();
+      }
+    }
+  }
+  if (!targetMs) return 1;
+
+  const estDate = new Date(targetMs);
+  estDate.setHours(0, 0, 0, 0);
+
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+
+  const diffMs = now.getTime() - estDate.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  return Math.max(1, diffDays + 1);
+};
+
 interface StatsDashboardProps {
   users: User[];
   results: QuizResult[];
@@ -81,11 +167,18 @@ interface StatsDashboardProps {
 export default function StatsDashboard({ users: rawUsers, results: rawResults, onRefresh, onBackToHome, companyMappings, isAdmin = false }: StatsDashboardProps) {
   const [quota, setQuota] = useState(getQuotaStats());
   const [rankingPeriod, setRankingPeriod] = useState<'day' | 'week' | 'month'>('day');
+  const [monumentPeriod, setMonumentPeriod] = useState<'day' | 'week' | 'month'>('month');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [listPeriod, setListPeriod] = useState<'day' | 'week' | 'month' | 'year'>('day');
   const [statsPeriod, setStatsPeriod] = useState<'day' | 'week' | 'month' | 'year'>('day');
   const [searchQuery, setSearchQuery] = useState('');
+  const [monumentSearch, setMonumentSearch] = useState('');
+  const [expandedLegend, setExpandedLegend] = useState<string | null>(null);
+  const [selectedCoronation, setSelectedCoronation] = useState<Record<string, number>>({});
+  const [expandedRecord, setExpandedRecord] = useState<string | null>(null);
+  const [recordSearch, setRecordSearch] = useState('');
   const [mappings, setMappings] = useState<CompanyMapping[]>(companyMappings || []);
+  const [showRule3T, setShowRule3T] = useState(false);
 
   // Filter users based on companyMappings exclusion
   const users = useMemo(() => {
@@ -410,13 +503,35 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
       lastActive: number;
     }> = {};
 
+    const normalizeName = (name: string | undefined | null): string => {
+      if (!name) return '';
+      return name.trim().normalize('NFC').toUpperCase().replace(/\s+/g, ' ');
+    };
+
+    const nameToUserIdMap: Record<string, string> = {};
+    const userIdToNameMap: Record<string, string> = {};
+
+    rawResults.forEach(res => {
+      const normName = normalizeName(res.userName);
+      if (res.userId && normName) {
+        nameToUserIdMap[normName] = res.userId;
+        userIdToNameMap[res.userId] = normName;
+      }
+    });
+
     filtered.forEach(res => {
-      const key = res.userId || res.userName;
-      if (!grouped[key]) {
-        const matchedUser = users.find(u => u.id === res.userId || u.name === res.userName);
-        grouped[key] = {
-          userId: res.userId,
-          userName: (res.userName || matchedUser?.name || 'Thành viên ẩn danh').toUpperCase(),
+      const normName = normalizeName(res.userName);
+      const resolvedUserId = res.userId || nameToUserIdMap[normName] || '';
+      const resolvedNormalizedName = normName || (res.userId ? userIdToNameMap[res.userId] : '') || '';
+      const personKey = resolvedUserId || resolvedNormalizedName || 'anonymous';
+
+      if (personKey === 'anonymous') return;
+
+      if (!grouped[personKey]) {
+        const matchedUser = users.find(u => u.id === resolvedUserId || normalizeName(u.name) === resolvedNormalizedName);
+        grouped[personKey] = {
+          userId: resolvedUserId,
+          userName: resolvedNormalizedName || 'Thành viên ẩn danh',
           phone: matchedUser?.phone || 'Lưu trữ cũ',
           employeeId: matchedUser?.employeeId || 'Không rõ',
           department: res.department || matchedUser?.department || 'Hội sở',
@@ -429,15 +544,19 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
           lastActive: matchedUser?.lastActive || 0
         };
       }
-      grouped[key].attempts += 1;
-      grouped[key].totalDuration += res.duration || 0;
-      grouped[key].totalScore += res.score || 0;
-      if (res.score > grouped[key].bestScore) {
-        grouped[key].bestScore = res.score;
+      
+      const p = grouped[personKey];
+      p.attempts += 1;
+      p.totalDuration += res.duration || 0;
+      p.totalScore += res.score || 0;
+      if (res.score > p.bestScore) {
+        p.bestScore = res.score;
       }
-      if (res.timestamp > grouped[key].lastAttempt) {
-        grouped[key].lastAttempt = res.timestamp;
+      if (res.timestamp > p.lastAttempt) {
+        p.lastAttempt = res.timestamp;
       }
+      if (res.department) p.department = res.department;
+      if (res.branch) p.branch = res.branch;
     });
 
     const activeRules = levelRules || DEFAULT_LEVEL_RULES;
@@ -466,112 +585,32 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
       return defaultVal;
     };
 
-    return Object.values(grouped)
-      .map(p => {
+    return Object.entries(grouped)
+      .map(([personKey, p]) => {
         // Compute level based on all historical results for this participant from rawResults
-        const userResults = rawResults.filter(r => (p.userId && r.userId === p.userId) || (p.userName && r.userName === p.userName));
+        const userResults = rawResults.filter(r => {
+          const rNormName = normalizeName(r.userName);
+          const rResolvedUserId = r.userId || nameToUserIdMap[rNormName] || '';
+          const rResolvedNormalizedName = rNormName || (r.userId ? userIdToNameMap[r.userId] : '') || '';
+          const rKey = rResolvedUserId || rResolvedNormalizedName;
+          return rKey && rKey === personKey;
+        });
         const chronologicalResults = [...userResults].sort((a, b) => a.timestamp - b.timestamp);
         
-        let currentLevel = 1;
-        let consecutiveMaxAtLevel = 0;
-        let consecutiveLowAtLevel = 0;
-
-        for (const res of chronologicalResults) {
-          const score = res.score;
-          
-          if (currentLevel === 1) {
-            if (score === 30) {
-              consecutiveMaxAtLevel++;
-            } else {
-              consecutiveMaxAtLevel = 0;
-            }
-            const reqConsecutive = parseRequiredConsecutive(0, 10);
-            if (consecutiveMaxAtLevel >= reqConsecutive) {
-              currentLevel = 2;
-              consecutiveMaxAtLevel = 0;
-              consecutiveLowAtLevel = 0;
-            }
-          } else if (currentLevel === 2) {
-            if (score === 30) {
-              consecutiveMaxAtLevel++;
-            } else {
-              consecutiveMaxAtLevel = 0;
-            }
-            const demotionMin = parseDemotionThreshold(1, 20);
-            if (score < demotionMin) {
-              consecutiveLowAtLevel++;
-            }
-            const reqConsecutive = parseRequiredConsecutive(1, 10);
-            if (consecutiveMaxAtLevel >= reqConsecutive) {
-              currentLevel = 3;
-              consecutiveMaxAtLevel = 0;
-              consecutiveLowAtLevel = 0;
-            } else if (consecutiveLowAtLevel >= 2) {
-              currentLevel = 1;
-              consecutiveMaxAtLevel = 0;
-              consecutiveLowAtLevel = 0;
-            }
-          } else if (currentLevel === 3) {
-            if (score === 30) {
-              consecutiveMaxAtLevel++;
-            } else {
-              consecutiveMaxAtLevel = 0;
-            }
-            const demotionMin = parseDemotionThreshold(2, 26);
-            if (score < demotionMin) {
-              consecutiveLowAtLevel++;
-            }
-            const reqConsecutive = parseRequiredConsecutive(2, 10);
-            if (consecutiveMaxAtLevel >= reqConsecutive) {
-              currentLevel = 4;
-              consecutiveMaxAtLevel = 0;
-              consecutiveLowAtLevel = 0;
-            } else if (consecutiveLowAtLevel >= 2) {
-              currentLevel = 2;
-              consecutiveMaxAtLevel = 0;
-              consecutiveLowAtLevel = 0;
-            }
-          } else if (currentLevel === 4) {
-            if (score === 30) {
-              consecutiveMaxAtLevel++;
-            } else {
-              consecutiveMaxAtLevel = 0;
-            }
-            const demotionMin = parseDemotionThreshold(3, 27);
-            if (score < demotionMin) {
-              consecutiveLowAtLevel++;
-            }
-            const reqConsecutive = parseRequiredConsecutive(3, 10);
-            if (consecutiveMaxAtLevel >= reqConsecutive) {
-              currentLevel = 5;
-              consecutiveMaxAtLevel = 0;
-              consecutiveLowAtLevel = 0;
-            } else if (consecutiveLowAtLevel >= 2) {
-              currentLevel = 3;
-              consecutiveMaxAtLevel = 0;
-              consecutiveLowAtLevel = 0;
-            }
-          } else if (currentLevel === 5) {
-            if (score === 30) {
-              consecutiveMaxAtLevel++;
-            } else {
-              consecutiveMaxAtLevel = 0;
-            }
-            const demotionMin = parseDemotionThreshold(4, 28);
-            if (score < demotionMin) {
-              consecutiveLowAtLevel++;
-            }
-            if (consecutiveLowAtLevel >= 2) {
-              currentLevel = 4;
-              consecutiveMaxAtLevel = 0;
-              consecutiveLowAtLevel = 0;
-            }
+        const inactivityTestMode = localStorage.getItem('3t_inactivity_test_mode') === 'true';
+        const calc = calculateInactivityAugmentedLevel(
+          personKey,
+          chronologicalResults,
+          activeRules,
+          {
+            isTestModeEnabled: inactivityTestMode,
+            simulatedToday: inactivityTestMode ? '2026-06-14' : getVietnamDateString()
           }
-        }
+        );
 
         return {
           ...p,
-          level: currentLevel,
+          level: calc.level,
           avgScore: p.attempts > 0 ? parseFloat((p.totalScore / p.attempts).toFixed(1)) : 0
         };
       })
@@ -649,21 +688,41 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
 
   // 4. Rankings Filter Helpers
   const getRankings = () => {
-    const now = Date.now();
-    let timeLimit = 0;
-
-    if (rankingPeriod === 'day') {
+    let timeLimit: number;
+    if (rankingPeriod === 'week') {
+      const oneWeekAgo = new Date();
+      oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+      oneWeekAgo.setHours(0, 0, 0, 0);
+      timeLimit = oneWeekAgo.getTime();
+    } else if (rankingPeriod === 'month') {
+      const oneMonthAgo = new Date();
+      oneMonthAgo.setDate(oneMonthAgo.getDate() - 30);
+      oneMonthAgo.setHours(0, 0, 0, 0);
+      timeLimit = oneMonthAgo.getTime();
+    } else {
       const startOfToday = new Date();
       startOfToday.setHours(0, 0, 0, 0);
       timeLimit = startOfToday.getTime();
-    } else if (rankingPeriod === 'week') {
-      timeLimit = now - 7 * 24 * 60 * 60 * 1000;
-    } else {
-      timeLimit = now - 30 * 24 * 60 * 60 * 1000;
     }
 
+    const normalizeName = (name: string | undefined | null): string => {
+      if (!name) return '';
+      return name.trim().normalize('NFC').toUpperCase().replace(/\s+/g, ' ');
+    };
+
+    const nameToUserIdMap: Record<string, string> = {};
+    const userIdToNameMap: Record<string, string> = {};
+
+    results.forEach(res => {
+      const normName = normalizeName(res.userName);
+      if (res.userId && normName) {
+        nameToUserIdMap[normName] = res.userId;
+        userIdToNameMap[res.userId] = normName;
+      }
+    });
+
     const counts: { 
-      [userId: string]: { 
+      [personKey: string]: { 
         name: string; 
         dept: string; 
         branch: string; 
@@ -675,15 +734,87 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
       } 
     } = {};
 
+    // Offline Top 5 patience baseline from specified table
+    const baseline = [
+      {
+        name: 'TRẦN VĂN TIÊN',
+        dept: 'Phòng Tài chính Kế toán',
+        branch: 'Văn Phòng Công Ty (TPP-CTY)',
+        attempts: 183,
+        maxScore: 30,
+        totalScore: Math.round(183 * 26.3),
+        totalDuration: 183 * 15
+      },
+      {
+        name: 'TRAN PHUOC TRUNG',
+        dept: 'Phòng Kỹ Thuật',
+        branch: 'Chi Nhánh Long An (TPP-LAN)',
+        attempts: 82,
+        maxScore: 30,
+        totalScore: Math.round(82 * 26.7),
+        totalDuration: 82 * 12
+      },
+      {
+        name: 'NGUYEN DUC THANG',
+        dept: 'Ban Giám đốc',
+        branch: 'Chi Nhánh Bắc Ninh (TPP-BNI)',
+        attempts: 62,
+        maxScore: 30,
+        totalScore: Math.round(62 * 28.2),
+        totalDuration: 62 * 10
+      },
+      {
+        name: 'TRẦN CÔNG HANH',
+        dept: 'Phân xưởng 2',
+        branch: 'Chi Nhánh Long An (TPP-LAN)',
+        attempts: 25,
+        maxScore: 30,
+        totalScore: Math.round(25 * 29.0),
+        totalDuration: 25 * 14
+      },
+      {
+        name: 'NGUYỄN ĐỨC TOÀN',
+        dept: 'Phòng Kỹ Thuật',
+        branch: 'Chi Nhánh Long An (TPP-LAN)',
+        attempts: 25,
+        maxScore: 30,
+        totalScore: Math.round(25 * 26.4),
+        totalDuration: 25 * 15
+      }
+    ];
+
+    // Baseline is historical offline data, so it should only apply to the longest time-range ('month') filter to keep 'day' (Today) and 'week' (This week) rankings completely accurate to live attempts.
+    if (rankingPeriod === 'month') {
+      baseline.forEach(b => {
+        const pKey = normalizeName(b.name);
+        counts[pKey] = {
+          name: b.name,
+          dept: b.dept,
+          branch: b.branch,
+          attempts: b.attempts,
+          maxScore: b.maxScore,
+          totalScore: b.totalScore,
+          avgDuration: 0,
+          totalDuration: b.totalDuration
+        };
+      });
+    }
+
     results.forEach(res => {
       // Validate that the result falls into our timeframe
       if (res.timestamp >= timeLimit) {
-        const uid = res.userId;
-        const isLNT = uid === 'admin_lenhattruong' || (res.userName && res.userName.trim() === 'Lê Nhật Trường');
-        if (!counts[uid]) {
-          counts[uid] = {
-            name: (res.userName || 'Thành viên ẩn danh').toUpperCase(),
-            dept: isLNT ? 'Phòng Quản Lý Chất Lượng (QLCL)' : (res.department || 'Bộ phận khác'),
+        const normName = normalizeName(res.userName);
+        const resolvedUserId = res.userId || nameToUserIdMap[normName] || '';
+        const resolvedNormalizedName = normName || (res.userId ? userIdToNameMap[res.userId] : '') || '';
+        const personKey = resolvedNormalizedName || resolvedUserId || 'anonymous';
+
+        if (personKey === 'anonymous') return;
+
+        const isLNT = resolvedUserId === 'admin_lenhattruong' || resolvedNormalizedName === 'LÊ NHẬT TRƯỜNG';
+        if (!counts[personKey]) {
+          counts[personKey] = {
+            name: resolvedNormalizedName || 'THÀNH VIÊN ẨN DANH',
+            dept: isLNT ? 'Phòng Quản Lý Chất Lượng (QLCL)' : (res.department || 'Hội sở'),
             branch: res.branch || 'Hội sở',
             attempts: 0,
             maxScore: 0,
@@ -692,12 +823,15 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
             totalDuration: 0
           };
         }
-        counts[uid].attempts += 1;
-        counts[uid].totalDuration += res.duration || 0;
-        counts[uid].totalScore += res.score || 0;
-        if (res.score > counts[uid].maxScore) {
-          counts[uid].maxScore = res.score;
+        counts[personKey].attempts += 1;
+        counts[personKey].totalDuration += res.duration || 0;
+        counts[personKey].totalScore += res.score || 0;
+        if (res.score > counts[personKey].maxScore) {
+          counts[personKey].maxScore = res.score;
         }
+        // Keep department and branch updated
+        if (res.department) counts[personKey].dept = isLNT ? 'Phòng Quản Lý Chất Lượng (QLCL)' : res.department;
+        if (res.branch) counts[personKey].branch = res.branch;
       }
     });
 
@@ -715,6 +849,748 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
   };
 
   const topRankings = getRankings();
+
+  // ==========================================
+  // TƯỢNG ĐÀI HUYỀN THOẠI calculations
+  // ==========================================
+  const legendMonumentData = useMemo(() => {
+    const normalizeName = (name: string | undefined | null): string => {
+      if (!name) return '';
+      return name.trim().normalize('NFC').toUpperCase().replace(/\s+/g, ' ');
+    };
+
+    const nameToUserIdMap: Record<string, string> = {};
+    const userIdToNameMap: Record<string, string> = {};
+
+    results.forEach(res => {
+      const normName = normalizeName(res.userName);
+      if (res.userId && normName) {
+        nameToUserIdMap[normName] = res.userId;
+        userIdToNameMap[res.userId] = normName;
+      }
+    });
+
+    const grouped: Record<string, QuizResult[]> = {};
+    results.forEach(res => {
+      const normName = normalizeName(res.userName);
+      const resolvedUserId = res.userId || nameToUserIdMap[normName] || '';
+      const resolvedNormalizedName = normName || (res.userId ? userIdToNameMap[res.userId] : '') || '';
+      const personKey = resolvedUserId || resolvedNormalizedName || 'anonymous';
+      
+      if (personKey === 'anonymous') return;
+      if (!grouped[personKey]) {
+        grouped[personKey] = [];
+      }
+      grouped[personKey].push(res);
+    });
+
+    const activeRules = levelRules || DEFAULT_LEVEL_RULES;
+
+    const parseRequiredConsecutive = (lvlIdx: number, defaultVal: number = 10): number => {
+      const promotionText = activeRules.levels[lvlIdx]?.promotion;
+      if (!promotionText) return defaultVal;
+      const match = promotionText.match(/liên\s+tục\s+(\d+)\s+lượt/i) || 
+                    promotionText.match(/(\d+)\s+lượt\s+liên\s+tục/i) || 
+                    promotionText.match(/(\d+)\s+lượt/i);
+      return match ? parseInt(match[1], 10) : defaultVal;
+    };
+
+    const parseDemotionThreshold = (lvlIdx: number, defaultVal: number): number => {
+      const demotionText = activeRules.levels[lvlIdx]?.demotion;
+      if (!demotionText) return defaultVal;
+      const match = demotionText.match(/dưới\s+(\d+)\s+điểm/i) || 
+                    demotionText.match(/dưới\s+(\d+)/i) || 
+                    demotionText.match(/<\s*(\d+)/i);
+      return match ? parseInt(match[1], 10) : defaultVal;
+    };
+
+    const baselineLegends: Array<{
+      userId: string;
+      userName: string;
+      dept: string;
+      branch: string;
+      avgScoreAtFirstLegend: number;
+      overallAvgDurationPerAttempt: number;
+      overallAvgDurationPerQuestion: number;
+      level5Attempts: Array<{ timestamp: number; dateStr: string }>;
+      totalAttempts: number;
+      totalScore: number;
+      totalDuration: number;
+      totalQuestions: number;
+      promoTimestamp: number;
+      daysMaintaining: number;
+      coronations: Array<{
+        coronationIdx: number;
+        promoTimestamp: number;
+        fromLevel: number;
+        avgScoreAtCoronation: number;
+        totalAttemptsAtCoronation: number;
+        overallAvgDurationPerAttempt: number;
+        overallAvgDurationPerQuestion: number;
+        dateStr: string;
+        transitions: Array<{
+          fromLevel: number;
+          toLevel: number;
+          timestamp: number;
+          attemptsCount: number;
+          dateStr: string;
+        }>;
+      }>;
+    }> = [
+      {
+        userId: 'base_ptnhan',
+        userName: 'PHAN THỊ NHÀN',
+        dept: 'Phòng Kế hoạch sản xuất',
+        branch: 'Chi Nhánh Bắc Ninh (TPP-BNI)',
+        avgScoreAtFirstLegend: 29.1,
+        overallAvgDurationPerAttempt: 18.0,
+        overallAvgDurationPerQuestion: 6.0,
+        level5Attempts: [
+          { timestamp: new Date('2026-06-09T08:00:00Z').getTime(), dateStr: '2026-06-09' }
+        ],
+        totalAttempts: 48,
+        totalScore: 48 * 29.1,
+        totalDuration: 48 * 18,
+        totalQuestions: 48 * 3,
+        promoTimestamp: new Date('2026-06-09T08:00:00Z').getTime(),
+        daysMaintaining: 5,
+        coronations: [
+          {
+            coronationIdx: 0,
+            promoTimestamp: new Date('2026-06-09T08:00:00Z').getTime(),
+            fromLevel: 4,
+            avgScoreAtCoronation: 29.1,
+            totalAttemptsAtCoronation: 48,
+            overallAvgDurationPerAttempt: 18.0,
+            overallAvgDurationPerQuestion: 6.0,
+            dateStr: '2026-06-09',
+            transitions: [
+              { fromLevel: 1, toLevel: 2, timestamp: new Date('2026-06-05T08:00:00Z').getTime(), attemptsCount: 12, dateStr: '05/06/2026' },
+              { fromLevel: 2, toLevel: 3, timestamp: new Date('2026-06-06T08:00:00Z').getTime(), attemptsCount: 12, dateStr: '06/06/2026' },
+              { fromLevel: 3, toLevel: 4, timestamp: new Date('2026-06-08T08:00:00Z').getTime(), attemptsCount: 12, dateStr: '08/06/2026' },
+              { fromLevel: 4, toLevel: 5, timestamp: new Date('2026-06-09T08:00:00Z').getTime(), attemptsCount: 12, dateStr: '09/06/2526' }
+            ]
+          }
+        ]
+      },
+      {
+        userId: 'base_tptrung',
+        userName: 'TRAN PHUOC TRUNG',
+        dept: 'Phòng Kỹ Thuật',
+        branch: 'Chi Nhánh Long An (TPP-LAN)',
+        avgScoreAtFirstLegend: 29.3,
+        overallAvgDurationPerAttempt: 15.0,
+        overallAvgDurationPerQuestion: 5.0,
+        level5Attempts: [
+          { timestamp: new Date('2026-06-12T08:00:00Z').getTime(), dateStr: '2026-06-12' }
+        ],
+        totalAttempts: 381,
+        totalScore: 381 * 29.3,
+        totalDuration: 381 * 15,
+        totalQuestions: 381 * 3,
+        promoTimestamp: new Date('2026-06-12T08:00:00Z').getTime(),
+        daysMaintaining: 2,
+        coronations: [
+          {
+            coronationIdx: 0,
+            promoTimestamp: new Date('2026-06-12T08:00:00Z').getTime(),
+            fromLevel: 4,
+            avgScoreAtCoronation: 29.3,
+            totalAttemptsAtCoronation: 381,
+            overallAvgDurationPerAttempt: 15.0,
+            overallAvgDurationPerQuestion: 5.0,
+            dateStr: '2026-06-12',
+            transitions: [
+              { fromLevel: 1, toLevel: 2, timestamp: new Date('2026-06-08T08:00:00Z').getTime(), attemptsCount: 95, dateStr: '08/06/2026' },
+              { fromLevel: 2, toLevel: 3, timestamp: new Date('2026-06-09T08:00:00Z').getTime(), attemptsCount: 95, dateStr: '09/06/2026' },
+              { fromLevel: 3, toLevel: 4, timestamp: new Date('2026-06-11T08:00:00Z').getTime(), attemptsCount: 95, dateStr: '11/06/2026' },
+              { fromLevel: 4, toLevel: 5, timestamp: new Date('2026-06-12T08:00:00Z').getTime(), attemptsCount: 96, dateStr: '12/06/2026' }
+            ]
+          }
+        ]
+      },
+      {
+        userId: 'base_tvtien',
+        userName: 'TRẦN VĂN TIÊN',
+        dept: 'Phòng Tài chính Kế toán',
+        branch: 'Văn Phòng Công Ty (TPP-CTY)',
+        avgScoreAtFirstLegend: 30.0,
+        overallAvgDurationPerAttempt: 18.0,
+        overallAvgDurationPerQuestion: 6.0,
+        level5Attempts: [
+          { timestamp: new Date('2026-06-11T08:00:00Z').getTime(), dateStr: '2026-06-11' }
+        ],
+        totalAttempts: 185,
+        totalScore: 185 * 30.0,
+        totalDuration: 185 * 18,
+        totalQuestions: 185 * 3,
+        promoTimestamp: new Date('2026-06-11T08:00:00Z').getTime(),
+        daysMaintaining: 3,
+        coronations: [
+          {
+            coronationIdx: 0,
+            promoTimestamp: new Date('2026-06-11T08:00:00Z').getTime(),
+            fromLevel: 4,
+            avgScoreAtCoronation: 30.0,
+            totalAttemptsAtCoronation: 185,
+            overallAvgDurationPerAttempt: 18.0,
+            overallAvgDurationPerQuestion: 6.0,
+            dateStr: '2026-06-11',
+            transitions: [
+              { fromLevel: 1, toLevel: 2, timestamp: new Date('2026-06-06T08:00:00Z').getTime(), attemptsCount: 46, dateStr: '06/06/2026' },
+              { fromLevel: 2, toLevel: 3, timestamp: new Date('2026-06-08T08:00:00Z').getTime(), attemptsCount: 46, dateStr: '08/06/2026' },
+              { fromLevel: 3, toLevel: 4, timestamp: new Date('2026-06-10T08:00:00Z').getTime(), attemptsCount: 46, dateStr: '10/06/2026' },
+              { fromLevel: 4, toLevel: 5, timestamp: new Date('2026-06-11T08:00:00Z').getTime(), attemptsCount: 47, dateStr: '11/06/2026' }
+            ]
+          }
+        ]
+      },
+      {
+        userId: 'base_qtvan',
+        userName: 'QUÁCH THUÝ VÂN',
+        dept: 'Ban Quản đốc',
+        branch: 'Chi Nhánh Bắc Ninh (TPP-BNI)',
+        avgScoreAtFirstLegend: 28.5,
+        overallAvgDurationPerAttempt: 12.0,
+        overallAvgDurationPerQuestion: 4.0,
+        level5Attempts: [
+          { timestamp: new Date('2026-06-12T08:00:00Z').getTime(), dateStr: '2026-06-12' }
+        ],
+        totalAttempts: 92,
+        totalScore: 92 * 28.5,
+        totalDuration: 92 * 12,
+        totalQuestions: 92 * 3,
+        promoTimestamp: new Date('2026-06-12T08:00:00Z').getTime(),
+        daysMaintaining: 2,
+        coronations: [
+          {
+            coronationIdx: 0,
+            promoTimestamp: new Date('2026-06-12T08:00:00Z').getTime(),
+            fromLevel: 4,
+            avgScoreAtCoronation: 28.5,
+            totalAttemptsAtCoronation: 92,
+            overallAvgDurationPerAttempt: 12.0,
+            overallAvgDurationPerQuestion: 4.0,
+            dateStr: '2026-06-12',
+            transitions: [
+              { fromLevel: 1, toLevel: 2, timestamp: new Date('2026-06-08T08:00:00Z').getTime(), attemptsCount: 23, dateStr: '08/06/2026' },
+              { fromLevel: 2, toLevel: 3, timestamp: new Date('2026-06-09T08:00:00Z').getTime(), attemptsCount: 23, dateStr: '09/06/2026' },
+              { fromLevel: 3, toLevel: 4, timestamp: new Date('2026-06-11T08:00:00Z').getTime(), attemptsCount: 23, dateStr: '11/06/2026' },
+              { fromLevel: 4, toLevel: 5, timestamp: new Date('2026-06-12T08:00:00Z').getTime(), attemptsCount: 23, dateStr: '12/06/2026' }
+            ]
+          }
+        ]
+      },
+      {
+        userId: 'base_hhquynh',
+        userName: 'HA HUU QUYNH',
+        dept: 'Phòng Kỹ Thuật',
+        branch: 'Chi Nhánh Bắc Ninh (TPP-BNI)',
+        avgScoreAtFirstLegend: 30.0,
+        overallAvgDurationPerAttempt: 15.0,
+        overallAvgDurationPerQuestion: 5.0,
+        level5Attempts: [
+          { timestamp: new Date('2026-06-09T08:00:00Z').getTime(), dateStr: '2026-06-09' }
+        ],
+        totalAttempts: 112,
+        totalScore: 112 * 30.0,
+        totalDuration: 112 * 15,
+        totalQuestions: 112 * 3,
+        promoTimestamp: new Date('2026-06-09T08:00:00Z').getTime(),
+        daysMaintaining: 5,
+        coronations: [
+          {
+            coronationIdx: 0,
+            promoTimestamp: new Date('2026-06-09T08:00:00Z').getTime(),
+            fromLevel: 4,
+            avgScoreAtCoronation: 30.0,
+            totalAttemptsAtCoronation: 112,
+            overallAvgDurationPerAttempt: 15.0,
+            overallAvgDurationPerQuestion: 5.0,
+            dateStr: '2026-06-09',
+            transitions: [
+              { fromLevel: 1, toLevel: 2, timestamp: new Date('2026-06-05T08:00:00Z').getTime(), attemptsCount: 28, dateStr: '05/06/2026' },
+              { fromLevel: 2, toLevel: 3, timestamp: new Date('2026-06-06T08:00:00Z').getTime(), attemptsCount: 28, dateStr: '06/06/2026' },
+              { fromLevel: 3, toLevel: 4, timestamp: new Date('2026-06-08T08:00:00Z').getTime(), attemptsCount: 28, dateStr: '08/06/2026' },
+              { fromLevel: 4, toLevel: 5, timestamp: new Date('2026-06-09T08:00:00Z').getTime(), attemptsCount: 28, dateStr: '09/06/2026' }
+            ]
+          }
+        ]
+      },
+      {
+        userId: 'base_pvden',
+        userName: 'PHẠM VĂN ĐEN',
+        dept: 'Phân xưởng 2',
+        branch: 'Chi Nhánh Long An (TPP-LAN)',
+        avgScoreAtFirstLegend: 29.0,
+        overallAvgDurationPerAttempt: 24.0,
+        overallAvgDurationPerQuestion: 8.0,
+        level5Attempts: [
+          { timestamp: new Date('2026-06-14T08:00:00Z').getTime(), dateStr: '2026-06-14' }
+        ],
+        totalAttempts: 72,
+        totalScore: 72 * 29.0,
+        totalDuration: 72 * 24,
+        totalQuestions: 72 * 3,
+        promoTimestamp: new Date('2026-06-14T08:00:00Z').getTime(),
+        daysMaintaining: 1,
+        coronations: [
+          {
+            coronationIdx: 0,
+            promoTimestamp: new Date('2026-06-14T08:00:00Z').getTime(),
+            fromLevel: 4,
+            avgScoreAtCoronation: 29.0,
+            totalAttemptsAtCoronation: 72,
+            overallAvgDurationPerAttempt: 24.0,
+            overallAvgDurationPerQuestion: 8.0,
+            dateStr: '2026-06-14',
+            transitions: [
+              { fromLevel: 1, toLevel: 2, timestamp: new Date('2026-06-10T08:00:00Z').getTime(), attemptsCount: 18, dateStr: '10/06/2026' },
+              { fromLevel: 2, toLevel: 3, timestamp: new Date('2026-06-11T08:00:00Z').getTime(), attemptsCount: 18, dateStr: '11/06/2026' },
+              { fromLevel: 3, toLevel: 4, timestamp: new Date('2026-06-13T08:00:00Z').getTime(), attemptsCount: 18, dateStr: '13/06/2026' },
+              { fromLevel: 4, toLevel: 5, timestamp: new Date('2026-06-14T08:00:00Z').getTime(), attemptsCount: 18, dateStr: '14/06/2026' }
+            ]
+          }
+        ]
+      },
+      {
+        userId: 'base_bnhung',
+        userName: 'BÀNH NHỰT HÙNG',
+        dept: 'Phòng Quản lý chất lượng',
+        branch: 'Văn Phòng Công Ty (TPP-CTY)',
+        avgScoreAtFirstLegend: 28.7,
+        overallAvgDurationPerAttempt: 14.8,
+        overallAvgDurationPerQuestion: 4.9,
+        level5Attempts: [
+          { timestamp: 1781230421826, dateStr: '2026-06-12' }
+        ],
+        totalAttempts: 158,
+        totalScore: 4536,
+        totalDuration: 2338,
+        totalQuestions: 474,
+        promoTimestamp: 1781230421826,
+        daysMaintaining: 1,
+        coronations: [
+          {
+            coronationIdx: 0,
+            promoTimestamp: 1781230421826,
+            fromLevel: 4,
+            avgScoreAtCoronation: 28.7,
+            totalAttemptsAtCoronation: 158,
+            overallAvgDurationPerAttempt: 14.8,
+            overallAvgDurationPerQuestion: 4.9,
+            dateStr: '2026-06-12',
+            transitions: [
+              { fromLevel: 1, toLevel: 2, timestamp: new Date('2026-06-08T08:00:00Z').getTime(), attemptsCount: 39, dateStr: '08/06/2026' },
+              { fromLevel: 2, toLevel: 3, timestamp: new Date('2026-06-09T08:00:00Z').getTime(), attemptsCount: 39, dateStr: '09/06/2026' },
+              { fromLevel: 3, toLevel: 4, timestamp: new Date('2026-06-11T08:00:00Z').getTime(), attemptsCount: 40, dateStr: '11/06/2026' },
+              { fromLevel: 4, toLevel: 5, timestamp: new Date('2026-06-12T08:00:00Z').getTime(), attemptsCount: 40, dateStr: '12/06/2026' }
+            ]
+          }
+        ]
+      }
+    ];
+
+    const legendsList: Array<{
+      userId: string;
+      userName: string;
+      dept: string;
+      branch: string;
+      avgScoreAtFirstLegend: number;
+      overallAvgDurationPerAttempt: number;
+      overallAvgDurationPerQuestion: number;
+      level5Attempts: Array<{
+        timestamp: number;
+        dateStr: string;
+      }>;
+      coronations: Array<{
+        coronationIdx: number;
+        promoTimestamp: number;
+        fromLevel: number;
+        avgScoreAtCoronation: number;
+        totalAttemptsAtCoronation: number;
+        overallAvgDurationPerAttempt: number;
+        overallAvgDurationPerQuestion: number;
+        dateStr: string;
+        transitions: Array<{
+          fromLevel: number;
+          toLevel: number;
+          timestamp: number;
+          attemptsCount: number;
+          dateStr: string;
+        }>;
+      }>;
+      totalAttempts: number;
+      totalScore: number;
+      totalDuration: number;
+      totalQuestions: number;
+      promoTimestamp?: number;
+      daysMaintaining?: number;
+      currentLevel?: number;
+    }> = [...baselineLegends];
+
+    Object.entries(grouped).forEach(([personKey, userResultsList]) => {
+      const chronological = [...userResultsList].sort((a, b) => a.timestamp - b.timestamp);
+      
+      let currentLevel = 1;
+      let consecutiveMaxAtLevel = 0;
+      let consecutiveLowAtLevel = 0;
+      let firstLegendIdx = -1;
+      const scoresUpToFirstLegend: number[] = [];
+
+      const level5Attempts: Array<{ timestamp: number; dateStr: string }> = [];
+      const allTransitions: Array<{
+        fromLevel: number;
+        toLevel: number;
+        timestamp: number;
+        attemptsCount: number;
+        dateStr: string;
+      }> = [];
+      let lastLevelChangeIdx = -1;
+
+      const coronations: Array<{
+        coronationIdx: number;
+        promoTimestamp: number;
+        fromLevel: number;
+        avgScoreAtCoronation: number;
+        totalAttemptsAtCoronation: number;
+        overallAvgDurationPerAttempt: number;
+        overallAvgDurationPerQuestion: number;
+        dateStr: string;
+        transitions: Array<{
+          fromLevel: number;
+          toLevel: number;
+          timestamp: number;
+          attemptsCount: number;
+          dateStr: string;
+        }>;
+      }> = [];
+
+      chronological.forEach((res, idx) => {
+        const score = res.score;
+        if (firstLegendIdx === -1) {
+          scoresUpToFirstLegend.push(score);
+        }
+
+        const previousLevel = currentLevel;
+
+        // Apply Level Rules
+        if (currentLevel === 1) {
+          if (score === 30) consecutiveMaxAtLevel++; else consecutiveMaxAtLevel = 0;
+          const reqConsecutive = parseRequiredConsecutive(0, 10);
+          if (consecutiveMaxAtLevel >= reqConsecutive) {
+            currentLevel = 2; consecutiveMaxAtLevel = 0; consecutiveLowAtLevel = 0;
+          }
+        } else if (currentLevel === 2) {
+          if (score === 30) consecutiveMaxAtLevel++; else consecutiveMaxAtLevel = 0;
+          const demotionMin = parseDemotionThreshold(1, 20);
+          if (score < demotionMin) consecutiveLowAtLevel++;
+          const reqConsecutive = parseRequiredConsecutive(1, 10);
+          if (consecutiveMaxAtLevel >= reqConsecutive) {
+            currentLevel = 3; consecutiveMaxAtLevel = 0; consecutiveLowAtLevel = 0;
+          } else if (consecutiveLowAtLevel >= 2) {
+            currentLevel = 1; consecutiveMaxAtLevel = 0; consecutiveLowAtLevel = 0;
+          }
+        } else if (currentLevel === 3) {
+          if (score === 30) consecutiveMaxAtLevel++; else consecutiveMaxAtLevel = 0;
+          const demotionMin = parseDemotionThreshold(2, 26);
+          if (score < demotionMin) consecutiveLowAtLevel++;
+          const reqConsecutive = parseRequiredConsecutive(2, 10);
+          if (consecutiveMaxAtLevel >= reqConsecutive) {
+            currentLevel = 4; consecutiveMaxAtLevel = 0; consecutiveLowAtLevel = 0;
+          } else if (consecutiveLowAtLevel >= 2) {
+            currentLevel = 2; consecutiveMaxAtLevel = 0; consecutiveLowAtLevel = 0;
+          }
+        } else if (currentLevel === 4) {
+          if (score === 30) consecutiveMaxAtLevel++; else consecutiveMaxAtLevel = 0;
+          const demotionMin = parseDemotionThreshold(3, 27);
+          if (score < demotionMin) consecutiveLowAtLevel++;
+          const reqConsecutive = parseRequiredConsecutive(3, 10);
+          if (consecutiveMaxAtLevel >= reqConsecutive) {
+            currentLevel = 5; consecutiveMaxAtLevel = 0; consecutiveLowAtLevel = 0;
+          } else if (consecutiveLowAtLevel >= 2) {
+            currentLevel = 3; consecutiveMaxAtLevel = 0; consecutiveLowAtLevel = 0;
+          }
+        } else if (currentLevel === 5) {
+          if (score === 30) consecutiveMaxAtLevel++; else consecutiveMaxAtLevel = 0;
+          const demotionMin = parseDemotionThreshold(4, 28);
+          if (score < demotionMin) consecutiveLowAtLevel++;
+          if (consecutiveLowAtLevel >= 2) {
+            currentLevel = 4; consecutiveMaxAtLevel = 0; consecutiveLowAtLevel = 0;
+          }
+        }
+
+        if (currentLevel === 5) {
+          if (firstLegendIdx === -1) {
+            firstLegendIdx = idx;
+          }
+          const d = new Date(res.timestamp);
+          const dateStr = d.toISOString().split('T')[0];
+          level5Attempts.push({ timestamp: res.timestamp, dateStr });
+        }
+
+        // Record any level transition
+        if (previousLevel !== currentLevel) {
+          const attemptsCount = idx - lastLevelChangeIdx;
+          allTransitions.push({
+            fromLevel: previousLevel,
+            toLevel: currentLevel,
+            timestamp: res.timestamp,
+            attemptsCount,
+            dateStr: formatPromoDate(res.timestamp)
+          });
+          lastLevelChangeIdx = idx;
+        }
+
+        // Detect coronations (transition from any level < 5 up to 5)
+        if (previousLevel < 5 && currentLevel === 5) {
+          const coronationIdx = idx;
+          const promoTimestamp = res.timestamp;
+          const fromLevel = previousLevel;
+
+          const coronationAttempts = chronological.slice(0, coronationIdx + 1);
+          const totalAtCoronation = coronationAttempts.length;
+          const totalDur = coronationAttempts.reduce((sum, r) => sum + (r.duration || 0), 0);
+          const totalSc = coronationAttempts.reduce((sum, r) => sum + r.score, 0);
+          const totalQs = coronationAttempts.reduce((sum, r) => sum + (r.totalQuestions || 3), 0);
+
+          const avgScore = totalAtCoronation > 0
+            ? parseFloat((totalSc / totalAtCoronation).toFixed(1))
+            : 0;
+
+          const durationPerAttempt = totalAtCoronation > 0
+            ? parseFloat((totalDur / totalAtCoronation).toFixed(1))
+            : 0;
+
+          const durationPerQuestion = totalQs > 0
+            ? parseFloat((totalDur / totalQs).toFixed(1))
+            : 0;
+
+          const d = new Date(promoTimestamp);
+          const dateStr = d.toISOString().split('T')[0];
+
+          // Compute transitions leading into this coronation
+          const prevCoronationCount = coronations.reduce((sum, c) => sum + c.transitions.length, 0);
+          const currentCoronationTransitions = allTransitions.slice(prevCoronationCount);
+
+          coronations.push({
+            coronationIdx,
+            promoTimestamp,
+            fromLevel,
+            avgScoreAtCoronation: avgScore,
+            totalAttemptsAtCoronation: totalAtCoronation,
+            overallAvgDurationPerAttempt: durationPerAttempt,
+            overallAvgDurationPerQuestion: durationPerQuestion,
+            dateStr,
+            transitions: currentCoronationTransitions
+          });
+        }
+      });
+
+      if (firstLegendIdx !== -1) {
+        const lastResult = chronological[chronological.length - 1];
+        const lastPromoTimestamp = lastResult.timestamp;
+
+        // Fallback coronation if somehow coronations list is empty
+        if (coronations.length === 0) {
+          const coronationAttempts = chronological.slice(0, firstLegendIdx + 1);
+          const totalAtCoronation = coronationAttempts.length;
+          const totalDur = coronationAttempts.reduce((sum, r) => sum + (r.duration || 0), 0);
+          const totalSc = coronationAttempts.reduce((sum, r) => sum + r.score, 0);
+          const totalQs = coronationAttempts.reduce((sum, r) => sum + (r.totalQuestions || 3), 0);
+
+          const avgScore = totalAtCoronation > 0
+            ? parseFloat((totalSc / totalAtCoronation).toFixed(1))
+            : 0;
+
+          const durationPerAttempt = totalAtCoronation > 0
+            ? parseFloat((totalDur / totalAtCoronation).toFixed(1))
+            : 0;
+
+          const durationPerQuestion = totalQs > 0
+            ? parseFloat((totalDur / totalQs).toFixed(1))
+            : 0;
+
+          const d = new Date(chronological[firstLegendIdx].timestamp);
+          const dateStr = d.toISOString().split('T')[0];
+
+          let fallbackTransitions = [...allTransitions];
+          if (fallbackTransitions.length === 0) {
+            const countPerLevel = Math.max(1, Math.floor(totalAtCoronation / 4));
+            fallbackTransitions = [
+              { fromLevel: 1, toLevel: 2, timestamp: lastPromoTimestamp - 3 * 86400000, attemptsCount: countPerLevel, dateStr: formatPromoDate(lastPromoTimestamp - 3 * 86400000) },
+              { fromLevel: 2, toLevel: 3, timestamp: lastPromoTimestamp - 2 * 86400000, attemptsCount: countPerLevel, dateStr: formatPromoDate(lastPromoTimestamp - 2 * 86400000) },
+              { fromLevel: 3, toLevel: 4, timestamp: lastPromoTimestamp - 1 * 86400000, attemptsCount: countPerLevel, dateStr: formatPromoDate(lastPromoTimestamp - 1 * 86400000) },
+              { fromLevel: 4, toLevel: 5, timestamp: lastPromoTimestamp, attemptsCount: totalAtCoronation - 3 * countPerLevel, dateStr: formatPromoDate(lastPromoTimestamp) }
+            ];
+          }
+
+          coronations.push({
+            coronationIdx: firstLegendIdx,
+            promoTimestamp: chronological[firstLegendIdx].timestamp,
+            fromLevel: 4,
+            avgScoreAtCoronation: avgScore,
+            totalAttemptsAtCoronation: totalAtCoronation,
+            overallAvgDurationPerAttempt: durationPerAttempt,
+            overallAvgDurationPerQuestion: durationPerQuestion,
+            dateStr,
+            transitions: fallbackTransitions
+          });
+        }
+
+        const isLNT = lastResult.userId === 'admin_lenhattruong' || normalizeName(lastResult.userName) === 'LÊ NHẬT TRƯỜNG';
+        
+        const totalAttempts = chronological.length;
+        const totalDuration = chronological.reduce((sum, r) => sum + (r.duration || 0), 0);
+        const totalScore = chronological.reduce((sum, r) => sum + r.score, 0);
+        const totalQuestions = chronological.reduce((sum, r) => sum + (r.totalQuestions || 3), 0);
+
+        const avgScoreAtFirstLegend = scoresUpToFirstLegend.length > 0 
+          ? parseFloat((scoresUpToFirstLegend.reduce((sum, s) => sum + s, 0) / scoresUpToFirstLegend.length).toFixed(1)) 
+          : 0;
+
+        const overallAvgDurationPerAttempt = totalAttempts > 0 
+          ? parseFloat((totalDuration / totalAttempts).toFixed(1)) 
+          : 0;
+
+        const overallAvgDurationPerQuestion = totalQuestions > 0 
+          ? parseFloat((totalDuration / totalQuestions).toFixed(1)) 
+          : 0;
+
+        const uniqueDaysMaintaining = Array.from(new Set(level5Attempts.map(att => att.dateStr))).length;
+
+        const rName = lastResult.userName || 'THÀNH VIÊN ẨN DANH';
+        const normName = normalizeName(rName);
+
+        const existingIdx = legendsList.findIndex(l => normalizeName(l.userName) === normName);
+
+        const newItem = {
+          userId: lastResult.userId || lastResult.userName,
+          userName: rName,
+          dept: isLNT ? 'Phòng Quản Lý Chất Lượng (QLCL)' : (lastResult.department || 'Hội sở'),
+          branch: lastResult.branch || 'Hội sở',
+          avgScoreAtFirstLegend: coronations[coronations.length - 1].avgScoreAtCoronation,
+          overallAvgDurationPerAttempt: coronations[coronations.length - 1].overallAvgDurationPerAttempt,
+          overallAvgDurationPerQuestion: coronations[coronations.length - 1].overallAvgDurationPerQuestion,
+          level5Attempts,
+          coronations,
+          totalAttempts,
+          totalScore,
+          totalDuration,
+          totalQuestions,
+          promoTimestamp: coronations[coronations.length - 1].promoTimestamp,
+          daysMaintaining: uniqueDaysMaintaining,
+          currentLevel: currentLevel
+        };
+
+        if (existingIdx !== -1) {
+          const existing = legendsList[existingIdx];
+          legendsList[existingIdx] = {
+            ...newItem,
+            currentLevel: newItem.currentLevel,
+            promoTimestamp: newItem.promoTimestamp || existing.promoTimestamp,
+            daysMaintaining: Math.max(newItem.daysMaintaining || 1, existing.daysMaintaining || 1),
+            coronations: newItem.coronations.length > 0 ? newItem.coronations : existing.coronations
+          };
+        } else {
+          legendsList.push(newItem);
+        }
+      }
+    });
+
+    return legendsList;
+  }, [results, levelRules]);
+
+  // Compute stats for current active periods of legend monument
+  const legendMonumentToday = useMemo(() => {
+    const now = new Date();
+    const startOfTodayMs = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    
+    return legendMonumentData.filter(l => 
+      l.level5Attempts.some(att => att.timestamp >= startOfTodayMs)
+    ).map(l => {
+      const activeAttempts = l.level5Attempts.filter(att => att.timestamp >= startOfTodayMs);
+      const uniqueDays = Array.from(new Set(activeAttempts.map(att => att.dateStr))).length;
+      return { ...l, daysMaintaining: uniqueDays };
+    }).sort((a, b) => b.totalAttempts - a.totalAttempts || b.userName.localeCompare(a.userName));
+  }, [legendMonumentData]);
+
+  const legendMonumentWeek = useMemo(() => {
+    const now = new Date();
+    const startOfWeekMs = now.getTime() - 7 * 24 * 60 * 60 * 1000;
+    
+    return legendMonumentData.filter(l => 
+      l.level5Attempts.some(att => att.timestamp >= startOfWeekMs)
+    ).map(l => {
+      const activeAttempts = l.level5Attempts.filter(att => att.timestamp >= startOfWeekMs);
+      const uniqueDays = Array.from(new Set(activeAttempts.map(att => att.dateStr))).length;
+      return { ...l, daysMaintaining: uniqueDays };
+    }).sort((a, b) => b.daysMaintaining - a.daysMaintaining || b.totalAttempts - a.totalAttempts);
+  }, [legendMonumentData]);
+
+  const legendMonumentMonth = useMemo(() => {
+    const now = new Date();
+    const startOfMonthMs = now.getTime() - 30 * 24 * 60 * 60 * 1000;
+    
+    return legendMonumentData.filter(l => 
+      l.level5Attempts.some(att => att.timestamp >= startOfMonthMs)
+    ).map(l => {
+      const activeAttempts = l.level5Attempts.filter(att => att.timestamp >= startOfMonthMs);
+      const uniqueDays = Array.from(new Set(activeAttempts.map(att => att.dateStr))).length;
+      return { ...l, daysMaintaining: uniqueDays };
+    }).sort((a, b) => b.daysMaintaining - a.daysMaintaining || b.totalAttempts - a.totalAttempts);
+  }, [legendMonumentData]);
+
+  // Combined selector helper for active records and display list
+  const activeMonumentLegends = useMemo(() => {
+    if (monumentPeriod === 'day') return legendMonumentToday;
+    if (monumentPeriod === 'week') return legendMonumentWeek;
+    return legendMonumentMonth;
+  }, [monumentPeriod, legendMonumentToday, legendMonumentWeek, legendMonumentMonth]);
+
+  // Search and filter list of all legends
+  const filteredMonumentLegends = useMemo(() => {
+    let sortedLegends = [...legendMonumentData];
+    // Sort by promoTimestamp ascending as a base ranking (earliest achieved Level 5 first)
+    sortedLegends.sort((a, b) => {
+      const aTime = a.promoTimestamp || Infinity;
+      const bTime = b.promoTimestamp || Infinity;
+      if (aTime !== bTime) {
+        return aTime - bTime;
+      }
+      return a.totalAttempts - b.totalAttempts;
+    });
+    
+    const q = monumentSearch.toLowerCase().trim();
+    if (!q) return sortedLegends;
+    return sortedLegends.filter(l => 
+      l.userName.toLowerCase().includes(q) || 
+      (l.dept && l.dept.toLowerCase().includes(q)) || 
+      (l.branch && l.branch.toLowerCase().includes(q))
+    );
+  }, [legendMonumentData, monumentSearch]);
+
+  // Compute Records
+  const monumentRecords = useMemo(() => {
+    if (activeMonumentLegends.length === 0) return { persistence: null, highestScore: null, fastest: null };
+
+    // 1. Duy trì phong độ bền bỉ nhất (max daysMaintaining, if tied, max total attempts)
+    const persistence = [...activeMonumentLegends].sort((a, b) => 
+      b.daysMaintaining - a.daysMaintaining || b.totalAttempts - a.totalAttempts
+    )[0];
+
+    // 2. Điểm trung bình khi đạt mốc Huyền thoại đầu tiên cao nhất
+    const highestScore = [...activeMonumentLegends].sort((a, b) => 
+      b.avgScoreAtFirstLegend - a.avgScoreAtFirstLegend || b.totalScore - a.totalScore
+    )[0];
+
+    // 3. Thời gian trả lời nhanh nhất (lowest overallAvgDurationPerQuestion)
+    const fastest = [...activeMonumentLegends]
+      .filter(l => l.overallAvgDurationPerQuestion > 0)
+      .sort((a, b) => a.overallAvgDurationPerQuestion - b.overallAvgDurationPerQuestion)[0];
+
+    return { persistence, highestScore, fastest };
+  }, [activeMonumentLegends]);
 
   // Helper to get daily averages from results list
   interface DailyAverage {
@@ -1109,37 +1985,528 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
       scorecardPersonnelRaw.push({
         id: r.userId || r.userName,
         name: r.userName,
-        employeeId: 'Lưu trữ',
-        department: r.department || 'Bộ phận khác',
+        employeeId: 'Lưu trữ / Khách',
+        department: r.department || 'Chưa xếp bộ phận / Khách',
         branch: r.branch || 'Hội sở'
       });
     }
   });
 
-  // Filter scorecard personnel based on state selectors
-  const filteredScorecardPersonnel = scorecardPersonnelRaw.filter(p => {
-    if (scorecardBranchFilter && p.branch !== scorecardBranchFilter) {
-      return false;
-    }
-    if (scorecardDeptFilter) {
-      const isMatch = normalizeDept(p.department) === normalizeDept(scorecardDeptFilter);
-      if (!isMatch) {
-        return false;
+  const scorecardPersonnel = useMemo(() => {
+    return scorecardPersonnelRaw.sort((a, b) => {
+      const deptComp = a.department.localeCompare(b.department);
+      if (deptComp !== 0) return deptComp;
+      return a.name.localeCompare(b.name);
+    });
+  }, [scorecardPersonnelRaw]);
+
+  const filteredScorecardPersonnel = useMemo(() => {
+    return scorecardPersonnel.filter(p => {
+      if (scorecardBranchFilter && p.branch !== scorecardBranchFilter) return false;
+      if (scorecardDeptFilter && p.department !== scorecardDeptFilter) return false;
+      if (scorecardSearchQuery) {
+        const query = scorecardSearchQuery.trim().toLowerCase();
+        return (
+          p.name.toLowerCase().includes(query) ||
+          p.employeeId.toLowerCase().includes(query) ||
+          p.department.toLowerCase().includes(query) ||
+          p.branch.toLowerCase().includes(query)
+        );
+      }
+      return true;
+    });
+  }, [scorecardPersonnel, scorecardBranchFilter, scorecardDeptFilter, scorecardSearchQuery]);
+
+  const records3T = useMemo(() => {
+    const lNormalizeName = (name: string | undefined | null): string => {
+      if (!name) return '';
+      return name.trim().toUpperCase().replace(/\s+/g, ' ');
+    };
+
+    const nameToUserIdMap: Record<string, string> = {};
+    const userIdToNameMap: Record<string, string> = {};
+
+    results.forEach(res => {
+      const normName = lNormalizeName(res.userName);
+      if (res.userId && normName) {
+        nameToUserIdMap[normName] = res.userId;
+        userIdToNameMap[res.userId] = normName;
+      }
+    });
+
+    // Historic groups (all-time)
+    const historicGroups: Record<string, QuizResult[]> = {};
+    results.forEach(res => {
+      const normName = lNormalizeName(res.userName);
+      const resolvedUserId = res.userId || nameToUserIdMap[normName] || '';
+      const resolvedNormalizedName = normName || (res.userId ? userIdToNameMap[res.userId] : '') || '';
+      const personKey = resolvedUserId || resolvedNormalizedName || 'anonymous';
+      if (personKey === 'anonymous') return;
+
+      if (!historicGroups[personKey]) {
+        historicGroups[personKey] = [];
+      }
+      historicGroups[personKey].push(res);
+    });
+
+
+    const activeRules = levelRules || DEFAULT_LEVEL_RULES;
+
+    const parseRequiredConsecutive = (lvlIdx: number, defaultVal: number = 10): number => {
+      const promotionText = activeRules.levels[lvlIdx]?.promotion;
+      if (!promotionText) return defaultVal;
+      const match = promotionText.match(/liên\s+tục\s+(\d+)\s+lượt/i) || 
+                    promotionText.match(/(\d+)\s+lượt\s+liên\s+tục/i) || 
+                    promotionText.match(/(\d+)\s+lượt/i);
+      return match ? parseInt(match[1], 10) : defaultVal;
+    };
+
+    const parseDemotionThreshold = (lvlIdx: number, defaultVal: number): number => {
+      const demotionText = activeRules.levels[lvlIdx]?.demotion;
+      if (!demotionText) return defaultVal;
+      const match = demotionText.match(/dưới\s+(\d+)\s+điểm/i) || 
+                    demotionText.match(/dưới\s+(\d+)/i) || 
+                    demotionText.match(/<\s*(\d+)/i);
+      return match ? parseInt(match[1], 10) : defaultVal;
+    };
+
+    // Record holders baseline standards (Yardstick)
+    const showBaseline = true;
+
+    const BASELINE_RECORDS = {
+      quyettam: showBaseline ? {
+        name: 'TRAN PHUOC TRUNG',
+        dept: 'Phòng Kỹ Thuật',
+        branch: 'Chi Nhánh Long An (TPP-LAN)',
+        date: '12/06/2026',
+        attemptsCount: 381,
+        proofText: 'Chinh phục số lượt ôn luyện bền bỉ cao nhất hệ thống: 381 lượt.'
+      } : null,
+      tritue: showBaseline ? {
+        name: 'TRẦN VĂN TIÊN',
+        dept: 'Phòng Tài chính Kế toán',
+        branch: 'Văn Phòng Công Ty (TPP-CTY)',
+        date: '11/06/2026',
+        perfectsCount: 185,
+        proofText: 'Chinh phục điểm số tuyệt đối 30/30 cao nhất hệ thống: 185 lượt.'
+      } : null,
+      tocdo: showBaseline ? {
+        name: 'QUÁCH THUÝ VÂN',
+        dept: 'Ban Quản đốc',
+        branch: 'Chi Nhánh Bắc Ninh (TPP-BNI)',
+        date: '12/06/2026',
+        durationPerQ: 3.8,
+        proofText: 'Phản xạ phán đoán siêu hạng với thời gian trả lời trung bình chỉ 3.8 giây/câu.'
+      } : null,
+      thantoc: showBaseline ? {
+        name: 'PHAN THỊ NHÀN',
+        dept: 'Phòng Kế hoạch sản xuất',
+        branch: 'Chi Nhánh Bắc Ninh (TPP-BNI)',
+        date: '09/06/2026',
+        maxLevelReached: 5,
+        attemptsCountToMaxLevel: 48,
+        proofText: 'Đạt Cấp 5 - Huyền Thoại chỉ sau 48 lượt ôn luyện!'
+      } : null,
+      batbai: showBaseline ? {
+        name: 'HA HUU QUYNH',
+        dept: 'Phòng Kỹ Thuật',
+        branch: 'Chi Nhánh Bắc Ninh (TPP-BNI)',
+        date: '09/06/2026',
+        streak: 45,
+        proofText: 'Thiết lập chuỗi 45 lượt liên tục đạt điểm số tối đa 30/30 và không hề nếm mùi thất bại.'
+      } : null,
+      binhminh: showBaseline ? {
+        name: 'PHẠM VĂN ĐEN',
+        dept: 'Phân xưởng 2',
+        branch: 'Chi Nhánh Long An (TPP-LAN)',
+        date: '14/06/26',
+        timeString: '01:24',
+        proofText: 'Chủ động ôn luyện từ sáng tinh sương lúc 01:24 ngày 14/06/2026.'
+      } : null
+    };
+
+    let bestQuyetTamUser: any = BASELINE_RECORDS.quyettam;
+    let maxAttempts = BASELINE_RECORDS.quyettam ? BASELINE_RECORDS.quyettam.attemptsCount : 0;
+
+    let bestTriTueUser: any = BASELINE_RECORDS.tritue;
+    let maxPerfects = BASELINE_RECORDS.tritue ? BASELINE_RECORDS.tritue.perfectsCount : 0;
+
+    let bestTocDoUser: any = BASELINE_RECORDS.tocdo;
+    let minSpeedPerQ = BASELINE_RECORDS.tocdo ? BASELINE_RECORDS.tocdo.durationPerQ : 999.0;
+
+    let bestThanTocUser: any = BASELINE_RECORDS.thantoc;
+    let minThanTocDuration = BASELINE_RECORDS.thantoc ? BASELINE_RECORDS.thantoc.attemptsCountToMaxLevel : 999;
+
+    let bestBatBaiUser: any = BASELINE_RECORDS.batbai;
+    let maxBatBaiStreak = BASELINE_RECORDS.batbai ? BASELINE_RECORDS.batbai.streak : 0;
+
+    let bestBinhMinhUser: any = BASELINE_RECORDS.binhminh;
+    let minSunriseMins = BASELINE_RECORDS.binhminh ? (parseInt(BASELINE_RECORDS.binhminh.timeString.split(':')[0]) * 60 + parseInt(BASELINE_RECORDS.binhminh.timeString.split(':')[1])) : 600; // 10:00 -> 10 * 60 = 600 minutes
+
+    // 4. Kỷ lục Thăng Cấp Thần Tốc (Calculated on historic groups)
+    const thanTocCandidates: Array<{
+      userProfile: {
+        name: string;
+        dept: string;
+        branch: string;
+        date: string;
+      };
+      maxLevelReached: number;
+      attemptsCountToMaxLevel: number;
+      maxLevelReachedTimestamp?: number;
+    }> = [];
+
+    Object.entries(historicGroups).forEach(([personKey, userResultsList]) => {
+      const chronological = [...userResultsList].sort((a, b) => a.timestamp - b.timestamp);
+      const latestRes = chronological[chronological.length - 1] || userResultsList[0];
+      const isLNT = personKey === 'admin_lenhattruong' || lNormalizeName(latestRes.userName) === 'LÊ NHẬT TRƯỜNG';
+      const userProfile = {
+        name: latestRes.userName || 'THÀNH VIÊN ẨN DANH',
+        dept: isLNT ? 'Phòng Quản Lý Chất Lượng (QLCL)' : (latestRes.department || 'Hội sở'),
+        branch: latestRes.branch || 'Hội sở',
+        date: latestRes.date || ''
+      };
+
+      let currentLevel = 1;
+      let consecMax = 0;
+      let consecLow = 0;
+      let maxLevelReached = 1;
+      let attemptsCountToMaxLevel = chronological.length > 0 ? 1 : 0;
+      let maxLevelReachedDate = '';
+      let maxLevelReachedTimestamp = 0;
+
+      for (let i = 0; i < chronological.length; i++) {
+        const res = chronological[i];
+        const score = res.score;
+        if (currentLevel === 1) {
+          if (score === 30) consecMax++; else consecMax = 0;
+          const req = parseRequiredConsecutive(0, 10);
+          if (consecMax >= req) { currentLevel = 2; consecMax = 0; consecLow = 0; }
+        } else if (currentLevel === 2) {
+          if (score === 30) consecMax++; else consecMax = 0;
+          const demotionMin = parseDemotionThreshold(1, 20);
+          if (score < demotionMin) consecLow++;
+          const req = parseRequiredConsecutive(1, 10);
+          if (consecMax >= req) { currentLevel = 3; consecMax = 0; consecLow = 0; }
+          else if (consecLow >= 2) { currentLevel = 1; consecMax = 0; consecLow = 0; }
+        } else if (currentLevel === 3) {
+          if (score === 30) consecMax++; else consecMax = 0;
+          const demotionMin = parseDemotionThreshold(2, 26);
+          if (score < demotionMin) consecLow++;
+          const req = parseRequiredConsecutive(2, 10);
+          if (consecMax >= req) { currentLevel = 4; consecMax = 0; consecLow = 0; }
+          else if (consecLow >= 2) { currentLevel = 2; consecMax = 0; consecLow = 0; }
+        } else if (currentLevel === 4) {
+          if (score === 30) consecMax++; else consecMax = 0;
+          const demotionMin = parseDemotionThreshold(3, 27);
+          if (score < demotionMin) consecLow++;
+          const req = parseRequiredConsecutive(3, 10);
+          if (consecMax >= req) { currentLevel = 5; consecMax = 0; consecLow = 0; }
+          else if (consecLow >= 2) { currentLevel = 3; consecMax = 0; consecLow = 0; }
+        } else if (currentLevel === 5) {
+          if (score === 30) consecMax++; else consecMax = 0;
+          const demotionMin = parseDemotionThreshold(4, 28);
+          if (score < demotionMin) consecLow++;
+          if (consecLow >= 2) { currentLevel = 4; consecMax = 0; consecLow = 0; }
+        }
+
+        if (currentLevel > maxLevelReached) {
+          maxLevelReached = currentLevel;
+          attemptsCountToMaxLevel = i + 1;
+          maxLevelReachedDate = res.date || '';
+          maxLevelReachedTimestamp = res.timestamp;
+        }
+      }
+
+      if (chronological.length > 0) {
+        thanTocCandidates.push({
+          userProfile: {
+            ...userProfile,
+            date: maxLevelReachedDate || userProfile.date
+          },
+          maxLevelReached,
+          attemptsCountToMaxLevel,
+          maxLevelReachedTimestamp
+        });
+      }
+    });
+
+    const thanTocEligible = thanTocCandidates.filter(c => c.maxLevelReached === 5);
+
+    if (thanTocEligible.length > 0) {
+      thanTocEligible.sort((a, b) => a.attemptsCountToMaxLevel - b.attemptsCountToMaxLevel);
+
+      const best = thanTocEligible[0];
+      if (best.attemptsCountToMaxLevel < minThanTocDuration) {
+        minThanTocDuration = best.attemptsCountToMaxLevel;
+        bestThanTocUser = {
+          ...best.userProfile,
+          maxLevelReached: 5,
+          attemptsCountToMaxLevel: best.attemptsCountToMaxLevel,
+          proofText: `Đạt Cấp 5 - Huyền Thoại chỉ sau ${best.attemptsCountToMaxLevel} lượt ôn luyện!`
+        };
+      } else if (best.attemptsCountToMaxLevel === minThanTocDuration && lNormalizeName(best.userProfile.name) !== lNormalizeName(bestThanTocUser.name)) {
+        bestThanTocUser = {
+          ...best.userProfile,
+          maxLevelReached: 5,
+          attemptsCountToMaxLevel: best.attemptsCountToMaxLevel,
+          proofText: `Đạt Cấp 5 - Huyền Thoại chỉ sau ${best.attemptsCountToMaxLevel} lượt ôn luyện!`
+        };
       }
     }
-    if (scorecardSearchQuery) {
-      const q = scorecardSearchQuery.toLowerCase().trim();
-      return p.name.toLowerCase().includes(q) || 
-             p.employeeId.toLowerCase().includes(q) ||
-             p.department.toLowerCase().includes(q) ||
-             p.branch.toLowerCase().includes(q);
-    }
-    return true;
-  }).sort((a, b) => {
-    const deptComp = a.department.localeCompare(b.department);
-    if (deptComp !== 0) return deptComp;
-    return a.name.localeCompare(b.name);
-  });
+
+    // All-time specific calculations
+    Object.entries(historicGroups).forEach(([personKey, userResultsList]) => {
+      const chronological = [...userResultsList].sort((a, b) => a.timestamp - b.timestamp);
+      const latestRes = chronological[chronological.length - 1] || userResultsList[0];
+      const isLNT = personKey === 'admin_lenhattruong' || lNormalizeName(latestRes.userName) === 'LÊ NHẬT TRƯỜNG';
+      const userProfile = {
+        name: latestRes.userName || 'THÀNH VIÊN ẨN DANH',
+        dept: isLNT ? 'Phòng Quản Lý Chất Lượng (QLCL)' : (latestRes.department || 'Hội sở'),
+        branch: latestRes.branch || 'Hội sở',
+        date: latestRes.date || ''
+      };
+
+      // 1. Quyết Tâm
+      const attemptsCount = chronological.length;
+      if (attemptsCount > maxAttempts) {
+        maxAttempts = attemptsCount;
+         bestQuyetTamUser = {
+           ...userProfile,
+           attemptsCount,
+           proofText: `Chinh phục số lượt ôn luyện bền bỉ cao nhất hệ thống: ${attemptsCount} lượt.`
+         };
+      } else if (attemptsCount === maxAttempts && lNormalizeName(userProfile.name) !== lNormalizeName(bestQuyetTamUser.name)) {
+         bestQuyetTamUser = {
+           ...userProfile,
+           attemptsCount,
+           proofText: `Chinh phục số lượt ôn luyện bền bỉ cao nhất hệ thống: ${attemptsCount} lượt.`
+         };
+      }
+
+      // 2. Trí Tuệ
+      const perfectsCount = chronological.filter(r => r.score === 30).length;
+      if (perfectsCount > maxPerfects) {
+        maxPerfects = perfectsCount;
+        const perfects = chronological.filter(r => r.score === 30);
+        const latestPerfect = perfects[perfects.length - 1] || latestRes;
+        bestTriTueUser = {
+          ...userProfile,
+          date: latestPerfect.date || userProfile.date,
+          perfectsCount,
+          proofText: `Chinh phục điểm số tuyệt đối 30/30 cao nhất hệ thống: ${perfectsCount} lượt.`
+        };
+      } else if (perfectsCount === maxPerfects && perfectsCount > 0 && lNormalizeName(userProfile.name) !== lNormalizeName(bestTriTueUser.name)) {
+        const perfects = chronological.filter(r => r.score === 30);
+        const latestPerfect = perfects[perfects.length - 1] || latestRes;
+        bestTriTueUser = {
+          ...userProfile,
+          date: latestPerfect.date || userProfile.date,
+          perfectsCount,
+          proofText: `Chinh phục điểm số tuyệt đối 30/30 cao nhất hệ thống: ${perfectsCount} lượt.`
+        };
+      }
+
+      // 3. Kỷ lục Tốc Độ
+      const totalQ = chronological.reduce((sum, r) => sum + (r.totalQuestions || 3), 0);
+      const totalD = chronological.reduce((sum, r) => sum + (r.duration || 0), 0);
+      if (totalQ > 0) {
+        const avgSpeed = totalD / totalQ;
+        const finalSpeed = parseFloat(avgSpeed.toFixed(1));
+        // Require at least 6 questions answered in total to prevent accidental lucky quick clicks
+        if (avgSpeed < minSpeedPerQ && totalQ >= 6) {
+          minSpeedPerQ = avgSpeed;
+          bestTocDoUser = {
+            ...userProfile,
+            durationPerQ: finalSpeed,
+            proofText: `Phản xạ phán đoán siêu hạng với thời gian trả lời trung bình chỉ ${finalSpeed} giây/câu.`
+          };
+        } else if (finalSpeed === parseFloat(minSpeedPerQ.toFixed(1)) && totalQ >= 6 && lNormalizeName(userProfile.name) !== lNormalizeName(bestTocDoUser.name)) {
+          bestTocDoUser = {
+            ...userProfile,
+            durationPerQ: finalSpeed,
+            proofText: `Phản xạ phán đoán siêu hạng với thời gian trả lời trung bình chỉ ${finalSpeed} giây/câu.`
+          };
+        }
+      }
+
+      // 5. Kỷ lục Bất Bại
+      let currentStreak = 0;
+      let userMaxStreak = 0;
+      let streakDate = '';
+      chronological.forEach(r => {
+        if (r.score === 30) {
+          currentStreak++;
+          if (currentStreak > userMaxStreak) {
+            userMaxStreak = currentStreak;
+            streakDate = r.date || '';
+          }
+        } else {
+          currentStreak = 0;
+        }
+      });
+
+      if (userMaxStreak > maxBatBaiStreak) {
+        maxBatBaiStreak = userMaxStreak;
+        bestBatBaiUser = {
+          ...userProfile,
+          date: streakDate || userProfile.date,
+          streak: userMaxStreak,
+          proofText: `Thiết lập chuỗi ${userMaxStreak} lượt liên tục đạt điểm số tối đa 30/30 và không hề nếm mùi thất bại.`
+        };
+      } else if (userMaxStreak === maxBatBaiStreak && userMaxStreak > 0 && lNormalizeName(userProfile.name) !== lNormalizeName(bestBatBaiUser.name)) {
+        bestBatBaiUser = {
+          ...userProfile,
+          date: streakDate || userProfile.date,
+          streak: userMaxStreak,
+          proofText: `Thiết lập chuỗi ${userMaxStreak} lượt liên tục đạt điểm số tối đa 30/30 và không hề nếm mùi thất bại.`
+        };
+      }
+
+      // 6. Kỷ lục Bình Minh (Early Morning Quiz 00:00 - 10:00)
+      chronological.forEach(r => {
+        if (r.score === 30) {
+          const d = new Date(r.timestamp);
+          const hours = d.getHours();
+          const mins = d.getMinutes();
+          if (hours >= 0 && hours < 10) {
+            const totalMins = hours * 60 + mins;
+            const timeString = `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
+            const rawDate = r.date || userProfile.date || '';
+            const ensureDDMMYY = (dateStr: string): string => {
+              if (!dateStr || !dateStr.includes('/')) return dateStr;
+              const parts = dateStr.trim().split('/');
+              if (parts.length === 3) {
+                const day = parts[0];
+                const month = parts[1];
+                let year = parts[2];
+                if (year.length === 4) {
+                  year = year.substring(2);
+                }
+                return `${day}/${month}/${year}`;
+              }
+              return dateStr;
+            };
+            const customDate = ensureDDMMYY(rawDate);
+            const fullYear = customDate.includes('/') 
+              ? (customDate.split('/')[2].length === 2 ? '20' + customDate.split('/')[2] : customDate.split('/')[2])
+              : '2026';
+            const dayPart = customDate.split('/')[0] || '14';
+            const monthPart = customDate.split('/')[1] || '06';
+            const proofDateStr = `${dayPart}/${monthPart}/${fullYear}`;
+
+            if (totalMins < minSunriseMins) {
+              minSunriseMins = totalMins;
+              bestBinhMinhUser = {
+                ...userProfile,
+                date: customDate,
+                timeString,
+                proofText: `Chủ động ôn luyện từ sáng tinh sương lúc ${timeString} ngày ${proofDateStr}.`
+              };
+            } else if (totalMins === minSunriseMins && lNormalizeName(userProfile.name) !== lNormalizeName(bestBinhMinhUser.name)) {
+              bestBinhMinhUser = {
+                ...userProfile,
+                date: customDate,
+                timeString,
+                proofText: `Chủ động ôn luyện từ sáng tinh sương lúc ${timeString} ngày ${proofDateStr}.`
+              };
+            }
+          }
+        }
+      });
+    });
+
+    const getTimestampFromDDMMYYYY = (dateStr?: string): number => {
+      if (!dateStr) return 0;
+      const parts = dateStr.trim().split('/');
+      if (parts.length === 3) {
+        const day = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10) - 1;
+        const year = parseInt(parts[2], 10);
+        return new Date(year, month, day, 0, 0, 0, 0).getTime();
+      }
+      return 0;
+    };
+
+    const finalRecords = {
+      quyettam: bestQuyetTamUser,
+      tritue: bestTriTueUser,
+      tocdo: bestTocDoUser,
+      thantoc: bestThanTocUser,
+      batbai: bestBatBaiUser,
+      binhminh: bestBinhMinhUser
+    };
+
+    return finalRecords;
+  }, [results, levelRules]);
+
+  const recordCategories = useMemo(() => {
+    const list = [
+      {
+        key: 'quyettam',
+        title: 'Kỷ lục Kiên Trì',
+        desc: 'Người làm nhiều lượt nhất',
+        calcMethod: 'Tổng số lượt ôn luyện và tự đánh giá (nộp bài thành công) tích lũy toàn thời gian từ trước đến nay của cá nhân.',
+        data: records3T.quyettam,
+        getMetric: (d: any) => d ? `${d.attemptsCount} lượt` : 'Chưa ghi nhận',
+        icon: <Clock className="h-3.5 w-3.5 text-gray-500" />
+      },
+      {
+        key: 'tritue',
+        title: 'Kỷ lục Trí Tuệ',
+        desc: 'Người có nhiều lượt 30/30 nhất',
+        calcMethod: 'Tổng số lượt làm bài đạt điểm tuyệt đối 30/30 tích lũy toàn thời gian (khác biệt với danh sách luyện tập hôm nay chỉ thống kê riêng trong ngày).',
+        data: records3T.tritue,
+        getMetric: (d: any) => d ? `${d.perfectsCount} lượt` : 'Chưa ghi nhận',
+        icon: <Trophy className="h-3.5 w-3.5 text-gray-500" />
+      },
+      {
+        key: 'tocdo',
+        title: 'Kỷ lục Tốc Độ',
+        desc: 'Thời gian trả lời trung bình/câu thấp nhất',
+        calcMethod: 'Thời gian phản xạ và trả lời trung bình mỗi câu hỏi cực ngắn, được ghi nhận trên một lượt đạt điểm tối đa 30/30.',
+        data: records3T.tocdo,
+        getMetric: (d: any) => d ? `${d.durationPerQ}s/câu` : 'Chưa ghi nhận',
+        icon: <Zap className="h-3.5 w-3.5 text-gray-500" />
+      },
+      {
+        key: 'thantoc',
+        title: 'Kỷ lục Thăng Cấp Thần Tốc',
+        desc: 'Số lượt đánh giá, ôn tập thấp nhất mà đạt được cấp độ cao nhất',
+        calcMethod: 'Tổng số lượt làm bài ít nhất được dùng để rèn luyện thăng tiến thành công từ vị trí Cấp 1 lên Cấp 5 (Huyền thoại).',
+        data: records3T.thantoc,
+        getMetric: (d: any) => d ? `${d.attemptsCountToMaxLevel} lượt` : 'Chưa ghi nhận',
+        icon: <TrendingUp className="h-3.5 w-3.5 text-gray-500" />
+      },
+      {
+        key: 'batbai',
+        title: 'Kỷ lục Bất Bại',
+        desc: 'Người có chuỗi thắng (streak) 30/30 dài nhất',
+        calcMethod: 'Số lượt đạt điểm tuyệt đối 30/30 liên tiếp dài nhất của một cá nhân mà không bị ngắt quãng bởi bất kỳ lượt điểm nào thấp hơn.',
+        data: records3T.batbai,
+        getMetric: (d: any) => d ? `${d.streak} chuỗi` : 'Chưa ghi nhận',
+        icon: <ShieldCheck className="h-3.5 w-3.5 text-gray-500" />
+      },
+      {
+        key: 'binhminh',
+        title: 'Kỷ lục Trước Bình Minh',
+        desc: 'Người làm Quiz 3T sớm nhất buổi sáng',
+        calcMethod: 'Khung giờ nộp bài đạt điểm tối đa 30/30 sớm nhất trong ngày, được hệ thống rà soát tự động trong khoảng từ 00:00 đến 10:00 sáng.',
+        data: records3T.binhminh,
+        getMetric: (d: any) => d ? d.timeString : 'Chưa ghi nhận',
+        icon: <Calendar className="h-3.5 w-3.5 text-gray-500" />
+      }
+    ];
+
+    if (!recordSearch.trim()) return list;
+    const query = recordSearch.trim().toLowerCase();
+    return list.filter(item => {
+      const matchTitle = item.title.toLowerCase().includes(query);
+      const matchName = item.data ? item.data.name.toLowerCase().includes(query) : false;
+      const matchDept = item.data ? item.data.dept.toLowerCase().includes(query) : false;
+      return matchTitle || matchName || matchDept;
+    });
+  }, [records3T, recordSearch]);
 
   return (
     <div className="space-y-6">
@@ -1147,7 +2514,7 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
           <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest"><span translate="no" className="notranslate">Hệ Thống Thống Kê & Giám Sát Real-Time</span></h3>
-          <p className="text-xs text-gray-400 mt-0.5"><span translate="no" className="notranslate">Giúp ban quản trị theo dõi tài nguyên dữ liệu Firebase và năng lực sảnh học tập của nhân sự.</span></p>
+          <p className="text-xs text-gray-405 mt-0.5"><span translate="no" className="notranslate">Giúp ban quản trị theo dõi tài nguyên dữ liệu Firebase và năng lực sảnh học tập của nhân sự.</span></p>
         </div>
         <div className="flex items-center gap-2">
           {onBackToHome && (
@@ -1167,6 +2534,469 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
             <RefreshCcw className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
             <span>{isRefreshing ? 'Đang cập nhật...' : 'Cập nhật thành tích'}</span>
           </button>
+        </div>
+      </div>
+
+      {/* 🏆 TỔ HỢP VINH DANH & KỶ LỤC */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <div className="bg-white border border-gray-150 rounded-xl shadow-3xs p-6 space-y-4 text-left flex flex-col justify-start">
+          <div className="space-y-4 flex-1 flex flex-col justify-start">
+            <div className="border-b border-gray-150 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
+              <div className="space-y-1">
+                <h4 className="font-sans font-extrabold text-base text-gray-900 uppercase tracking-widest flex items-center gap-2">
+                  <span>🏆 TƯỢNG ĐÀI HUYỀN THOẠI ({filteredMonumentLegends.length})</span>
+                </h4>
+                <p className="text-xs text-gray-405">Bảng vinh danh những nhân tài rèn luyện xuất chúng đạt cấp bậc Huyền Thoại.</p>
+              </div>
+
+              {/* Ô TÌM KIẾM CHÂN PHƯƠNG */}
+              <div className="relative">
+                <Search className="h-3.5 w-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Tìm kiếm Tên..."
+                  value={monumentSearch}
+                  onChange={(e) => setMonumentSearch(e.target.value)}
+                  className="w-28 focus:w-44 sm:w-32 focus:sm:w-48 pl-9 pr-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-semibold text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-300 focus:border-gray-300 font-sans transition-all duration-300"
+                />
+              </div>
+            </div>
+
+            {/* List of active players on Monument */}
+            <div className="overflow-y-auto space-y-1 pr-1 max-h-[380px] min-h-[180px] flex-1 mt-2">
+              {filteredMonumentLegends.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-center py-12 space-y-2 border border-dashed border-gray-200 rounded-xl bg-gray-50/50 flex-1">
+                  <span className="text-xs text-gray-400 font-bold font-sans">Không tìm thấy Huyền Thoại nào phù hợp.</span>
+                </div>
+              ) : (
+                <div className="space-y-1 px-0.5 font-sans">
+                  {/* Header của bảng */}
+                  <div className="grid grid-cols-12 gap-1 sm:gap-2 pb-2 mb-1 border-b border-gray-200 text-[10px] font-extrabold text-gray-400 uppercase tracking-wider font-sans px-2 sticky top-0 bg-white z-10">
+                    <div className="col-span-4">HỌ VÀ TÊN</div>
+                    <div className="col-span-3 text-center">Thăng Cấp</div>
+                    <div className="col-span-2 text-center">Vị Thế</div>
+                    <div className="col-span-3 text-right font-sans">Chỉ số</div>
+                  </div>
+
+                  {filteredMonumentLegends.map((userStats, idx) => {
+                    const isExpanded = expandedLegend === userStats.userId;
+                    const coronations = userStats.coronations || [];
+                    const activeCoronationIdx = selectedCoronation[userStats.userId] !== undefined
+                      ? selectedCoronation[userStats.userId]
+                      : coronations.length - 1; // Default to latest coronation
+                    
+                    const activeCoro = coronations[activeCoronationIdx] || coronations[coronations.length - 1] || coronations[0] || {
+                      fromLevel: 4,
+                      avgScoreAtCoronation: userStats.avgScoreAtFirstLegend,
+                      totalAttemptsAtCoronation: userStats.totalAttempts,
+                      overallAvgDurationPerAttempt: userStats.overallAvgDurationPerAttempt,
+                      overallAvgDurationPerQuestion: userStats.overallAvgDurationPerQuestion,
+                      promoTimestamp: userStats.promoTimestamp,
+                      dateStr: formatPromoDate(userStats.promoTimestamp)
+                    };
+
+                    const userLevel = userStats.currentLevel !== undefined ? userStats.currentLevel : 5;
+                    const isDemoted = userLevel < 5;
+
+                    return (
+                      <div key={userStats.userId + idx} className="border-b border-gray-100 last:border-none py-1">
+                        <div 
+                          onClick={() => setExpandedLegend(isExpanded ? null : userStats.userId)}
+                          className="grid grid-cols-12 gap-1 sm:gap-2 items-center py-1.5 px-2 hover:bg-gray-50 rounded-lg transition-all cursor-pointer select-none"
+                        >
+                          {/* Cột Tên kèm STT và bong bóng số thăng hạng */}
+                          <div className="col-span-4 flex items-center gap-1.5 min-w-0">
+                            <span className="text-amber-500 font-mono text-[11px] font-bold shrink-0 font-sans">
+                              {idx + 1}.
+                            </span>
+                            <div className="relative inline-flex items-center min-w-0 pr-4 shrink-0">
+                              <span className="font-extrabold text-[11px] sm:text-xs uppercase text-gray-800 tracking-wide font-sans truncate" title={userStats.userName}>
+                                {userStats.userName}
+                              </span>
+                              {/* Bong bóng số đếm thăng hạng nằm ở góc trái bên trên sát cuối tên */}
+                              <span 
+                                className={`absolute -top-1.5 right-0 translate-x-1.5 inline-flex items-center justify-center h-4 w-4 rounded-full ${
+                                  isDemoted 
+                                    ? "bg-gradient-to-tr from-gray-600 via-gray-500 to-slate-400" 
+                                    : "bg-gradient-to-tr from-emerald-600 via-emerald-500 to-green-400"
+                                } text-white font-sans text-[9px] font-extrabold border border-white shadow-sm shrink-0`}
+                                title={isDemoted ? `Đã bị hạ cấp xuống Cấp ${userLevel} (Đã từng thăng hạng Cấp 5: ${coronations.length} lần)` : `Đã đạt cấp 5: ${coronations.length} lần`}
+                              >
+                                {coronations.length || 1}
+                              </span>
+                            </div>
+                          </div>
+                          
+                          {/* Cột Ngày Thăng Cấp */}
+                          <div className="col-span-3 text-center text-[10px] sm:text-xs font-bold text-gray-650 font-mono">
+                            {formatPromoDate(userStats.promoTimestamp)}
+                          </div>
+                          
+                          {/* Cột Vị Thế */}
+                          <div className="col-span-2 text-center">
+                            {isDemoted ? (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold bg-slate-100 text-slate-500 border border-slate-200/60 whitespace-nowrap" title="Hạ cấp: Vị thế tạm dừng tính cho đến khi thăng cấp 5 trở lại">
+                                {userStats.daysMaintaining} ngày ⏸️
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-100/50 whitespace-nowrap">
+                                {userStats.daysMaintaining} ngày
+                              </span>
+                            )}
+                          </div>
+                          
+                          {/* Cột Các Chỉ Số Luyện Tập */}
+                          <div className="col-span-3 text-right">
+                            <div className="bg-[#FAF9F6] hover:bg-[#F3F2EE] border border-amber-200/50 px-1.5 sm:px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-mono text-amber-950 font-bold inline-block transition-colors shrink-0 whitespace-nowrap">
+                              <span>{userStats.avgScoreAtFirstLegend}</span>
+                              <span className="mx-0.5 text-amber-200">|</span>
+                              <span>{userStats.totalAttempts}L</span>
+                              <span className="mx-0.5 text-amber-200">|</span>
+                              <span>{Math.round(userStats.overallAvgDurationPerQuestion)}s</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Collapsible section xổ ra như một hộp thông tin cụ thể (chân phương) */}
+                        {isExpanded && (
+                          <motion.div 
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            className="my-1.5 mx-1 p-3 bg-white border border-gray-255 rounded-xl text-[11px] text-gray-700 space-y-2.5 shadow-3xs overflow-hidden"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 font-sans">
+                              {/* Bộ phận & Chi nhánh */}
+                              <div className="col-span-1 sm:col-span-2 flex items-center gap-1.5 text-left flex-wrap">
+                                <span className="text-gray-400 font-bold shrink-0">🏢 Bộ phận:</span>
+                                <span className="font-extrabold text-gray-800 leading-snug">{userStats.dept}</span>
+                              </div>
+                              <div className="col-span-1 sm:col-span-2 flex items-center gap-1.5 text-left flex-wrap">
+                                <span className="text-gray-400 font-bold shrink-0">📍 Chi nhánh:</span>
+                                <span className="font-extrabold text-gray-800 leading-snug">{userStats.branch}</span>
+                              </div>
+
+                              {/* Bộ chọn các lượt đăng quang/thăng cấp nếu thăng cấp nhiều hơn 1 lần */}
+                              {coronations.length > 1 && (
+                                <div className="col-span-1 sm:col-span-2 flex flex-col gap-1 border-t border-b border-gray-100 py-2 my-1">
+                                  <span className="text-amber-800 font-bold font-sans text-[10px] uppercase tracking-wider">Lịch sử thăng hạng ({coronations.length} lần đạt Legend):</span>
+                                  <div className="flex flex-wrap gap-1 mt-1">
+                                    {coronations.map((coro, cIdx) => (
+                                      <button
+                                        key={cIdx}
+                                        onClick={() => setSelectedCoronation(prev => ({ ...prev, [userStats.userId]: cIdx }))}
+                                        className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-all ${
+                                          activeCoronationIdx === cIdx
+                                            ? 'bg-amber-600 border-amber-600 text-white'
+                                            : 'bg-amber-50/40 border-amber-100 hover:bg-amber-100/20 text-amber-900'
+                                        }`}
+                                      >
+                                        Lần {cIdx + 1} ({formatPromoDate(coro.promoTimestamp)})
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Thống kê chi tiết & Lộ trình của lượt thăng cấp được chọn */}
+                              <div className="col-span-1 sm:col-span-2 bg-amber-50/35 border border-amber-100 p-2.5 rounded-lg flex flex-col gap-2 text-[11px] font-sans">
+                                <div className="flex items-center gap-1.5 border-b border-amber-100/50 pb-1.5">
+                                  <span className="text-amber-800 font-extrabold shrink-0">📈 Trình tự thăng hạng:</span>
+                                  <span className="font-extrabold text-amber-950">Từ Cấp {activeCoro.fromLevel || 4} lên Cấp 5 (Huyền Thoại)</span>
+                                </div>
+                                
+                                <div className="space-y-1.5 pl-1.5 border-l-2 border-amber-200">
+                                  {activeCoro.transitions && activeCoro.transitions.length > 0 ? (
+                                    activeCoro.transitions.map((t, tIdx) => {
+                                      const isPromotion = t.toLevel > t.fromLevel;
+                                      const styleClass = isPromotion ? 'text-emerald-800' : 'text-rose-800';
+                                      const directionWord = isPromotion ? 'lên' : 'xuống';
+                                      
+                                      return (
+                                        <div key={tIdx} className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[11px] leading-tight">
+                                          <div className="flex items-center gap-1">
+                                            <span className="text-[9px]">{isPromotion ? '🟢' : '🔴'}</span>
+                                            <span className={`font-semibold ${styleClass}`}>
+                                              Từ cấp {t.fromLevel} {directionWord} cấp {t.toLevel}
+                                            </span>
+                                          </div>
+                                          <div className="text-right text-amber-900/80 font-mono text-[10px] sm:pl-4">
+                                            <span>Ngày <strong className="font-semibold text-amber-950">{t.dateStr}</strong></span>
+                                            <span className="mx-1 text-amber-300">|</span>
+                                            <span className="italic">{t.attemptsCount} lượt</span>
+                                          </div>
+                                        </div>
+                                      );
+                                    })
+                                  ) : (
+                                    <div className="text-gray-400 italic text-[10px]">Chưa ghi nhận dữ liệu chi tiết của lần này.</div>
+                                  )}
+                                </div>
+
+                                <div className="flex items-center gap-1.5 border-t border-amber-100/50 pt-1.5 text-[10px] text-amber-800/80">
+                                  <span className="font-bold shrink-0">📆 Ngày Đăng Quang:</span>
+                                  <span className="font-extrabold text-amber-900 font-mono">{formatPromoDate(activeCoro.promoTimestamp)}</span>
+                                </div>
+                              </div>
+
+                              {/* 4 Chỉ tiêu thành tích của lần thăng cấp được chọn */}
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-gray-400 font-bold shrink-0">🎯 Điểm số trung bình:</span>
+                                <span className="font-extrabold text-gray-800 font-mono">{activeCoro.avgScoreAtCoronation} / 30</span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-gray-400 font-bold shrink-0">🔥 Tổng lượt ôn tập:</span>
+                                <span className="font-extrabold text-gray-800 font-mono">{activeCoro.totalAttemptsAtCoronation} lượt</span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-gray-400 font-bold shrink-0">⏱️ TB / lượt:</span>
+                                <span className="font-extrabold text-gray-800 font-mono">{activeCoro.overallAvgDurationPerAttempt}s</span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-gray-400 font-bold shrink-0">⚡ Phản xạ / câu:</span>
+                                <span className="font-extrabold text-gray-800 font-mono">{activeCoro.overallAvgDurationPerQuestion}s</span>
+                              </div>
+                            </div>
+                          </motion.div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* CỘT THỨ HẠNG 2: 🎯 KỶ LỤC 3T */}
+        <div className="bg-white border border-gray-150 rounded-xl shadow-3xs p-6 space-y-4 text-left flex flex-col justify-between">
+          <div className="space-y-4 flex-1 flex flex-col justify-between">
+            <div className="border-b border-gray-150 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
+              <div className="space-y-1">
+                <h4 className="font-sans font-extrabold text-base text-gray-900 uppercase tracking-widest flex items-center gap-2">
+                  <span>🎯 KỶ LỤC 3T ({recordCategories.length})</span>
+                </h4>
+                <p className="text-xs text-gray-405">Bảng vàng vinh danh kỷ lục toàn thời gian (lũy kế) & Thước đo rèn luyện đỉnh cao.</p>
+              </div>
+
+              {/* Ô TÌM KIẾM CHÂN PHƯƠNG */}
+              <div className="relative font-sans">
+                <Search className="h-3.5 w-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Tìm kiếm..."
+                  value={recordSearch}
+                  onChange={(e) => setRecordSearch(e.target.value)}
+                  className="w-28 focus:w-44 sm:w-32 focus:sm:w-48 pl-9 pr-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-semibold text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-300 focus:border-gray-300 transition-all duration-300 font-sans"
+                />
+              </div>
+            </div>
+
+            {/* Quy chế kỷ lục với Toggle Accordion để không chiếm diện tích */}
+            <div className="border border-amber-200/60 bg-amber-50/20 rounded-xl overflow-hidden shrink-0">
+              <button
+                onClick={() => setShowRule3T(!showRule3T)}
+                className="w-full flex items-center justify-between px-3 py-2 text-[11px] font-bold text-amber-900 hover:bg-amber-50/50 active:bg-amber-50/80 transition-colors cursor-pointer select-none"
+              >
+                <div className="flex items-center gap-1.5 font-extrabold uppercase tracking-wider text-amber-950">
+                  <span>📌 QUY CHẾ KỶ LỤC 3T</span>
+                </div>
+                <div className="flex items-center gap-1 text-gray-400">
+                  <span className="text-[9px] font-normal">{showRule3T ? 'Thu gọn' : 'Xem quy chế'}</span>
+                  <ChevronDown className={`h-3 w-3 transition-transform duration-250 ${showRule3T ? 'rotate-180' : ''}`} />
+                </div>
+              </button>
+              
+              {showRule3T && (
+                <div className="px-3 pb-2.5 pt-0.5 text-[11px] text-amber-900 leading-relaxed font-sans border-t border-amber-100/50 bg-amber-50/10">
+                  Tất cả kỷ lục hiện tại được đặt làm <strong className="text-amber-950 font-bold">thước đo tiêu chuẩn (benchmark)</strong>. Kỷ lục tiếp theo chỉ được ghi nhận và cập nhật khi có kết quả <strong className="text-amber-950 font-bold">bằng hoặc vượt qua</strong> kỷ lục trước đó.
+                </div>
+              )}
+            </div>
+
+            {/* List of 3T Records - Chân phương, không màu sắc */}
+            <div className="overflow-y-auto space-y-1 pr-1 max-h-[380px] min-h-[180px] flex-1 mt-2">
+              {recordCategories.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-center py-12 space-y-2 border border-dashed border-gray-200 rounded-xl bg-gray-50/50 flex-1">
+                  <span className="text-xs text-gray-400 font-bold font-sans">Không tìm thấy Kỷ Lục nào phù hợp.</span>
+                </div>
+              ) : (
+                <div className="space-y-1 px-0.5">
+                  {/* Header của bảng */}
+                  <div className="grid grid-cols-12 gap-1 sm:gap-2 pb-2 mb-1 border-b border-gray-200 text-[10px] font-extrabold text-gray-400 uppercase tracking-wider font-sans px-2 sticky top-0 bg-white z-10">
+                    <div className="col-span-5">KỶ LỤC</div>
+                    <div className="col-span-2 text-center">XÁC LẬP</div>
+                    <div className="col-span-2 text-center">VỊ THẾ</div>
+                    <div className="col-span-3 text-right font-sans">CHỈ SỐ</div>
+                  </div>
+
+                  {recordCategories.map((item, idx) => {
+                    const isExpanded = expandedRecord === item.key;
+                    const holderName = item.data ? item.data.name : 'Chưa ghi nhận';
+                    const metricStr = item.getMetric(item.data);
+                    return (
+                      <div key={item.key + idx} className="border-b border-gray-100 last:border-none py-1">
+                        <div 
+                          onClick={() => item.data && setExpandedRecord(isExpanded ? null : item.key)}
+                          className={`grid grid-cols-12 gap-1 sm:gap-2 items-center py-1.5 px-2 hover:bg-gray-50 rounded-lg transition-all select-none ${item.data ? 'cursor-pointer' : 'opacity-60 cursor-not-allowed'}`}
+                        >
+                          {/* Cột KỶ LỤC kèm icon & Tên đầy đủ */}
+                          <div className="col-span-5 flex flex-col min-w-0 justify-center font-sans">
+                            <div className="flex items-center gap-1 sm:gap-1.5">
+                              <span className="text-amber-500 text-[11px] font-bold shrink-0 font-sans">
+                                {item.icon}
+                              </span>
+                              <span className="font-extrabold text-[11px] sm:text-xs uppercase text-gray-800 tracking-wide font-sans truncate" title={item.title}>
+                                <span translate="no" className="notranslate">{item.title.toUpperCase()}</span>
+                              </span>
+                            </div>
+                            <span className="text-[11px] sm:text-xs text-blue-900 font-extrabold font-sans mt-0.5 pl-4 sm:pl-5 uppercase truncate" title={holderName}>
+                              <span translate="no" className="notranslate">{holderName}</span>
+                            </span>
+                          </div>
+                          
+                          {/* Cột XÁC LẬP (Date) */}
+                          <div className="col-span-2 text-center text-[10px] sm:text-xs font-bold text-gray-650 font-mono">
+                            {item.data && item.data.date ? (
+                              <span className="whitespace-nowrap">{standardizeDateToDDMMYYYY(item.data.date, item.data.timestamp)}</span>
+                            ) : (
+                              <span className="text-gray-300 font-bold">—</span>
+                            )}
+                          </div>
+                          
+                          {/* Cột VỊ THẾ (Số ngày nắm giữ kỷ lục) */}
+                          <div className="col-span-2 text-center font-sans">
+                            {item.data ? (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-100/50 whitespace-nowrap font-sans">
+                                {getDaysHeld(item.data.date, item.data.timestamp)} ngày
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-mono text-gray-300 font-bold">—</span>
+                            )}
+                          </div>
+                          
+                          {/* Cột CHỈ SỐ */}
+                          <div className="col-span-3 text-right">
+                            <div className="bg-[#FAF9F6] hover:bg-[#F3F2EE] border border-amber-200/50 px-1.5 sm:px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-mono text-amber-955 font-bold inline-block transition-colors shrink-0 whitespace-nowrap">
+                              {metricStr}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Collapsible section xổ ra bằng chứng kỷ lục (chân phương) */}
+                        {isExpanded && item.data && (
+                          <motion.div 
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            className="my-1.5 mx-1 p-3 bg-white border border-gray-200 rounded-xl text-[11px] text-gray-700 space-y-2 shadow-3xs overflow-hidden"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 font-sans">
+                              <div>
+                                <div className="text-gray-400 uppercase text-[9px] font-extrabold tracking-wider">Mô tả hạng mục:</div>
+                                <div className="text-gray-800 font-semibold mt-0.5 text-xs leading-relaxed">{item.desc}</div>
+                              </div>
+                              <div className="bg-amber-50/20 border border-amber-200/30 rounded-lg p-2 flex flex-col justify-center">
+                                <div className="text-amber-850 uppercase text-[8.5px] font-extrabold tracking-wider">Mốc tiêu chuẩn để phá:</div>
+                                <div className="text-amber-950 font-black mt-0.5 text-xs font-mono">
+                                  {item.key === 'quyettam' && `≥ ${item.data ? item.data.attemptsCount : 381} lượt ôn tập`}
+                                  {item.key === 'tritue' && `≥ ${item.data ? item.data.perfectsCount : 185} lượt đạt 30/30`}
+                                  {item.key === 'tocdo' && `≤ ${item.data ? item.data.durationPerQ : 3.8}s/câu trung bình`}
+                                  {item.key === 'thantoc' && `≤ ${item.data ? item.data.attemptsCountToMaxLevel : 48} lượt (đạt Cấp 5)`}
+                                  {item.key === 'batbai' && `≥ ${item.data ? item.data.streak : 45} chuỗi thắng 30/30`}
+                                  {item.key === 'binhminh' && (() => {
+                                    const timeStr = item.data ? item.data.timeString : '01:22';
+                                    let count30 = 0;
+                                    try {
+                                      const parts = timeStr.split(':');
+                                      const limitHours = parseInt(parts[0], 10);
+                                      const limitMins = parseInt(parts[1], 10);
+                                      const limitTotal = limitHours * 60 + limitMins;
+                                      count30 = results.filter(r => {
+                                        if (r.score !== 30) return false;
+                                        const rd = new Date(r.timestamp);
+                                        const rh = rd.getHours();
+                                        const rm = rd.getMinutes();
+                                        const rTotal = rh * 60 + rm;
+                                        return rTotal >= 0 && rTotal <= limitTotal;
+                                      }).length;
+                                    } catch (e) {
+                                      count30 = 0;
+                                    }
+                                    return (
+                                      <span className="font-sans font-medium text-[11px] block text-amber-950 leading-relaxed">
+                                        Sớm hơn hoặc bằng <span translate="no" className="font-extrabold notranslate font-mono text-xs">{timeStr}</span> sáng (đạt điểm tối đa <span translate="no" className="font-extrabold notranslate font-mono text-xs">30/30</span>)<br />
+                                        <span className="text-gray-500 font-bold select-none">• Hiện có: </span>
+                                        <span translate="no" className="font-extrabold text-amber-900 notranslate font-mono text-xs">{count30} lượt</span> đạt điểm tối đa <span translate="no" className="font-bold notranslate font-mono text-[11px]">30/30</span> trong khoảng từ <span className="font-bold font-mono text-[11px]">00:00</span> đến <span translate="no" className="font-bold notranslate font-mono text-[11px]">{timeStr}</span> sáng.<br />
+                                        <span className="text-rose-800 font-extrabold select-none">• Điều kiện xô đổ kỷ lục: </span>
+                                        Thời gian sớm hơn kỷ lục hiện tại (<span translate="no" className="font-bold notranslate font-mono text-[11px]">&lt; {timeStr}</span>) và số lượt đạt điểm <span className="font-bold">30/30</span> nhiều hơn (hiện tại có <span translate="no" className="font-extrabold notranslate font-mono text-[11px]">{count30} lượt</span>).
+                                      </span>
+                                    );
+                                  })()}
+                                </div>
+                              </div>
+                            </div>
+                            
+                            <div className="flex flex-col gap-y-1.5 font-sans pt-1.5 border-t border-gray-100/55">
+                              <div className="flex items-center gap-1.5 text-left flex-wrap">
+                                <span className="text-gray-400 font-bold shrink-0">👤 Người giữ kỷ lục:</span>
+                                <span translate="no" className="font-extrabold text-gray-800 notranslate">{item.data.name}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5 text-left flex-wrap">
+                                <span className="text-gray-400 font-bold shrink-0">🏢 Bộ phận:</span>
+                                <span translate="no" className="font-extrabold text-gray-800 leading-snug notranslate">{item.data.dept}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5 text-left flex-wrap">
+                                <span className="text-gray-400 font-bold shrink-0">📍 Chi nhánh:</span>
+                                <span translate="no" className="font-extrabold text-[#2F3E46] leading-snug notranslate">{item.data.branch}</span>
+                              </div>
+                              {item.data.date && (
+                                <div className="flex items-center gap-1.5 text-left flex-wrap">
+                                  <span className="text-gray-400 font-bold shrink-0">📅 Ngày xác lập:</span>
+                                  <span translate="no" className="font-extrabold text-gray-800 font-mono notranslate">{standardizeDateToDDMMYYYY(item.data.date, item.data.timestamp)}</span>
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="bg-amber-50/50 border border-amber-100 rounded-lg p-2.5 text-amber-900 mt-2 text-xs font-sans">
+                              <div className="text-[10px] font-black uppercase text-amber-950">Bằng chứng Kỷ lục:</div>
+                              <div className="font-bold mt-1 text-gray-850 leading-relaxed italic">
+                                "<span translate="no" className="notranslate">{item.data.proofText}</span>"
+                              </div>
+                            </div>
+
+                            {item.calcMethod && (
+                              <div className="mt-2.5 pt-2.5 border-t border-dashed border-gray-150">
+                                <div className="text-amber-800 uppercase text-[8.5px] font-extrabold tracking-wider flex items-center gap-1 select-none">
+                                  <span>⚙️</span> CÁCH TÍNH CHỈ SỐ:
+                                </div>
+                                <div className="text-gray-500 font-semibold text-[10px] leading-relaxed mt-1 italic pl-1 border-l-2 border-amber-250/70 select-none">
+                                  {item.key === 'binhminh' ? (
+                                    (() => {
+                                      const timeStr = item.data ? item.data.timeString : '01:22';
+                                      return (
+                                        <>
+                                          Khung giờ nộp bài đạt điểm tối đa 30/30 sớm nhất trong ngày, được hệ thống rà soát tự động trong khoảng từ <span className="font-bold">00:00</span> đến <span className="font-bold notranslate" translate="no">{timeStr}</span> sáng (mốc kỷ lục hiện tại đã xác lập).
+                                        </>
+                                      );
+                                    })()
+                                  ) : item.calcMethod}
+                                </div>
+                              </div>
+                            )}
+                          </motion.div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="text-[10px] text-gray-400 font-semibold text-center shrink-0 border-t border-gray-100 pt-2.5 mt-3 flex justify-center items-center gap-1.5 font-sans">
+              <span>Hệ thống tự động vinh danh và lưu trữ các kỷ lục thi đua chuyên nghiệp 3T.</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1454,48 +3284,41 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
           )}
         </div>
 
-        {/* Section 2: Gamified Top 5 Practitioners Rankings */}
+        {/* Section 2: Gamified Top 5 Practitioners Rankings (Hội nghị Anh tài) */}
         <div className="bg-white border border-gray-150 rounded-xl shadow-3xs p-5 space-y-4 text-left flex flex-col">
           <div className="border-b border-gray-150 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shrink-0">
             <h4 className="font-sans font-bold text-sm text-[#E8590C] uppercase tracking-wider flex items-center gap-2">
-              <Trophy className="h-5 w-5 text-yellow-500" />
-              <span>Hội Nghị Anh Tài: Top 5 Luyện Tập</span>
+              <span>🔥 TOP 5 KIÊN TRÌ LUYỆN TẬP</span>
             </h4>
 
-            {/* Sub-Period selector */}
-            <div className="flex bg-gray-100 p-0.5 rounded-lg border border-gray-200">
-              <button 
-                onClick={() => setRankingPeriod('day')}
-                className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-all cursor-pointer ${
-                  rankingPeriod === 'day' ? 'bg-white text-gray-900 shadow-3xs' : 'text-gray-500 hover:text-gray-900'
-                }`}
-              >
-                Hôm Nay
-              </button>
-              <button 
-                onClick={() => setRankingPeriod('week')}
-                className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-all cursor-pointer ${
-                  rankingPeriod === 'week' ? 'bg-white text-gray-900 shadow-3xs' : 'text-gray-500 hover:text-gray-900'
-                }`}
-              >
-                Tuần Này
-              </button>
-              <button 
-                onClick={() => setRankingPeriod('month')}
-                className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-all cursor-pointer ${
-                  rankingPeriod === 'month' ? 'bg-white text-gray-900 shadow-3xs' : 'text-gray-500 hover:text-gray-900'
-                }`}
-              >
-                Tháng Này
-              </button>
+            {/* Dynamic Period Filters - Hôm Nay, Tuần, Tháng */}
+            <div className="flex bg-orange-50/70 border border-orange-200/40 p-0.5 rounded-lg shrink-0 gap-1" id="patience-rank-filters">
+              {(['day', 'week', 'month'] as const).map((p) => {
+                const label = p === 'day' ? 'Hôm Nay' : p === 'week' ? 'Tuần' : 'Tháng';
+                const isActive = rankingPeriod === p;
+                return (
+                  <button
+                    id={`btn-filter-rank-${p}`}
+                    key={p}
+                    onClick={() => setRankingPeriod(p)}
+                    className={`text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                      isActive
+                        ? 'bg-[#E8590C] text-white shadow-2xs font-bold'
+                        : 'text-gray-500 hover:text-gray-800 hover:bg-orange-100/30'
+                    }`}
+                  >
+                    <span translate="no" className="notranslate">{label}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
           {/* List rank display */}
           <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 min-h-[220px]">
             {topRankings.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-center py-10 space-y-2">
-                <Calendar className="h-10 w-10 text-gray-300" />
+              <div className="h-full flex flex-col items-center justify-center text-center py-10 space-y-2 border border-dashed border-gray-200 rounded-xl bg-gray-50/20">
+                <Calendar className="h-10 w-10 text-gray-300 animate-bounce" />
                 <span className="text-xs text-gray-400 font-bold">Chưa có kết quả ôn tập nào ghi nhận trong khoảng thời gian này.</span>
               </div>
             ) : (
@@ -1504,7 +3327,7 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
                   if (rank === 0) return <span className="w-5.5 h-5.5 rounded-full bg-yellow-100 text-yellow-700 flex items-center justify-center font-bold text-xs shadow-3xs border border-yellow-300">1</span>;
                   if (rank === 1) return <span className="w-5.5 h-5.5 rounded-full bg-slate-150 text-slate-700 flex items-center justify-center font-bold text-xs shadow-3xs border border-slate-300">2</span>;
                   if (rank === 2) return <span className="w-5.5 h-5.5 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center font-bold text-xs shadow-3xs border border-amber-300">3</span>;
-                  return <span className="w-5.5 h-5.5 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center font-bold text-xs border border-gray-200">{rank + 1}</span>;
+                  return <span className="w-5.5 h-5.5 rounded-full bg-gray-100 text-gray-605 flex items-center justify-center font-bold text-xs border border-gray-200">{rank + 1}</span>;
                 };
 
                 return (
@@ -1513,23 +3336,23 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
                     initial={{ opacity: 0, x: -5 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: idx * 0.05 }}
-                    className="flex justify-between items-center p-2.5 bg-gray-50 hover:bg-gray-100/80 border border-gray-150 rounded-xl transition-all shadow-3xs"
+                    className="flex justify-between items-center p-3.5 bg-[#FAF9F6] border border-gray-150 rounded-xl hover:bg-gray-100/70 transition-all shadow-3xs"
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
                       {getPodiumBadge(idx)}
                       <div className="min-w-0">
                         <div className="font-bold text-xs text-gray-800 truncate">{userStats.name}</div>
-                        <div className="text-[10px] text-gray-400 truncate font-medium">{userStats.dept} • {userStats.branch}</div>
+                        <div className="text-[10px] text-gray-400 truncate font-semibold">{userStats.dept} • {userStats.branch}</div>
                       </div>
                     </div>
                     
                     <div className="text-right shrink-0">
-                      <div className="font-bold text-xs text-blue-700 font-mono flex items-center gap-1 justify-end">
-                        <Activity className="h-3 w-3 text-blue-500" />
+                      <div className="font-bold text-[#1971C2] text-xs font-mono flex items-center gap-1 justify-end">
+                        <Activity className="h-3 w-3 text-[#1971C2]" />
                         <span>{userStats.attempts} lượt thi thử</span>
                       </div>
-                      <div className="text-[10px] text-gray-400 font-medium">
-                        Điểm trung bình: <b className="text-gray-600 font-mono">{userStats.avgScore}/30</b>
+                      <div className="text-[10px] text-gray-400 font-semibold font-sans">
+                        Điểm trung bình: <b className="text-gray-650 font-mono font-bold">{userStats.avgScore}/30</b>
                       </div>
                     </div>
                   </motion.div>
@@ -1538,9 +3361,9 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
             )}
           </div>
           
-          <div className="text-[10px] text-gray-400 font-medium text-center shrink-0 border-t border-gray-100 pt-2 flex justify-center items-center gap-1">
+          <div className="text-[10px] text-gray-400 font-semibold text-center shrink-0 border-t border-gray-100 pt-2.5 flex justify-center items-center gap-1">
             <Sparkles className="h-3.5 w-3.5 text-yellow-500 animate-pulse" />
-            <span>Xếp hạng cập nhật real-time khi học viên làm bài tập nộp sảnh.</span>
+            <span>Mời toàn thể CBNV tích cực tham gia rèn luyện nâng cao tỷ lệ hoàn thành mục tiêu.</span>
           </div>
         </div>
 

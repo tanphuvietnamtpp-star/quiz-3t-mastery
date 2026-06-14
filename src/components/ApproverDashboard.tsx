@@ -20,7 +20,7 @@ export default function ApproverDashboard({ user, onLogout, slogan = '3T Hội T
     setLoading(true);
     try {
       const allUsers = await databaseService.getUsers();
-      const allResults = await databaseService.getQuizResults();
+      const allResults = await databaseService.getQuizResults(false);
 
       // Filter: ONLY show users and results belonging to THIS approver's Specific branch and department!
       const filteredUsers = allUsers.filter(u => u.branch === user.branch && u.department === user.department);
@@ -42,7 +42,7 @@ export default function ApproverDashboard({ user, onLogout, slogan = '3T Hội T
   // Handle Approving a user
   const handleApproveUser = async (userId: string) => {
     try {
-      await databaseService.updateUser(userId, { status: 'approved' });
+      await databaseService.updateUser(userId, { status: 'approved', approvedAt: new Date().toISOString() });
       await loadData();
     } catch (err) {
       console.error("Lỗi khi duyệt nhân viên:", err);
@@ -119,8 +119,9 @@ export default function ApproverDashboard({ user, onLogout, slogan = '3T Hội T
               <h1 className="text-xl font-sans font-bold text-gray-900 leading-none">
                 <span translate="no" className="notranslate">Duyệt Viên: Trưởng Bộ Phận</span>
               </h1>
-              <p className="text-xs text-purple-600 mt-1 font-semibold">
-                <span translate="no" className="notranslate">Bộ phận: {user.department} - {user.branch}</span>
+              <p className="text-xs text-purple-600 mt-1 font-semibold flex flex-col gap-0.5">
+                <span translate="no" className="notranslate">⚡ Bộ phận: {user.department}</span>
+                <span translate="no" className="notranslate">📍 Chi nhánh: {user.branch}</span>
               </p>
             </div>
           </div>

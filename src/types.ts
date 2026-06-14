@@ -9,6 +9,7 @@ export interface User {
   branch: string;
   status: 'pending' | 'approved' | 'rejected' | 'PENDING' | 'APPROVED' | 'REJECTED';
   createdAt: string;
+  approvedAt?: string;
   employeeId?: string;
   canViewStats?: boolean;
   lastActive?: number;

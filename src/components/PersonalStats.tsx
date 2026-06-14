@@ -12,6 +12,7 @@ import {
 } from 'recharts';
 import * as XLSX from 'xlsx';
 import { formatDate } from '../utils/format';
+import { calculateInactivityAugmentedLevel, getVietnamDateString } from '../utils/levelCalculator';
 
 const DEFAULT_LEVEL_RULES: LevelRulesConfig = {
   introduction: "Hệ thống Quiz 3T Mastery áp dụng cơ chế phân hạng và thay đổi cấp độ tự động dựa trên thành tích luyện tập thực tế.",
@@ -23,7 +24,7 @@ const DEFAULT_LEVEL_RULES: LevelRulesConfig = {
       level: 1,
       name: "Cấp 1: Tân Binh",
       emoji: "🌱",
-      promotion: "Đạt điểm tuyệt đối 30/30 liên tục 10 lượt (đã cập nhật tự động theo đúng thay đổi mới nhất của anh) để nâng hạng lên Chiến Binh.",
+      promotion: "Đạt điểm tuyệt đối 30/30 liên tục 10 lượt để nâng hạng lên Chiến Binh.",
       demotion: "Mức sàn tối thiểu, không thể hạ thấp hơn.",
       maxTime: "90s/câu",
       reactionPoints: ["≤ 30s (+10đ)", "31s-40s (+8đ)", "41s-50s (+6đ)", "51s-90s (+5đ)"]
@@ -166,14 +167,40 @@ export default function PersonalStats({ users, results, levelRulesFromCloud }: P
   // User results history filtered & sorted chronologically
   const userResults = useMemo(() => {
     if (!selectedUser) return [];
-    return results.filter(r => 
-      r.userId === selectedUser.id || 
-      (r.userName && r.userName.trim().toLowerCase() === selectedUser.name.trim().toLowerCase() && r.department === selectedUser.department)
-    ).sort((a, b) => a.timestamp - b.timestamp);
+
+    const normalizeName = (name: string | undefined | null): string => {
+      if (!name) return '';
+      return name.trim().normalize('NFC').toUpperCase().replace(/\s+/g, ' ');
+    };
+
+    const nameToUserIdMap: Record<string, string> = {};
+    const userIdToNameMap: Record<string, string> = {};
+
+    results.forEach(res => {
+      const normName = normalizeName(res.userName);
+      if (res.userId && normName) {
+        nameToUserIdMap[normName] = res.userId;
+        userIdToNameMap[res.userId] = normName;
+      }
+    });
+
+    const targetNormName = normalizeName(selectedUser.name);
+    const targetUserId = selectedUser.id;
+
+    return results.filter(r => {
+      const rNormName = normalizeName(r.userName);
+      const rResolvedUserId = r.userId || nameToUserIdMap[rNormName] || '';
+      const rResolvedNormalizedName = rNormName || (r.userId ? userIdToNameMap[r.userId] : '') || '';
+
+      if (targetUserId && rResolvedUserId === targetUserId) return true;
+      if (targetNormName && rResolvedNormalizedName === targetNormName) return true;
+      return false;
+    }).sort((a, b) => a.timestamp - b.timestamp);
   }, [results, selectedUser]);
 
   // Compute stats metrics
   const stats = useMemo(() => {
+    const inactivityTestMode = localStorage.getItem('3t_inactivity_test_mode') === 'true';
     if (userResults.length === 0) {
       return {
         totalAttempts: 0,
@@ -186,6 +213,16 @@ export default function PersonalStats({ users, results, levelRulesFromCloud }: P
         scoreHistory: [] as any[]
       };
     }
+
+    const levelState = calculateInactivityAugmentedLevel(
+      selectedUser.id,
+      userResults,
+      currentRules,
+      {
+        isTestModeEnabled: inactivityTestMode,
+        simulatedToday: inactivityTestMode ? '2026-06-14' : getVietnamDateString()
+      }
+    );
 
     let bestScore = 0;
     let totalScore = 0;
@@ -346,8 +383,8 @@ export default function PersonalStats({ users, results, levelRulesFromCloud }: P
       bestScore,
       avgScore: Number((totalScore / userResults.length).toFixed(1)),
       avgDuration: Number((totalDuration / userResults.length).toFixed(0)),
-      level: currentLevel,
-      consecutiveMax: consecutiveMaxAtLevel,
+      level: levelState.level,
+      consecutiveMax: levelState.consecutiveMax,
       longestStreak,
       scoreHistory
     };

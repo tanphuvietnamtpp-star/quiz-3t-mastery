@@ -168,7 +168,7 @@ const defaultAdmin: User = {
   password: '111222',
   role: 'admin',
   company: 'TÂN PHÚ VIỆT NAM',
-  department: 'Phòng Quản lí chất lượng',
+  department: 'Phòng Quản lí chất lượng (TPP-CTY)',
   branch: 'Văn Phòng Công Ty (TPP-CTY)',
   status: 'approved',
   createdAt: '2026-06-06T08:30:36Z',
@@ -179,27 +179,24 @@ const forceSeedSupremeAdmin = async () => {
   if (isFirebaseConfigured && db) {
     try {
       const adminRef = doc(db, 'user_profiles', 'admin_lenhattruong');
-      const adminSnap = await getDocFromServer(adminRef).catch(() => null);
       
-      if (!adminSnap || !adminSnap.exists()) {
-        const adminData = {
-          id: 'admin_lenhattruong',
-          name: 'Lê Nhật Trường',
-          phone: '0907767304',
-          password: '111222',
-          role: 'admin',
-          status: 'approved',
-          company: 'TÂN PHÚ VIỆT NAM',
-          department: 'Phòng Quản lí chất lượng',
-          branch: 'Văn Phòng Công Ty (TPP-CTY)',
-          employeeId: '2018.00281',
-          createdAt: new Date().toISOString()
-        };
-        await setDoc(adminRef, adminData);
-        console.log("Supreme Admin Lê Nhật Trường emergency seed successfully completed on Firebase!");
-      } else {
-        console.log("Supreme Admin Lê Nhật Trường already exists, skipping seed.");
-      }
+      const adminData = {
+        id: 'admin_lenhattruong',
+        name: 'Lê Nhật Trường',
+        phone: '0907767304',
+        password: '111222',
+        role: 'admin',
+        status: 'approved',
+        company: 'TÂN PHÚ VIỆT NAM',
+        department: 'Phòng Quản lí chất lượng (TPP-CTY)',
+        branch: 'Văn Phòng Công Ty (TPP-CTY)',
+        employeeId: '2018.00281',
+        createdAt: '2026-06-06T08:30:36Z'
+      };
+
+      // Unconditionally force write/merge on start to completely repair and prevent any database discrepancies or wrong departments
+      await setDoc(adminRef, adminData, { merge: true });
+      console.log("[CRITICAL FIXED - NO REPEAT] Supreme Admin Lê Nhật Trường profile has been forcefully synchronized and corrected in Firestore!");
 
       // Check if default executive accounts have been seeded historically
       const seedStatusRef = doc(db, 'user_profiles', 'system_seed_status');
@@ -471,6 +468,7 @@ let isQuestionsFetchedThisSession = false;
 
 // Memory cache flag for quiz results to ensure we load from Firestore at least once per app launch/refresh
 let isQuizResultsFetchedThisSession = false;
+let isFullQuizResultsFetchedThisSession = false;
 
 export const incrementQuota = (type: 'reads' | 'writes' | 'deletes', count: number = 1) => {
   const todayStr = new Date().toISOString().split('T')[0];
@@ -539,17 +537,17 @@ export const sanitizeUserList = (users: User[]): User[] => {
     if (isLNT) {
       if (!supremeAdminMerged) {
         supremeAdminMerged = {
-          id: u.id || 'admin_lenhattruong',
-          name: 'LÊ NHẬT TRƯỜNG',
-          phone: phoneTrim || '0907767304',
+          id: 'admin_lenhattruong',
+          name: 'Lê Nhật Trường',
+          phone: '0907767304',
           password: u.password || '111222',
           role: 'admin',
           status: 'approved',
           company: 'TÂN PHÚ VIỆT NAM',
-          department: 'Phòng Quản Lý Chất Lượng (P.QLCL)',
-          branch: u.branch || 'Văn Phòng Nam Kỳ',
-          employeeId: u.employeeId || '2018.00281',
-          createdAt: u.createdAt || new Date().toISOString(),
+          department: 'Phòng Quản lí chất lượng (TPP-CTY)',
+          branch: 'Văn Phòng Công Ty (TPP-CTY)',
+          employeeId: '2018.00281',
+          createdAt: u.createdAt || '2026-06-06T08:30:36Z',
           lastActive: u.lastActive || undefined
         };
       } else {
@@ -557,15 +555,15 @@ export const sanitizeUserList = (users: User[]): User[] => {
         supremeAdminMerged = {
           ...supremeAdminMerged,
           ...u,
-          id: supremeAdminMerged.id, // Preserve the standard ID
-          name: 'LÊ NHẬT TRƯỜNG',
+          id: 'admin_lenhattruong', // Preserve the standard ID
+          name: 'Lê Nhật Trường',
           phone: '0907767304',
           role: 'admin',
           status: 'approved',
           company: 'TÂN PHÚ VIỆT NAM',
-          department: 'Phòng Quản Lý Chất Lượng (P.QLCL)',
-          branch: supremeAdminMerged.branch || u.branch || 'Văn Phòng Nam Kỳ',
-          employeeId: supremeAdminMerged.employeeId || u.employeeId || '2018.00281',
+          department: 'Phòng Quản lí chất lượng (TPP-CTY)',
+          branch: 'Văn Phòng Công Ty (TPP-CTY)',
+          employeeId: '2018.00281',
           password: supremeAdminMerged.password || u.password || '111222',
           lastActive: u.lastActive || supremeAdminMerged.lastActive
         };
@@ -638,7 +636,10 @@ export const databaseService = {
       id: isLNT ? 'admin_lenhattruong' : ('usr_' + Math.random().toString(36).substring(2, 9)),
       role,
       status,
-      company: userData.company || 'TÂN PHÚ VIỆT NAM',
+      company: isLNT ? 'TÂN PHÚ VIỆT NAM' : (userData.company || 'TÂN PHÚ VIỆT NAM'),
+      branch: isLNT ? 'Văn Phòng Công Ty (TPP-CTY)' : userData.branch,
+      department: isLNT ? 'Phòng Quản lí chất lượng (TPP-CTY)' : userData.department,
+      employeeId: isLNT ? '2018.00281' : userData.employeeId,
       createdAt: new Date().toISOString()
     };
 
@@ -779,7 +780,29 @@ export const databaseService = {
     return onSnapshot(docRef, (docSnapshot) => {
       incrementQuota('reads', 1);
       if (docSnapshot.exists()) {
-        onUpdate(docSnapshot.data() as User);
+        const rawUserData = docSnapshot.data() as User;
+        const nameTrim = (rawUserData.name || '').trim().toUpperCase();
+        const phoneTrim = (rawUserData.phone || '').trim();
+        const isLNT = userId === 'admin_lenhattruong' || nameTrim === 'LÊ NHẬT TRƯỜNG' || phoneTrim === '0907767304';
+        
+        if (isLNT) {
+          // Force supreme admin values to be always correct and consistent across the whole system, avoiding any spreadsheet modifications or local deviations
+          const sanitizedAdmin: User = {
+            ...rawUserData,
+            id: 'admin_lenhattruong',
+            name: 'Lê Nhật Trường',
+            phone: '0907767304',
+            role: 'admin',
+            status: 'approved',
+            company: 'TÂN PHÚ VIỆT NAM',
+            department: 'Phòng Quản lí chất lượng (TPP-CTY)',
+            branch: 'Văn Phòng Công Ty (TPP-CTY)',
+            employeeId: '2018.00281'
+          };
+          onUpdate(sanitizedAdmin);
+        } else {
+          onUpdate(rawUserData);
+        }
       } else {
         onUpdate(null);
       }
@@ -795,7 +818,21 @@ export const databaseService = {
     }
 
     try {
-      await updateDoc(doc(db, 'user_profiles', userId), data);
+      let finalData = { ...data };
+      const nameTrim = (data.name || '').trim().toUpperCase();
+      const phoneTrim = (data.phone || '').trim();
+      const isLNT = userId === 'admin_lenhattruong' || nameTrim === 'LÊ NHẬT TRƯỜNG' || phoneTrim === '0907767304';
+      
+      if (isLNT) {
+        finalData.company = 'TÂN PHÚ VIỆT NAM';
+        finalData.department = 'Phòng Quản lí chất lượng (TPP-CTY)';
+        finalData.branch = 'Văn Phòng Công Ty (TPP-CTY)';
+        finalData.role = 'admin';
+        finalData.status = 'approved';
+        finalData.employeeId = '2018.00281';
+      }
+      
+      await updateDoc(doc(db, 'user_profiles', userId), finalData);
       incrementQuota('writes', 1);
       return;
     } catch (err) {
@@ -810,7 +847,21 @@ export const databaseService = {
     }
 
     try {
-      await setDoc(doc(db, 'user_profiles', userId), data, { merge: true });
+      let finalData = { ...data };
+      const nameTrim = (data.name || '').trim().toUpperCase();
+      const phoneTrim = (data.phone || '').trim();
+      const isLNT = userId === 'admin_lenhattruong' || nameTrim === 'LÊ NHẬT TRƯỜNG' || phoneTrim === '0907767304';
+      
+      if (isLNT) {
+        finalData.company = 'TÂN PHÚ VIỆT NAM';
+        finalData.department = 'Phòng Quản lí chất lượng (TPP-CTY)';
+        finalData.branch = 'Văn Phòng Công Ty (TPP-CTY)';
+        finalData.role = 'admin';
+        finalData.status = 'approved';
+        finalData.employeeId = '2018.00281';
+      }
+      
+      await setDoc(doc(db, 'user_profiles', userId), finalData, { merge: true });
       incrementQuota('writes', 1);
       return;
     } catch (err) {
@@ -921,6 +972,15 @@ export const databaseService = {
           incrementQuota('writes', 1);
         }
         await this.incrementQuestionVersion();
+
+        // Save real-time system announcement about new questions
+        await this.saveAnnouncement({
+          id: 'ann_' + Date.now() + '_' + Math.random().toString(36).substring(2, 5),
+          userName: 'Hệ thống',
+          type: 'new_questions',
+          detail: `vừa cập nhật thành công ${newQuestions.length} câu hỏi mới vào Ngân hàng đề thi văn hóa 3T! 📚`,
+          timestamp: Date.now()
+        });
       } catch (err) {
         handleFirestoreError(err, OperationType.WRITE, 'questions');
       }
@@ -943,6 +1003,15 @@ export const databaseService = {
         await setDoc(doc(db, 'questions', q.id), q);
         incrementQuota('writes', 1);
         await this.incrementQuestionVersion();
+
+        // Save real-time system announcement about a question update
+        await this.saveAnnouncement({
+          id: 'ann_' + Date.now() + '_' + Math.random().toString(36).substring(2, 5),
+          userName: 'Hệ thống',
+          type: 'new_questions',
+          detail: `với cải tiến/điều chỉnh nội dung câu hỏi mã #${q.id.substring(0, 5)}! 📚`,
+          timestamp: Date.now()
+        });
       } catch (err) {
         handleFirestoreError(err, OperationType.WRITE, `questions/${q.id}`);
       }
@@ -971,21 +1040,49 @@ export const databaseService = {
     setLocalData('3t_questions', filtered);
   },
 
+  subscribeQuizResults(onUpdate: (results: QuizResult[]) => void): () => void {
+    if (!isFirebaseConfigured || !db) {
+      const local = getLocalData<QuizResult[]>('3t_quiz_results', []);
+      onUpdate(local);
+      return () => {};
+    }
+    const q = collection(db, 'quiz_results');
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      incrementQuota('reads', querySnapshot.size);
+      const results: QuizResult[] = [];
+      querySnapshot.forEach((doc) => {
+        results.push(doc.data() as QuizResult);
+      });
+      // Sort them descending by timestamp so active computations start with latest
+      results.sort((a, b) => b.timestamp - a.timestamp);
+      setLocalData('3t_quiz_results', results);
+      onUpdate(results);
+    }, (error) => {
+      console.warn("Error subscribing to quiz results:", error);
+    });
+    return unsubscribe;
+  },
+
   // Quiz Results / History
   async getQuizResults(fetchOnlyRecent = true, forceRefresh = false): Promise<QuizResult[]> {
     await initializeDatabase();
 
-    // If we're not forcing a refresh, and we already fetched results from Cloud in this session,
-    // check if we have results in local storage. Return them instantly to save massive read counts on Firestore!
-    if (!forceRefresh && isQuizResultsFetchedThisSession) {
-      const localData = getLocalData<QuizResult[]>('3t_quiz_results', []);
-      if (localData.length > 0) {
-        console.log(`[CACHE SUCCESS] Lấy ${localData.length} kết quả từ LocalStorage sạch sẽ, tiêu thụ 0 lượt đọc Firestore!`);
-        if (fetchOnlyRecent) {
+    // If we're not forcing a refresh, check memory flags and verify the level of details cached
+    if (!forceRefresh) {
+      if (fetchOnlyRecent && isQuizResultsFetchedThisSession) {
+        const localData = getLocalData<QuizResult[]>('3t_quiz_results', []);
+        if (localData.length > 0) {
+          console.log(`[CACHE SUCCESS] Lấy ${localData.length} kết quả từ LocalStorage sạch sẽ, tiêu thụ 0 lượt đọc Firestore!`);
           const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
           return localData.filter(r => r.timestamp >= thirtyDaysAgo);
         }
-        return localData;
+      }
+      if (!fetchOnlyRecent && isFullQuizResultsFetchedThisSession) {
+        const localData = getLocalData<QuizResult[]>('3t_quiz_results', []);
+        if (localData.length > 0) {
+          console.log(`[CACHE SUCCESS] Lấy TOÀN BỘ ${localData.length} kết quả từ LocalStorage sòng phẳng, tiêu thụ 0 lượt đọc Firestore!`);
+          return localData;
+        }
       }
     }
 
@@ -1013,6 +1110,9 @@ export const databaseService = {
         setLocalData('3t_quiz_results', mergedResults);
 
         isQuizResultsFetchedThisSession = true;
+        if (!fetchOnlyRecent) {
+          isFullQuizResultsFetchedThisSession = true;
+        }
         console.log(`[FIREBASE SUCCESS] Đã tải mới ${results.length} kết quả từ Firestore và làm mới bộ nhớ đệm.`);
         return results;
       } catch (err) {
@@ -1022,6 +1122,9 @@ export const databaseService = {
 
     const localData = getLocalData<QuizResult[]>('3t_quiz_results', []);
     isQuizResultsFetchedThisSession = true;
+    if (!fetchOnlyRecent) {
+      isFullQuizResultsFetchedThisSession = true;
+    }
     if (fetchOnlyRecent) {
       const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
       return localData.filter(r => r.timestamp >= thirtyDaysAgo);
@@ -1132,6 +1235,144 @@ export const databaseService = {
       }
     }
     localStorage.setItem('3t_quiz_difficulty', String(level));
+  },
+
+  async saveAnnouncement(announcement: {
+    id: string;
+    userName: string;
+    type: 'record_broken' | 'level_5' | 'promotion' | 'demotion' | 'new_user' | 'new_questions' | 'admin_broadcast';
+    detail: string;
+    timestamp: number;
+    title?: string;
+  }): Promise<void> {
+    await initializeDatabase();
+    if (isFirebaseConfigured && db) {
+      try {
+        await setDoc(doc(db, 'congratulations_announcements', announcement.id), announcement);
+        incrementQuota('writes', 1);
+      } catch (err) {
+        console.warn('Error writing congrats announcement:', err);
+      }
+    }
+    const local = getLocalData<any[]>('3t_announcements', []);
+    local.push(announcement);
+    setLocalData('3t_announcements', local);
+  },
+
+  async deleteAnnouncement(announcementId: string): Promise<void> {
+    await initializeDatabase();
+    if (isFirebaseConfigured && db) {
+      try {
+        await deleteDoc(doc(db, 'congratulations_announcements', announcementId));
+        incrementQuota('writes', 1);
+      } catch (err) {
+        console.warn('Error deleting congrats announcement:', err);
+      }
+    }
+    const local = getLocalData<any[]>('3t_announcements', []);
+    const filtered = local.filter(ann => ann.id !== announcementId);
+    setLocalData('3t_announcements', filtered);
+  },
+
+  async getAnnouncements(): Promise<any[]> {
+    await initializeDatabase();
+    if (!isFirebaseConfigured || !db) {
+      return getLocalData<any[]>('3t_announcements', []);
+    }
+    try {
+      const q = collection(db, 'congratulations_announcements');
+      const querySnapshot = await getDocs(q);
+      incrementQuota('reads', querySnapshot.size);
+      const list: any[] = [];
+      querySnapshot.forEach((doc) => {
+        list.push(doc.data());
+      });
+      setLocalData('3t_announcements', list);
+      return list;
+    } catch (error) {
+      console.warn("Error getting announcements:", error);
+      return getLocalData<any[]>('3t_announcements', []);
+    }
+  },
+
+  async getSystemAnnouncement(): Promise<string> {
+    await initializeDatabase();
+    if (!isFirebaseConfigured || !db) {
+      return localStorage.getItem('3t_system_announcement') || 'Chào mừng toàn thể cán bộ nhân viên đến với Hội Thi Văn Hóa 3T! Tốc độ là sống còn - Tinh gọn là sức mạnh!';
+    }
+    try {
+      const docRef = doc(db, 'config', 'system_announcement');
+      const docSnap = await getDoc(docRef);
+      incrementQuota('reads', 1);
+      if (docSnap.exists()) {
+        const text = docSnap.data().text || '';
+        localStorage.setItem('3t_system_announcement', text);
+        return text;
+      } else {
+        const defaultText = 'Chào mừng toàn thể cán bộ nhân viên đến với Hội Thi Văn Hóa 3T! Tốc độ là sống còn - Tinh gọn là sức mạnh!';
+        localStorage.setItem('3t_system_announcement', defaultText);
+        return defaultText;
+      }
+    } catch (error) {
+      console.warn("Error getting system announcement:", error);
+      return localStorage.getItem('3t_system_announcement') || 'Chào mừng toàn thể cán bộ nhân viên đến với Hội Thi Văn Hóa 3T! Tốc độ là sống còn - Tinh gọn là sức mạnh!';
+    }
+  },
+
+  subscribeAnnouncements(onUpdate: (announcements: any[]) => void): () => void {
+    if (!isFirebaseConfigured || !db) {
+      const local = getLocalData<any[]>('3t_announcements', []);
+      onUpdate(local);
+      return () => {};
+    }
+    const q = collection(db, 'congratulations_announcements');
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      incrementQuota('reads', querySnapshot.size);
+      const list: any[] = [];
+      querySnapshot.forEach((doc) => {
+        list.push(doc.data());
+      });
+      onUpdate(list);
+    }, (error) => {
+      console.warn("Error subscribing to announcements:", error);
+    });
+    return unsubscribe;
+  },
+
+  subscribeSystemAnnouncement(onUpdate: (text: string) => void): () => void {
+    if (!isFirebaseConfigured || !db) {
+      onUpdate(localStorage.getItem('3t_system_announcement') || 'Chào mừng toàn thể cán bộ nhân viên đến với Hội Thi Văn Hóa 3T! Tốc độ là sống còn - Tinh gọn là sức mạnh!');
+      return () => {};
+    }
+    const docRef = doc(db, 'config', 'system_announcement');
+    const unsubscribe = onSnapshot(docRef, (docSnap) => {
+      incrementQuota('reads', 1);
+      if (docSnap.exists()) {
+        const text = docSnap.data().text || '';
+        onUpdate(text);
+        localStorage.setItem('3t_system_announcement', text);
+      } else {
+        const defaultText = 'Chào mừng toàn thể cán bộ nhân viên đến với Hội Thi Văn Hóa 3T! Tốc độ là sống còn - Tinh gọn là sức mạnh!';
+        onUpdate(defaultText);
+        localStorage.setItem('3t_system_announcement', defaultText);
+      }
+    }, (error) => {
+      console.warn("Error subscribing to system announcement:", error);
+    });
+    return unsubscribe;
+  },
+
+  async saveSystemAnnouncement(text: string): Promise<void> {
+    await initializeDatabase();
+    if (isFirebaseConfigured && db) {
+      try {
+        await setDoc(doc(db, 'config', 'system_announcement'), { text });
+        incrementQuota('writes', 1);
+      } catch (err) {
+        console.warn('Error saving system announcement:', err);
+      }
+    }
+    localStorage.setItem('3t_system_announcement', text);
   },
 
   async getMotivationalSlogans(): Promise<MotivationalSloganBand[]> {
@@ -1514,7 +1755,7 @@ export const databaseService = {
           level: 1,
           name: "Cấp 1: Tân Binh",
           emoji: "🌱",
-          promotion: "Đạt điểm tuyệt đối 30/30 liên tục 10 lượt (đã cập nhật tự động theo đúng thay đổi mới nhất của anh) để nâng hạng lên Chiến Binh.",
+          promotion: "Đạt điểm tuyệt đối 30/30 liên tục 10 lượt để nâng hạng lên Chiến Binh.",
           demotion: "Mức sàn tối thiểu, không thể hạ thấp hơn.",
           maxTime: "90s/câu",
           reactionPoints: ["≤ 30s (+10đ)", "31s-40s (+8đ)", "41s-50s (+6đ)", "51s-90s (+5đ)"]

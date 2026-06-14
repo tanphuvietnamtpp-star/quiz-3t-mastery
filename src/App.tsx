@@ -6,7 +6,7 @@ import ApproverDashboard from './components/ApproverDashboard';
 import AdminDashboard from './components/AdminDashboard';
 import { databaseService } from './firebase';
 import { motion, AnimatePresence } from 'motion/react';
-import { Wrench, KeyRound } from 'lucide-react';
+import { Wrench, KeyRound, Trophy, Sparkles, X } from 'lucide-react';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -15,6 +15,7 @@ export default function App() {
   const [slogan, setSlogan] = useState('3T Hội Tụ - Tân Phú Vươn Xa');
   const [difficulty, setDifficulty] = useState(1);
   const [motivationalSlogans, setMotivationalSlogans] = useState<MotivationalSloganBand[]>([]);
+  const [congratsNotification, setCongratsNotification] = useState<{ id: string; userName: string; type: 'record_broken' | 'level_5'; detail: string; timestamp: number } | null>(null);
 
   const [adminInitialTab, setAdminInitialTab] = useState<'users' | 'questions' | 'add_images' | 'qr' | 'stats' | 'encoding' | 'firebase_data'>('users');
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -30,6 +31,32 @@ export default function App() {
     });
     return () => unsubscribe();
   }, []);
+
+  // Subscribe to real-time congrats announcements (record shatters / Level 5 promotions)
+  useEffect(() => {
+    const appOpenedTime = Date.now() - 3000; // Only get announcements published from this moment onwards (allow 3s window)
+    const unsubscribe = databaseService.subscribeAnnouncements((announcements: any[]) => {
+      if (!announcements || announcements.length === 0) return;
+      const recent = announcements
+        .filter((a: any) => a.timestamp > appOpenedTime)
+        .sort((a, b) => b.timestamp - a.timestamp);
+      
+      if (recent.length > 0) {
+        setCongratsNotification(recent[0]);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Auto-dismiss congratulations toast after 10 seconds
+  useEffect(() => {
+    if (congratsNotification) {
+      const timer = setTimeout(() => {
+        setCongratsNotification(null);
+      }, 10000);
+      return () => clearTimeout(timer);
+    }
+  }, [congratsNotification]);
 
   // Detect mobile device
   useEffect(() => {
@@ -67,6 +94,46 @@ export default function App() {
     }, 45000); // Heartbeat every 45 seconds
 
     return () => clearInterval(interval);
+  }, [currentUser?.id]);
+
+  // Subscribe to real-time current user profile updates (role, status, department, branch, etc.)
+  useEffect(() => {
+    if (!currentUser?.id) return;
+
+    const unsubscribe = databaseService.subscribeUser(currentUser.id, (updatedUser) => {
+      if (updatedUser) {
+        if (updatedUser.status?.toLowerCase() !== 'approved' && currentUser.role !== 'admin') {
+          // If the profile gets disapproved and they are not a hardcoded admin, log them out
+          handleLogout();
+          return;
+        }
+
+        setCurrentUser(prevUser => {
+          if (!prevUser) return updatedUser;
+          // Compare relevant fields to prevent unnecessary state triggers, but sync if changes occurred
+          const hasChanged = 
+            prevUser.name !== updatedUser.name ||
+            prevUser.department !== updatedUser.department ||
+            prevUser.branch !== updatedUser.branch ||
+            prevUser.role !== updatedUser.role ||
+            prevUser.status !== updatedUser.status ||
+            prevUser.canViewStats !== updatedUser.canViewStats ||
+            prevUser.phone !== updatedUser.phone ||
+            prevUser.password !== updatedUser.password;
+
+          if (hasChanged) {
+            localStorage.setItem('3t_active_user', JSON.stringify(updatedUser));
+            return updatedUser;
+          }
+          return prevUser;
+        });
+      } else {
+        // If user doc was deleted/removed, log out
+        handleLogout();
+      }
+    });
+
+    return () => unsubscribe();
   }, [currentUser?.id]);
 
   // Secure Startup Logic: Synchronously clear legacy sessions and check saved states sequentially
@@ -390,6 +457,45 @@ export default function App() {
 
   return (
     <div className={`min-h-screen bg-gray-50 flex flex-col ${currentUser?.role === 'admin' ? 'select-text' : 'select-none'}`}>
+      {/* 🎉 REAL-TIME GLOBAL CONGRATULATORY BANNER 🎉 */}
+      <AnimatePresence>
+        {congratsNotification && (
+          <motion.div
+            initial={{ opacity: 0, y: -50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            transition={{ type: "spring", stiffness: 300, damping: 25 }}
+            className="fixed top-5 left-1/2 -translate-x-1/2 z-[9999] max-w-md w-[calc(100%-2rem)] bg-slate-900 text-white rounded-2xl shadow-2xl border border-amber-500/40 p-5 overflow-hidden font-sans border-l-4 border-l-amber-500"
+          >
+            <div className="flex items-start gap-3.5 pl-1 relative">
+              <div className="p-2.5 bg-amber-500/10 rounded-xl border border-amber-500/20 text-amber-400 shrink-0 select-none">
+                <Trophy className="h-6 w-6 text-yellow-500 animate-bounce" />
+              </div>
+              
+              <div className="flex-1 min-w-0 pr-4">
+                <h4 className="text-[10px] font-sans font-black tracking-widest text-amber-400 uppercase leading-none flex items-center gap-1">
+                  <Sparkles className="h-3 w-3 text-amber-400 animate-pulse" />
+                  <span>Vinh Danh Đỉnh Cao 3T</span>
+                </h4>
+                <p className="text-[13px] font-sans font-bold text-gray-100 mt-1.5 leading-snug">
+                  Chiến binh <span translate="no" className="text-yellow-405 font-black uppercase text-amber-305 notranslate">{congratsNotification.userName}</span> <span translate="no" className="notranslate">{congratsNotification.detail}</span>
+                </p>
+                <div className="text-[9px] text-gray-400 font-bold mt-2 font-mono">
+                  {new Date(congratsNotification.timestamp).toLocaleTimeString('vi-VN')} - REAL-TIME BROADCAST
+                </div>
+              </div>
+              
+              <button 
+                onClick={() => setCongratsNotification(null)}
+                className="absolute top-0 right-0 p-1 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 active:scale-95 transition-all cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {maintenanceObj.isMaintenance && currentUser?.role !== 'admin' && (showAdminBypass || hasBypassParam) && (
         <div className="bg-amber-600 text-white text-[11px] font-bold py-2 px-4 text-center animate-pulse flex justify-between items-center gap-4 shrink-0 shadow-md font-sans">
           <span>⚠️ HỆ THỐNG ĐANG TẠM KHÓA BẢO TRÌ. ĐĂNG NHẬP CHỈ DÀNH CHO ADMIN KHẨN CẤP!</span>

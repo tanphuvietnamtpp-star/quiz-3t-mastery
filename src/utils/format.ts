@@ -1,5 +1,12 @@
-export function formatDate(dateString: string | Date): string {
-  const date = typeof dateString === 'string' ? new Date(dateString) : dateString;
+export function formatDate(dateString: any): string {
+  if (!dateString) return '';
+  let date: Date;
+  if (dateString instanceof Date) {
+    date = dateString;
+  } else {
+    date = new Date(dateString);
+  }
+  
   if (isNaN(date.getTime())) return '';
   
   const day = String(date.getDate()).padStart(2, '0');

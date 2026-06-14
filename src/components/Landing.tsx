@@ -265,8 +265,8 @@ export default function Landing({ onLoginSuccess, slogan }: LandingProps) {
         phone: phone.trim(),
         password: password,
         company: isLNT ? 'TÂN PHÚ VIỆT NAM' : company,
-        branch: isLNT ? 'Văn Phòng Nam Kỳ' : branch,
-        department: isLNT ? 'Phòng Quản Lý Chất Lượng (P.QLCL)' : department,
+        branch: isLNT ? 'Văn Phòng Công Ty (TPP-CTY)' : branch,
+        department: isLNT ? 'Phòng Quản lí chất lượng (TPP-CTY)' : department,
         employeeId: employeeId.trim()
       });
 

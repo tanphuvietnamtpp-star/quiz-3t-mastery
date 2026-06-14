@@ -9,7 +9,7 @@ import {
   RefreshCcw, UserMinus, FileDown, Upload, Pencil, Lock, BarChart3,
   Database, Building, Briefcase, Landmark, Home, ChevronDown, ChevronUp,
   ShieldCheck, ShieldAlert, Zap, Activity, Server, Search, X,
-  Award, TrendingUp, RotateCcw, ArrowLeft
+  Award, TrendingUp, RotateCcw, ArrowLeft, Bell
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import StatsDashboard from './StatsDashboard';
@@ -41,7 +41,7 @@ const DEFAULT_LEVEL_RULES: LevelRulesConfig = {
       level: 1,
       name: "Cấp 1: Tân Binh",
       emoji: "🌱",
-      promotion: "Đạt điểm tuyệt đối 30/30 liên tục 10 lượt (đã cập nhật tự động theo đúng thay đổi mới nhất của anh) để nâng hạng lên Chiến Binh.",
+      promotion: "Đạt điểm tuyệt đối 30/30 liên tục 10 lượt để nâng hạng lên Chiến Binh.",
       demotion: "Mức sàn tối thiểu, không thể hạ thấp hơn.",
       maxTime: "90s/câu",
       reactionPoints: ["≤ 30s (+10đ)", "31s-40s (+8đ)", "41s-50s (+6đ)", "51s-90s (+5đ)"]
@@ -130,7 +130,15 @@ export default function AdminDashboard({
   const [questions, setQuestions] = useState<Question[]>([]);
   const [results, setResults] = useState<QuizResult[]>([]);
   
-  const [activeTab, setActiveTab ] = useState<'users' | 'questions' | 'add_images' | 'qr' | 'stats' | 'encoding' | 'firebase_data' | 'rules' | 'personal'>('users');
+  const [activeTab, setActiveTab ] = useState<'users' | 'questions' | 'add_images' | 'qr' | 'stats' | 'encoding' | 'firebase_data' | 'rules' | 'personal' | 'notifications'>('users');
+
+  // System Announcement States
+  const [systemAnnouncement, setSystemAnnouncement] = useState('Chào mừng toàn thể cán bộ nhân viên đến với Hội Thi Văn Hóa 3T! Tốc độ là sống còn - Tinh gọn là sức mạnh!');
+  const [isEditingAnnouncement, setIsEditingAnnouncement] = useState(false);
+  const [announcementEditText, setAnnouncementEditText] = useState('');
+  const [allAnnouncements, setAllAnnouncements] = useState<any[]>([]);
+  const [newAnnouncementText, setNewAnnouncementText] = useState('');
+  const [newAnnouncementType, setNewAnnouncementType] = useState<'admin_broadcast' | 'congrats'>('admin_broadcast');
   
   // Search and filter states for User Registration List
   const [userSearchQuery, setUserSearchQuery] = useState('');
@@ -421,6 +429,7 @@ export default function AdminDashboard({
   const [customQrUrl, setCustomQrUrl] = useState('https://quiz3t.vercel.app');
   const [showQrNotice, setShowQrNotice] = useState(false);
   const [showManualForm, setShowManualForm] = useState(false);
+  const [showImageForm, setShowImageForm] = useState(false);
 
   const loadData = async (forceRefresh = false) => {
     setLoading(true);
@@ -441,6 +450,26 @@ export default function AdminDashboard({
         if (allMappings[0].branches.length > 0) {
           setSelectedBrId(allMappings[0].branches[0].id);
         }
+      }
+
+      // Load current system announcement once
+      try {
+        const text = await databaseService.getSystemAnnouncement();
+        setSystemAnnouncement(text);
+        if (!isEditingAnnouncement) {
+          setAnnouncementEditText(text);
+        }
+      } catch (annErr) {
+        console.error("Lỗi khi tải thông báo hệ thống:", annErr);
+      }
+
+      // Load general congratulations announcements once
+      try {
+        const list = await databaseService.getAnnouncements();
+        const sorted = (list || []).sort((a, b) => b.timestamp - a.timestamp);
+        setAllAnnouncements(sorted);
+      } catch (annListErr) {
+        console.error("Lỗi khi tải bảng tin:", annListErr);
       }
 
       try {
@@ -518,12 +547,6 @@ export default function AdminDashboard({
 
   useEffect(() => {
     loadData();
-
-    // Real-time onSnapshot listener so that new registrations immediately pop up for Admin
-    const unsubscribe = databaseService.subscribeUsers((allUsers) => {
-      setUsers(allUsers);
-    });
-    return () => unsubscribe();
   }, []);
 
   // Seed question action
@@ -544,7 +567,11 @@ export default function AdminDashboard({
   const handleToggleRole = async (userId: string, currentRole: 'employee' | 'approver' | 'admin') => {
     const newRole = currentRole === 'employee' ? 'approver' : 'employee';
     try {
-      await databaseService.updateUser(userId, { role: newRole });
+      if (newRole === 'employee') {
+        await databaseService.updateUser(userId, { role: newRole, canViewStats: false });
+      } else {
+        await databaseService.updateUser(userId, { role: newRole });
+      }
       setNotice({ type: 'success', msg: `Đã thay đổi quyền tài khoản thành công.` });
       await loadData();
     } catch (err) {
@@ -554,7 +581,7 @@ export default function AdminDashboard({
 
   const handleApproveUser = async (userId: string) => {
     try {
-      await databaseService.updateUser(userId, { status: 'approved' });
+      await databaseService.updateUser(userId, { status: 'approved', approvedAt: new Date().toISOString() });
       setNotice({ type: 'success', msg: 'Đã kích hoạt phê duyệt CBNV thành công.' });
       await loadData();
     } catch (err) {
@@ -592,6 +619,7 @@ export default function AdminDashboard({
         await databaseService.updateUser(userId, { 
           role: 'executive',
           status: 'approved',
+          approvedAt: new Date().toISOString(),
           company: 'TÂN PHÚ VIỆT NAM',
           department: 'Ban Tổng Giám Đốc',
           branch: 'Văn Phòng Công Ty (TPP-CTY)'
@@ -1720,7 +1748,7 @@ export default function AdminDashboard({
                   onUpdateMaintenance(maintenanceObj.isMaintenance, finalMsg);
                   alert("Đã lưu nội dung thông báo bảo trì.");
                 }}
-                className="px-2 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 rounded text-[10px] font-bold transition-all active:scale-95"
+                className="px-2 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 rounded text-[10px] font-bold transition-all active:scale-95 cursor-pointer"
               >
                 Lưu nội dung
               </button>
@@ -1731,7 +1759,7 @@ export default function AdminDashboard({
                   onUpdateMaintenance(!maintenanceObj.isMaintenance, finalMsg);
                   alert(maintenanceObj.isMaintenance ? "Đã dỡ bỏ trạng thái tạm khóa bảo trì thành công!" : "Đã kích hoạt tạm khóa bảo trì toàn hệ thống!");
                 }}
-                className={`px-3 py-1 text-[10px] font-bold rounded transition-all active:scale-95 uppercase tracking-wider text-white ${
+                className={`px-3 py-1 text-[10px] font-bold rounded transition-all active:scale-95 uppercase tracking-wider text-white cursor-pointer ${
                   maintenanceObj.isMaintenance 
                     ? 'bg-green-600 hover:bg-green-500' 
                     : 'bg-red-600 hover:bg-red-500'
@@ -1754,17 +1782,17 @@ export default function AdminDashboard({
         )}
 
         {/* Workspace Tab Bar */}
-        <div className="flex border-b border-gray-200">
+        <div className="flex border-b border-gray-200 overflow-x-auto whitespace-nowrap scrollbar-none pt-3">
           <button
             onClick={() => { setActiveTab('users'); setNotice(null); }}
-            className={`pb-3 px-4 text-sm font-medium border-b-2 transition-all flex items-center gap-2 ${
+            className={`pb-3 px-2 lg:px-3 text-[11.5px] md:text-[12px] font-medium border-b-2 transition-all flex items-center gap-1.5 shrink-0 ${
               activeTab === 'users' ? 'border-[#1971C2] text-[#1971C2] font-bold' : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
             <div className="relative flex items-center justify-center p-0.5">
-              <Users className="h-[26px] w-[26px] text-current" />
+              <Users className="h-[21px] w-[21px] text-current" />
               {pendingUsersCount > 0 && (
-                <span className="absolute -top-2 -left-3.5 text-[11px] font-black leading-none bg-rose-500 text-white rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 animate-pulse shadow-xs ring-1.5 ring-white">
+                <span className="absolute -top-2 -right-2 text-[9px] font-black leading-none bg-rose-500 text-white rounded-full min-w-[15px] h-[15px] flex items-center justify-center px-0.5 animate-pulse shadow-xs ring-1 ring-white">
                   {pendingUsersCount}
                 </span>
               )}
@@ -1773,14 +1801,14 @@ export default function AdminDashboard({
           </button>
           <button
             onClick={() => { setActiveTab('questions'); setNotice(null); }}
-            className={`pb-3 px-4 text-sm font-medium border-b-2 transition-all flex items-center gap-2 ${
+            className={`pb-3 px-2 lg:px-3 text-[11.5px] md:text-[12px] font-medium border-b-2 transition-all flex items-center gap-1.5 shrink-0 ${
               activeTab === 'questions' ? 'border-[#1971C2] text-[#1971C2] font-bold' : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
             <div className="relative flex items-center justify-center p-0.5">
-              <HelpCircle className="h-[26px] w-[26px] text-current" />
+              <HelpCircle className="h-[21px] w-[21px] text-current" />
               {totalQuestionsCount > 0 && (
-                <span className="absolute -top-2 -left-3.5 text-[11px] font-black leading-none bg-[#1971C2] text-white rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 shadow-xs ring-1.5 ring-white">
+                <span className="absolute -top-2 -right-2 text-[9px] font-black leading-none bg-[#1971C2] text-white rounded-full min-w-[15px] h-[15px] flex items-center justify-center px-0.5 shadow-xs ring-1 ring-white">
                   {totalQuestionsCount}
                 </span>
               )}
@@ -1788,37 +1816,26 @@ export default function AdminDashboard({
             <span translate="no" className="notranslate">CÂU HỎI</span>
           </button>
           <button
-            onClick={() => { setActiveTab('add_images'); setNotice(null); }}
-            className={`pb-3 px-4 text-sm font-medium border-b-2 transition-all flex items-center gap-2 ${
-              activeTab === 'add_images' ? 'border-[#1971C2] text-[#1971C2] font-bold' : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            <div className="relative flex items-center justify-center p-0.5">
-              <ImagePlus className="h-[26px] w-[26px] text-current" />
-            </div>
-            <span translate="no" className="notranslate">THÊM PIC</span>
-          </button>
-          <button
             onClick={() => { setActiveTab('qr'); setNotice(null); }}
-            className={`pb-3 px-4 text-sm font-medium border-b-2 transition-all flex items-center gap-2 ${
+            className={`pb-3 px-2 lg:px-3 text-[11.5px] md:text-[12px] font-medium border-b-2 transition-all flex items-center gap-1.5 shrink-0 ${
               activeTab === 'qr' ? 'border-[#1971C2] text-[#1971C2] font-bold' : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
             <div className="relative flex items-center justify-center p-0.5">
-              <QrCode className="h-[26px] w-[26px] text-current" />
+              <QrCode className="h-[21px] w-[21px] text-current" />
             </div>
             <span translate="no" className="notranslate">MÃ QR</span>
           </button>
           <button
             onClick={() => { setActiveTab('stats'); setNotice(null); }}
-            className={`pb-3 px-4 text-sm font-medium border-b-2 transition-all flex items-center gap-2 ${
+            className={`pb-3 px-2 lg:px-3 text-[11.5px] md:text-[12px] font-medium border-b-2 transition-all flex items-center gap-1.5 shrink-0 ${
               activeTab === 'stats' ? 'border-[#1971C2] text-[#1971C2] font-bold' : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
             <div className="relative flex items-center justify-center p-0.5">
-              <BarChart3 className="h-[26px] w-[26px] text-current" />
+              <BarChart3 className="h-[21px] w-[21px] text-current" />
               {participantsTodayCount > 0 && (
-                <span className="absolute -top-2 -left-3.5 text-[11px] font-black leading-none bg-blue-600 text-white rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 shadow-xs ring-1.5 ring-white">
+                <span className="absolute -top-2 -right-2 text-[9px] font-black leading-none bg-blue-600 text-white rounded-full min-w-[15px] h-[15px] flex items-center justify-center px-0.5 shadow-xs ring-1 ring-white">
                   {participantsTodayCount}
                 </span>
               )}
@@ -1829,13 +1846,13 @@ export default function AdminDashboard({
               initial={{ y: 0 }}
               animate={attemptsTodayCount > 0 ? {
                 y: [0, -12, 0, -8, 0, -4, 0],
-                scale: [1, 1.25, 0.95, 1.1, 0.98, 1.02, 1],
+                scale: [1, 1.15, 0.95, 1.05, 0.98, 1.01, 1],
               } : {}}
               transition={{
                 duration: 0.8,
                 ease: "easeInOut"
               }}
-              className={`text-[11px] font-black leading-none rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 shadow-xs ring-1.5 ring-white shrink-0 ${
+              className={`text-[9.5px] font-black leading-none rounded-full min-w-[15px] h-[15px] flex items-center justify-center px-0.5 shadow-xs ring-1 ring-white shrink-0 ${
                 attemptsTodayCount > 0 
                   ? 'bg-emerald-500 text-white' 
                   : 'bg-slate-400 text-white'
@@ -1847,47 +1864,58 @@ export default function AdminDashboard({
           </button>
           <button
             onClick={() => { setActiveTab('encoding'); setNotice(null); }}
-            className={`pb-3 px-4 text-sm font-medium border-b-2 transition-all md:flex hidden items-center gap-2 ${
+            className={`pb-3 px-2 lg:px-3 text-[11.5px] md:text-[12px] font-medium border-b-2 transition-all md:flex hidden items-center gap-1.5 shrink-0 ${
               activeTab === 'encoding' ? 'border-[#1971C2] text-[#1971C2] font-bold' : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
             <div className="relative flex items-center justify-center p-0.5">
-              <Database className="h-[26px] w-[26px] text-current" />
+              <Database className="h-[21px] w-[21px] text-current" />
             </div>
             <span translate="no" className="notranslate">MÃ HÓA</span>
           </button>
           <button
             onClick={() => { setActiveTab('firebase_data'); setNotice(null); }}
-            className={`pb-3 px-4 text-sm font-medium border-b-2 transition-all flex items-center gap-2 ${
+            className={`pb-3 px-2 lg:px-3 text-[11.5px] md:text-[12px] font-medium border-b-2 transition-all flex items-center gap-1.5 shrink-0 ${
               activeTab === 'firebase_data' ? 'border-[#1971C2] text-[#1971C2] font-bold' : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
             <div className="relative flex items-center justify-center p-0.5">
-              <Server className="h-[26px] w-[26px] text-current" />
+              <Server className="h-[21px] w-[21px] text-current" />
             </div>
             <span translate="no" className="notranslate">DỮ LIỆU</span>
           </button>
           <button
             onClick={() => { setActiveTab('rules'); setNotice(null); }}
-            className={`pb-3 px-4 text-sm font-medium border-b-2 transition-all flex items-center gap-2 ${
+            className={`pb-3 px-2 lg:px-3 text-[11.5px] md:text-[12px] font-medium border-b-2 transition-all flex items-center gap-1.5 shrink-0 ${
               activeTab === 'rules' ? 'border-[#1971C2] text-[#1971C2] font-bold' : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
             <div className="relative flex items-center justify-center p-0.5">
-              <Award className="h-[26px] w-[26px] text-current" />
+              <Award className="h-[21px] w-[21px] text-current" />
             </div>
             <span translate="no" className="notranslate">QUY CHẾ</span>
           </button>
           <button
             onClick={() => { setActiveTab('personal'); setNotice(null); }}
-            className={`pb-3 px-4 text-sm font-medium border-b-2 transition-all flex items-center gap-2 ${
+            className={`pb-3 px-2 lg:px-3 text-[11.5px] md:text-[12px] font-medium border-b-2 transition-all flex items-center gap-1.5 shrink-0 ${
               activeTab === 'personal' ? 'border-[#1971C2] text-[#1971C2] font-bold' : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
             <div className="relative flex items-center justify-center p-0.5">
-              <UserCheck className="h-[26px] w-[26px] text-current" />
+              <UserCheck className="h-[21px] w-[21px] text-current" />
             </div>
             <span translate="no" className="notranslate">CÁ NHÂN</span>
+          </button>
+          <button
+            onClick={() => { setActiveTab('notifications'); setNotice(null); }}
+            className={`pb-3 px-2 lg:px-3 text-[11.5px] md:text-[12px] font-medium border-b-2 transition-all flex items-center gap-1.5 shrink-0 ${
+              activeTab === 'notifications' ? 'border-[#1971C2] text-[#1971C2] font-bold' : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <div className="relative flex items-center justify-center p-0.5">
+              <Bell className="h-[21px] w-[21px] text-current" />
+            </div>
+            <span translate="no" className="notranslate">THÔNG BÁO</span>
           </button>
         </div>
 
@@ -2542,6 +2570,161 @@ export default function AdminDashboard({
                 )}
               </div>
 
+              {/* Image Extractor Form */}
+              <div className="bg-white border border-gray-150 rounded-md p-6 shadow-sm">
+                <button
+                  type="button"
+                  onClick={() => setShowImageForm(!showImageForm)}
+                  className="w-full flex items-center justify-between text-sm font-bold text-gray-900 uppercase tracking-widest focus:outline-none cursor-pointer"
+                >
+                  <span translate="no" className="notranslate">THÊM CÂU HỎI BẰNG HÌNH ẢNH</span>
+                  {showImageForm ? (
+                    <ChevronUp className="h-4 w-4 text-gray-500 shrink-0 transition-transform" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-gray-500 shrink-0 transition-transform" />
+                  )}
+                </button>
+
+                {showImageForm && (
+                  <div className="mt-4 border-t border-gray-100 pt-4 space-y-4 font-sans">
+                    <p className="text-xs text-gray-550">Tải lên hình ảnh chụp đề thi để bóc tách tự động bằng AI siêu tốc.</p>
+                    
+                    {/* Image Input field Box */}
+                    <div className="border-2 border-dashed border-gray-200 rounded-md p-8 text-center space-y-4 bg-gray-50/50">
+                      <div className="bg-blue-50 text-blue-600 h-10 w-10 rounded-full flex items-center justify-center mx-auto border border-blue-100">
+                        <ImagePlus className="h-5 w-5 text-[#1971C2]" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-xs text-gray-800 uppercase tracking-wider"><span translate="no" className="notranslate">Tải lên loạt hình ảnh chụp đề thi 3T</span></h3>
+                        <p className="text-[11px] text-gray-400 mt-1 max-w-md mx-auto leading-relaxed"><span translate="no" className="notranslate">Cơ chế nén tự động tối ưu hóa dung lượng & API Quota sẽ chạy tại chỗ trước khi phân tích qua Gemini AI.</span></p>
+                      </div>
+                      
+                      <div className="relative inline-block mt-2">
+                        <input
+                          type="file"
+                          multiple
+                          accept="image/*"
+                          onChange={handleImageChange}
+                          className="absolute inset-0 opacity-0 cursor-pointer w-full"
+                          disabled={extracting || loading}
+                        />
+                        <button type="button" className="bg-[#1971C2] text-white font-bold text-[10px] uppercase tracking-wider py-2 px-5 rounded shadow-sm hover:bg-opacity-95 cursor-pointer">
+                          <span translate="no" className="notranslate">{loading ? 'Đang nén ảnh...' : 'Chọn từ máy tính / chụp ảnh'}</span>
+                        </button>
+                      </div>
+
+                      {selectedImages.length > 0 && (
+                        <div className="pt-4 max-w-sm mx-auto border-t border-gray-200/50 mt-4">
+                          <div className="text-[10px] text-gray-450 uppercase mb-2 font-bold tracking-wider"><span translate="no" className="notranslate">Hình ảnh đã chọn ({selectedImages.length})</span></div>
+                          <div className="flex gap-2 justify-center flex-wrap">
+                            {selectedImages.map((img, iIdx) => (
+                              <div key={iIdx} className="relative h-12 w-12 rounded overflow-hidden bg-gray-100 border border-gray-250">
+                                <img 
+                                  src={`data:image/jpeg;base64,${img.compressedBase64}`} 
+                                  alt="preview" 
+                                  className="object-cover h-full w-full" 
+                                  referrerPolicy="no-referrer"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedImages(prev => prev.filter((_, i) => i !== iIdx))}
+                                  className="absolute bg-black/60 text-white rounded-full p-0.5 top-0.5 right-0.5 hover:bg-black cursor-pointer"
+                                  title="Xóa hình"
+                                >
+                                  <UserMinus className="h-2.5 w-2.5" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+
+                          <div className="pt-4">
+                            <button
+                              type="button"
+                              onClick={handleExtractWithAI}
+                              disabled={extracting || selectedImages.length === 0}
+                              className="w-full bg-[#1971C2] hover:bg-opacity-95 text-white font-bold text-xs py-2 px-4 rounded shadow-sm cursor-pointer uppercase tracking-wider"
+                            >
+                              <span translate="no" className="notranslate">{extracting ? 'Trí tuệ Nhân tạo Gemini đang bóc tách...' : 'Phân Tích Bóc Tách Đề Bằng AI'}</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Extract questions table with duplication warnings! */}
+                    {extractedQuestions.length > 0 && (
+                      <div className="border border-gray-150 rounded-md shadow-sm overflow-hidden space-y-4 p-4 bg-white mt-4">
+                        <div className="border-b border-gray-100 pb-3 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                          <div>
+                            <h3 className="text-xs font-bold text-gray-505 uppercase tracking-widest"><span translate="no" className="notranslate">Nội dung câu hỏi AI bóc tách</span></h3>
+                            <p className="text-[10px] text-red-500 mt-0.5 italic"><span translate="no" className="notranslate">Hệ thống đã tự động rà quét kiểm tra trùng lặp câu hỏi.</span></p>
+                          </div>
+
+                          {/* Stats Badge circled by the user */}
+                          <div className="flex flex-wrap items-center gap-3">
+                            <div className="flex items-center gap-1.5 px-3 py-1 bg-green-50 border border-green-200 rounded">
+                              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+                              <span className="text-[10px] font-extrabold text-green-700">
+                                {extractedQuestions.filter(q => !q.isDuplicate).length} CÂU HỢP LỆ
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5 px-3 py-1 bg-orange Block rounded border border-orange-200 bg-orange-50">
+                              <span className="w-1.5 h-1.5 rounded-full bg-orange-500"></span>
+                              <span className="text-[10px] font-extrabold text-orange-700">
+                                {extractedQuestions.filter(q => q.isDuplicate).length} CÂU KHÔNG HỢP LỆ
+                              </span>
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={handleSaveExtractedQuestions}
+                            className="bg-green-600 hover:bg-green-750 text-white font-bold text-[10px] uppercase tracking-wider py-2 px-4 rounded cursor-pointer shrink-0"
+                          >
+                            <span translate="no" className="notranslate">Lưu đề không trùng lặp</span>
+                          </button>
+                        </div>
+
+                        <div className="space-y-4 max-h-[450px] overflow-y-auto pr-1">
+                          {extractedQuestions.map((eq, qIdx) => (
+                            <div 
+                              key={eq.id}
+                              className={`p-3 rounded border ${
+                                eq.isDuplicate ? 'bg-orange-50/50 border-orange-200' : 'bg-gray-50/50 border-gray-200'
+                              }`}
+                            >
+                              <div className="flex justify-between items-start gap-4">
+                                <span translate="no" className="notranslate text-[9px] bg-white border border-gray-200 px-1.5 py-0.5 rounded font-bold uppercase">CÂU TRÍ TUỆ {qIdx + 1}</span>
+                                {eq.isDuplicate ? (
+                                  <span translate="no" className="notranslate flex items-center gap-1 font-bold text-orange-700 text-[10px] px-2 py-0.5 bg-orange-100/55 border border-orange-200/60 rounded-full leading-none">
+                                    <AlertTriangle className="h-2.5 w-2.5" /> TRÙNG LẶP SỐ LIỆU ĐỀ CŨ
+                                  </span>
+                                ) : (
+                                  <span translate="no" className="notranslate text-green-700 text-[10px] font-bold px-2 py-0.5 bg-green-50 border border-green-200 rounded-full leading-none">HỢP LỆ</span>
+                                )}
+                              </div>
+
+                              <div className="pt-2">
+                                <h4 className="font-bold text-xs text-gray-800">{eq.text}</h4>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-2">
+                                  {eq.options.map((opt, oIdx) => (
+                                    <div key={oIdx} className={`p-1.5 rounded text-[11px] text-gray-600 ${
+                                      oIdx === eq.correctAnswerIndex ? 'bg-green-50 border border-green-200/80 text-green-900 font-bold' : 'bg-white border border-gray-150'
+                                    }`}>
+                                      {String.fromCharCode(65 + oIdx)}. {cleanOptionText(opt)}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
               {/* Active list table */}
               <div className="bg-white border border-gray-150 rounded-md shadow-sm overflow-hidden">
                 <div className="p-3 border-b border-gray-105 bg-gray-50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -2644,156 +2827,6 @@ export default function AdminDashboard({
                   </table>
                 </div>
               </div>
-            </motion.div>
-          )}
-
-          {/* AI Question Extractor Tab */}
-          {activeTab === 'add_images' && (
-            <motion.div
-              key="add_images"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="space-y-6"
-            >
-              <div className="bg-white border border-gray-150 rounded-md p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
-                <div>
-                  <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest flex items-center gap-1.5 font-sans">
-                    <ImagePlus className="h-4 w-4 text-purple-650" />
-                    <span>Trích xuất Câu Hỏi AI (Hình Ảnh)</span>
-                  </h3>
-                  <p className="text-xs text-gray-400 mt-0.5">Tải lên hình ảnh chụp đề thi để bóc tách tự động bằng AI siêu tốc.</p>
-                </div>
-                <button
-                  onClick={onSimulateEmployee}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-green-600 hover:bg-green-700 rounded-md shadow-xs transition-all cursor-pointer active:scale-95 whitespace-nowrap"
-                >
-                  <Home className="h-3.5 w-3.5" />
-                  <span>MOBILE</span>
-                </button>
-              </div>
-
-              {/* Image Input field Box */}
-              <div className="bg-white border-2 border-dashed border-gray-200 rounded-md p-8 text-center space-y-4">
-                <div className="bg-blue-50 text-blue-600 h-12 w-12 rounded-full flex items-center justify-center mx-auto border border-blue-100">
-                  <ImagePlus className="h-6 w-6 text-[#1971C2]" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-sm text-gray-800"><span translate="no" className="notranslate">Tải lên loạt hình ảnh chụp đề thi 3T</span></h3>
-                  <p className="text-xs text-gray-500 mt-1"><span translate="no" className="notranslate">Cơ chế nén tự động tối ưu hóa dung lượng & API Quota sẽ chạy tại chỗ trước khi phân tích qua Gemini AI.</span></p>
-                </div>
-                
-                <div className="relative inline-block">
-                  <input
-                    type="file"
-                    multiple
-                    accept="image/*"
-                    onChange={handleImageChange}
-                    className="absolute inset-0 opacity-0 cursor-pointer w-full"
-                    disabled={extracting || loading}
-                  />
-                  <button className="bg-[#1971C2] text-white font-bold text-xs py-2 px-5 rounded-md shadow-sm">
-                    <span translate="no" className="notranslate">{loading ? 'Đang nén ảnh...' : 'Chọn từ máy tính / chụp ảnh'}</span>
-                  </button>
-                </div>
-
-                {selectedImages.length > 0 && (
-                  <div className="pt-4 max-w-sm mx-auto">
-                    <div className="text-xs text-gray-450 uppercase mb-2"><span translate="no" className="notranslate">Hình ảnh đã chọn rèn luyện ({selectedImages.length})</span></div>
-                    <div className="flex gap-2 justify-center flex-wrap">
-                      {selectedImages.map((img, iIdx) => (
-                        <div key={iIdx} className="relative h-14 w-14 rounded-md overflow-hidden bg-gray-100 border border-gray-250">
-                          <img 
-                            src={`data:image/jpeg;base64,${img.compressedBase64}`} 
-                            alt="preview" 
-                            className="object-cover h-full w-full" 
-                            referrerPolicy="no-referrer"
-                          />
-                          <button
-                            onClick={() => setSelectedImages(prev => prev.filter((_, i) => i !== iIdx))}
-                            className="absolute bg-black/60 text-white rounded-full p-0.5 top-0.5 right-0.5 hover:bg-black"
-                          >
-                            <UserMinus className="h-3 w-3" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="pt-4">
-                      <button
-                        onClick={handleExtractWithAI}
-                        disabled={extracting || selectedImages.length === 0}
-                        className="w-full bg-[#1971C2] hover:bg-opacity-95 text-white font-bold text-xs py-2 px-4 rounded-md shadow-sm"
-                      >
-                        <span translate="no" className="notranslate">{extracting ? 'Trí tuệ Nhân tạo Gemini đang bóc tách...' : 'Phân Tích Bóc Tách Đề Bằng AI'}</span>
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Extract questions table with duplication warnings! */}
-              {extractedQuestions.length > 0 && (
-                <div className="bg-white border border-gray-150 rounded-md shadow-sm overflow-hidden space-y-4 p-4">
-                  <div className="border-b border-gray-100 pb-3 flex justify-between items-center">
-                    <div>
-                      <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest"><span translate="no" className="notranslate">Nội dung câu hỏi AI bóc tách</span></h3>
-                      <p className="text-xs text-red-500 mt-0.5 italic"><span translate="no" className="notranslate">Hệ thống đã tự động rà quét kiểm tra trùng lặp câu hỏi.</span></p>
-                    </div>
-                    <button
-                      onClick={handleSaveExtractedQuestions}
-                      className="bg-green-600 hover:bg-green-700 text-white font-bold text-xs py-2 px-4 rounded-md"
-                    >
-                      <span translate="no" className="notranslate">Lưu đề không trùng lặp</span>
-                    </button>
-                  </div>
-
-                  <div className="space-y-4 max-h-[450px] overflow-y-auto">
-                    {extractedQuestions.map((eq, qIdx) => (
-                      <div 
-                        key={eq.id}
-                        className={`p-4 rounded-md border ${
-                          eq.isDuplicate ? 'bg-orange-50 border-orange-200' : 'bg-gray-50 border-gray-200'
-                        }`}
-                      >
-                        <div className="flex justify-between items-start gap-4">
-                          <span translate="no" className="notranslate text-[10px] bg-white border border-gray-200 px-2 py-0.5 rounded font-bold">CÂU TRÍ TUỆ {qIdx + 1}</span>
-                          {eq.isDuplicate ? (
-                            <span translate="no" className="notranslate flex items-center gap-1 font-bold text-orange-700 text-xs px-2 py-0.5 bg-orange-100 border border-orange-200 rounded-full">
-                              <AlertTriangle className="h-3 w-3" /> TRÙNG LẶP SỐ LIỆU ĐỀ CŨ
-                            </span>
-                          ) : (
-                            <span translate="no" className="notranslate text-green-700 text-xs font-bold px-2 py-0.5 bg-green-50 border border-green-200 rounded-full">HỢP LỆ</span>
-                          )}
-                        </div>
-
-                        <div className="pt-2">
-                          <h4 className="font-bold text-sm text-gray-800">{eq.text}</h4>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2">
-                            {eq.options.map((opt, oIdx) => (
-                              <div key={oIdx} className={`p-2 rounded text-xs text-gray-600 ${
-                                oIdx === eq.correctAnswerIndex ? 'bg-green-50/50 text-green-900 border border-green-200 font-semibold' : 'bg-white border border-gray-150'
-                              }`}>
-                                {String.fromCharCode(65 + oIdx)}. {cleanOptionText(opt)}
-                              </div>
-                            ))}
-                          </div>
-                          
-                          <div className="mt-2 text-xs bg-blue-50/50 p-2.5 rounded text-blue-700">
-                            <strong>Lời khuyên Sếp:</strong> {eq.explanation}
-                          </div>
-
-                          {eq.isDuplicate && (
-                            <div className="mt-2 text-[11px] text-orange-850 bg-orange-50 p-2 rounded-md">
-                              <strong>Lỗi trùng với đề cũ:</strong> "{eq.duplicateOriginal}"
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
             </motion.div>
           )}
 
@@ -3792,6 +3825,231 @@ export default function AdminDashboard({
                 results={results} 
                 levelRulesFromCloud={levelRules} 
               />
+            </motion.div>
+          )}
+
+          {/* THÔNG BÁO View */}
+          {activeTab === 'notifications' && (
+            <motion.div
+              key="notifications_view"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="space-y-6"
+            >
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                
+                {/* Left side: Post and Edit Announcements */}
+                <div className="lg:col-span-4 space-y-4">
+                  {/* Edit Global Marquee */}
+                  <div className="bg-white border border-gray-150 rounded-lg p-4 shadow-sm font-sans">
+                    <div className="flex items-center gap-2 pb-3 mb-3 border-b border-gray-100">
+                      <Bell className="h-4.5 w-4.5 text-[#D9480F] animate-swing" />
+                      <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider">Thông Báo Chữ Chạy Hệ Thống</h3>
+                    </div>
+                    {isEditingAnnouncement ? (
+                      <div className="space-y-3">
+                        <textarea
+                          rows={3}
+                          value={announcementEditText}
+                          onChange={(e) => setAnnouncementEditText(e.target.value)}
+                          className="w-full text-xs p-2.5 border border-amber-300 rounded-lg bg-white text-slate-850 outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 font-sans leading-relaxed"
+                          placeholder="Nhập thông báo hiển thị cho toàn bộ hệ thống..."
+                          autoFocus
+                        />
+                        <div className="flex gap-2 justify-end">
+                          <button
+                            onClick={() => {
+                              setAnnouncementEditText(systemAnnouncement);
+                              setIsEditingAnnouncement(false);
+                            }}
+                            className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-slate-700 text-[11px] font-bold rounded-md transition-all active:scale-95 cursor-pointer"
+                          >
+                            Hủy
+                          </button>
+                          <button
+                            onClick={async () => {
+                              if (!announcementEditText.trim()) return;
+                              try {
+                                await databaseService.saveSystemAnnouncement(announcementEditText.trim());
+                                // Log to database
+                                await databaseService.saveAnnouncement({
+                                  id: 'ann_sys_' + Date.now(),
+                                  userName: user.name,
+                                  type: 'admin_broadcast',
+                                  detail: announcementEditText.trim(),
+                                  timestamp: Date.now()
+                                });
+                                setIsEditingAnnouncement(false);
+                                alert("Đã lưu thông báo chữ chạy mới!");
+                              } catch (err) {
+                                console.error("Lỗi cập nhật thông báo chữ chạy:", err);
+                              }
+                            }}
+                            className="px-3 py-1.5 bg-[#2B8A3E] text-white text-[11px] font-bold rounded-md transition-all active:scale-95 cursor-pointer"
+                          >
+                            Lưu thông báo
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="p-3 bg-amber-50/70 border border-amber-100 rounded-lg leading-relaxed text-slate-805 text-xs font-bold">
+                          {systemAnnouncement}
+                        </div>
+                        <button
+                          onClick={() => {
+                            setAnnouncementEditText(systemAnnouncement);
+                            setIsEditingAnnouncement(true);
+                          }}
+                          className="w-full py-1.5 bg-amber-50 hover:bg-amber-100/80 active:scale-95 rounded-md border border-amber-200 text-amber-850 font-bold text-[11px] transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                          <span>Chỉnh Sửa Thông Báo Chữ Chạy</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Post New Announcement Feed */}
+                  <div className="bg-white border border-gray-150 rounded-lg p-4 shadow-sm font-sans">
+                    <div className="flex items-center gap-2 pb-3 mb-3 border-b border-gray-100">
+                      <Plus className="h-4.5 w-4.5 text-[#1971C2]" />
+                      <h3 className="text-xs font-bold text-gray-750 uppercase tracking-wider">Đăng Tin Thông Báo Mới</h3>
+                    </div>
+                    
+                    <div className="space-y-3 text-xs font-sans">
+                      <div className="space-y-1">
+                        <label className="text-[10px] text-gray-400 uppercase font-black tracking-wider">Phân loại hiển thị</label>
+                        <select
+                          value={newAnnouncementType}
+                          onChange={(e) => setNewAnnouncementType(e.target.value as 'admin_broadcast' | 'congrats')}
+                          className="w-full border border-gray-250 rounded px-2.5 py-2 text-xs outline-none focus:border-[#1971C2] font-semibold text-slate-750 bg-white"
+                        >
+                          <option value="admin_broadcast">📢 Quản trị viên phát sóng (Đỏ nổi bật)</option>
+                          <option value="congrats">🎉 Biểu dương khen thưởng (Xanh lá)</option>
+                        </select>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[10px] text-gray-400 uppercase font-black tracking-wider">Nội dung chi tiết</label>
+                        <textarea
+                          rows={4}
+                          value={newAnnouncementText}
+                          onChange={(e) => setNewAnnouncementText(e.target.value)}
+                          placeholder="Nhập nội dung thông báo gửi tới bảng tin toàn bộ CBNV..."
+                          className="w-full border border-gray-250 rounded-lg p-2.5 font-medium outline-none text-xs focus:ring-1 focus:ring-[#1971C2] focus:border-[#1971C2] bg-white text-slate-850 leading-relaxed"
+                        />
+                      </div>
+
+                      <button
+                        onClick={async () => {
+                          if (!newAnnouncementText.trim()) {
+                            alert("Vui lòng nhập nội dung thông báo!");
+                            return;
+                          }
+                          try {
+                            await databaseService.saveAnnouncement({
+                              id: 'ann_' + Date.now(),
+                              userName: user.name,
+                              type: newAnnouncementType,
+                              detail: newAnnouncementText.trim(),
+                              timestamp: Date.now()
+                            });
+                            setNewAnnouncementText('');
+                            alert("Đăng tin thông báo mới thành công!");
+                          } catch (err) {
+                            console.error("Lỗi khi lưu thông báo mới:", err);
+                          }
+                        }}
+                        className="w-full py-2 bg-[#1971C2] hover:bg-opacity-95 text-white font-black text-[11px] uppercase tracking-wider rounded-lg active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+                      >
+                        <CheckCircle2 className="h-4 w-4" />
+                        <span>Đăng Lên Bảng Tin</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right side: Current Notification Feed Log */}
+                <div className="lg:col-span-8">
+                  <div className="bg-white border border-gray-150 rounded-lg shadow-sm font-sans flex flex-col h-[520px]">
+                    <div className="px-4 py-3.5 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Activity className="h-4.5 w-4.5 text-slate-500" />
+                        <h3 className="text-xs font-bold text-gray-650 uppercase tracking-widest font-sans">Nhật ký bảng tin hiện tại</h3>
+                      </div>
+                      <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-bold">
+                        {allAnnouncements.length} tin tức
+                      </span>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto p-4 space-y-3.5 max-h-[460px]">
+                      {allAnnouncements.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-full text-slate-400 py-12">
+                          <Bell className="h-10 w-10 mb-2 opacity-30 animate-pulse" />
+                          <p className="text-xs font-medium">Chưa có thông báo nào được lưu trên hệ thống.</p>
+                        </div>
+                      ) : (
+                        allAnnouncements.map((ann) => {
+                          const isBroadcast = ann.type === 'admin_broadcast';
+                          return (
+                            <div 
+                              key={ann.id} 
+                              className={`p-3.5 rounded-xl border leading-relaxed font-sans text-xs flex flex-col gap-1.5 shadow-3xs transition-all ${
+                                isBroadcast 
+                                  ? 'bg-[#FFF9DB] border-[#FFE3E3]/40' 
+                                  : 'bg-[#EBFBEE] border-[#D3F9D8]/45'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-1.5">
+                                  <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md ${
+                                    isBroadcast 
+                                      ? 'bg-[#FFE3E3] text-[#E03131]' 
+                                      : 'bg-[#D3F9D8] text-[#2B8A3E]'
+                                  }`}>
+                                    {isBroadcast ? '📢 Phát Sóng' : '🎉 Biểu Dương'}
+                                  </span>
+                                  <span className="text-[10px] text-gray-600 font-bold">
+                                    Người tạo: <span className="text-slate-900 font-extrabold">{ann.userName || 'Hệ thống'}</span>
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10px] text-gray-400 font-medium">
+                                    {formatDate(new Date(ann.timestamp))}
+                                  </span>
+                                  <button
+                                    onClick={async () => {
+                                      if (window.confirm("Bạn có chắc chắn muốn xóa thông báo này? Hành động này không thể hoàn tác.")) {
+                                        try {
+                                          await databaseService.deleteAnnouncement(ann.id);
+                                          alert("Đã xóa thông báo thành công!");
+                                        } catch (err) {
+                                          console.error("Lỗi xóa thông báo:", err);
+                                          alert("Lỗi khi xóa thông báo.");
+                                        }
+                                      }
+                                    }}
+                                    className="p-1 text-slate-400 hover:text-red-500 rounded transition-all active:scale-90 cursor-pointer"
+                                    title="Xóa thông báo"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                              <p translate="no" className="notranslate text-xs text-slate-800 leading-relaxed font-sans font-medium">
+                                {ann.detail ? (ann.detail.charAt(0).toUpperCase() + ann.detail.slice(1)) : ""}
+                              </p>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+              </div>
             </motion.div>
           )}
 
