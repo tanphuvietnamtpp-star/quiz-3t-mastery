@@ -183,8 +183,15 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
   // Filter users based on companyMappings exclusion
   const users = useMemo(() => {
     return rawUsers.filter(u => {
-      const bNameNorm = (u.branch || '').trim().normalize('NFC').toLowerCase();
+      const uStatus = (u.status || '').toUpperCase();
+      if (uStatus !== 'APPROVED' && uStatus !== 'APPROVED_MEMBER') return false;
+
+      if (u.role === 'admin' || u.role === 'executive') return false;
+
       const dNameNorm = (u.department || '').trim().normalize('NFC').toLowerCase();
+      if (dNameNorm === 'ban tổng giám đốc') return false;
+
+      const bNameNorm = (u.branch || '').trim().normalize('NFC').toLowerCase();
       for (const co of mappings) {
         for (const br of co.branches) {
           if (br.name.trim().normalize('NFC').toLowerCase() === bNameNorm) {
@@ -204,8 +211,28 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
   // Filter results based on companyMappings exclusion
   const results = useMemo(() => {
     return rawResults.filter(r => {
-      const bNameNorm = (r.branch || '').trim().normalize('NFC').toLowerCase();
+      let foundUser: User | undefined;
+      if (r.userId) {
+        foundUser = rawUsers.find(u => u.id === r.userId);
+      } else if (r.userName) {
+        const normName = r.userName.trim().normalize('NFC').toUpperCase().replace(/\s+/g, ' ');
+        foundUser = rawUsers.find(u => {
+          const uNorm = u.name ? u.name.trim().normalize('NFC').toUpperCase().replace(/\s+/g, ' ') : '';
+          return uNorm === normName;
+        });
+      }
+
+      if (!foundUser) return false;
+
+      const uStatus = (foundUser.status || '').toUpperCase();
+      if (uStatus !== 'APPROVED' && uStatus !== 'APPROVED_MEMBER') return false;
+
+      if (foundUser.role === 'admin' || foundUser.role === 'executive') return false;
+
       const dNameNorm = (r.department || '').trim().normalize('NFC').toLowerCase();
+      if (dNameNorm === 'ban tổng giám đốc') return false;
+
+      const bNameNorm = (r.branch || '').trim().normalize('NFC').toLowerCase();
       for (const co of mappings) {
         for (const br of co.branches) {
           if (br.name.trim().normalize('NFC').toLowerCase() === bNameNorm) {
@@ -220,7 +247,7 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
       }
       return true;
     });
-  }, [rawResults, mappings]);
+  }, [rawResults, rawUsers, mappings]);
   const [scorecardBranchFilter, setScorecardBranchFilter] = useState('');
   const [scorecardDeptFilter, setScorecardDeptFilter] = useState('');
   const [scorecardSearchQuery, setScorecardSearchQuery] = useState('');

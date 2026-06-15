@@ -1163,9 +1163,69 @@ export default function EmployeeDashboard({
     syncInactivityDemotions();
   }, [allResults, allUsersList, levelRules, allAnnouncements]);
 
+  // Filtered results to exclude unapproved, deleted, admin, and executive (exempt / "đặc cách" / "đã bị loại") users for all public rankings and honor boards
+  const resultsForRankings = useMemo(() => {
+    if (allResults.length === 0) return [];
+    
+    const lNormalizeName = (name: string | undefined | null): string => {
+      if (!name) return '';
+      return name.trim().normalize('NFC').toUpperCase().replace(/\s+/g, ' ');
+    };
+
+    return allResults.filter(res => {
+      if (res.userId) {
+        const found = allUsersList.find(u => u.id === res.userId);
+        if (!found) return false;
+        
+        const fStatus = (found.status || '').toUpperCase();
+        if (fStatus !== 'APPROVED' && fStatus !== 'APPROVED_MEMBER') {
+          return false;
+        }
+        
+        if (found.role === 'admin' || found.role === 'executive') {
+          return false;
+        }
+        
+        const deptNorm = (found.department || '').trim().toLowerCase();
+        if (deptNorm === 'ban tổng giám đốc') {
+          return false;
+        }
+        
+        return true;
+      }
+      
+      const normName = lNormalizeName(res.userName);
+      if (normName) {
+        const found = allUsersList.find(u => {
+          const uNorm = u.name ? u.name.trim().normalize('NFC').toUpperCase().replace(/\s+/g, ' ') : '';
+          return uNorm === normName;
+        });
+        if (!found) return false;
+        
+        const fStatus = (found.status || '').toUpperCase();
+        if (fStatus !== 'APPROVED' && fStatus !== 'APPROVED_MEMBER') {
+          return false;
+        }
+        
+        if (found.role === 'admin' || found.role === 'executive') {
+          return false;
+        }
+        
+        const deptNorm = (found.department || '').trim().toLowerCase();
+        if (deptNorm === 'ban tổng giám đốc') {
+          return false;
+        }
+        
+        return true;
+      }
+      
+      return false;
+    });
+  }, [allResults, allUsersList]);
+
   // Detailed dynamic Level calculation for all users to construct BẢNG VÀNG VINH DANH
   const leaderboardCandidates = useMemo(() => {
-    if (allResults.length === 0) return { 
+    if (resultsForRankings.length === 0) return { 
       day: [], 
       week: [], 
       month: [], 
@@ -1185,7 +1245,7 @@ export default function EmployeeDashboard({
     const nameToUserIdMap: Record<string, string> = {};
     const userIdToNameMap: Record<string, string> = {};
 
-    allResults.forEach(res => {
+    resultsForRankings.forEach(res => {
       const normName = normalizeName(res.userName);
       if (res.userId && normName) {
         nameToUserIdMap[normName] = res.userId;
@@ -1206,7 +1266,7 @@ export default function EmployeeDashboard({
       totalQuestions: number;
     }> = {};
 
-    allResults.forEach(res => {
+    resultsForRankings.forEach(res => {
       const normName = normalizeName(res.userName);
       const resolvedUserId = res.userId || nameToUserIdMap[normName] || '';
       const resolvedNormalizedName = normName || (res.userId ? userIdToNameMap[res.userId] : '') || '';
@@ -1266,7 +1326,7 @@ export default function EmployeeDashboard({
     };
 
     const compiledParticipants = Object.entries(groupedUsers).map(([personKey, p]) => {
-      const userResults = allResults.filter(r => {
+      const userResults = resultsForRankings.filter(r => {
         const rNormName = normalizeName(r.userName);
         const rResolvedUserId = r.userId || nameToUserIdMap[rNormName] || '';
         const rResolvedNormalizedName = rNormName || (r.userId ? userIdToNameMap[r.userId] : '') || '';
@@ -1449,7 +1509,7 @@ export default function EmployeeDashboard({
       isWeekFallback: false,
       isMonthFallback: false
     };
-  }, [allResults, levelRules]);
+  }, [resultsForRankings, levelRules]);
 
   // Helper for date formatting in dd/mm/yy
   const formatToDDMMYY = (timestamp: any): string => {
@@ -1483,7 +1543,7 @@ export default function EmployeeDashboard({
     const userIdToDeptMap: Record<string, string> = {};
     const userIdToBranchMap: Record<string, string> = {};
 
-    allResults.forEach(res => {
+    resultsForRankings.forEach(res => {
       const normName = lNormalizeName(res.userName);
       if (res.userId && normName) {
         nameToUserIdMap[normName] = res.userId;
@@ -1496,7 +1556,7 @@ export default function EmployeeDashboard({
     });
 
     const userGroups: Record<string, QuizResult[]> = {};
-    allResults.forEach(res => {
+    resultsForRankings.forEach(res => {
       const normName = lNormalizeName(res.userName);
       const resolvedUserId = res.userId || nameToUserIdMap[normName] || '';
       const resolvedNormalizedName = normName || (res.userId ? userIdToNameMap[res.userId] : '') || '';
@@ -1831,7 +1891,7 @@ export default function EmployeeDashboard({
       }
       return a.totalAttempts - b.totalAttempts;
     });
-  }, [allResults, levelRules, inactivityTestMode]);
+  }, [resultsForRankings, levelRules, inactivityTestMode]);
 
   // Records 3T calculations based on actual results paired with historic high-standards
   const records3T = useMemo(() => {
@@ -1922,7 +1982,7 @@ export default function EmployeeDashboard({
     const userIdToDeptMap: Record<string, string> = {};
     const userIdToBranchMap: Record<string, string> = {};
 
-    allResults.forEach(res => {
+    resultsForRankings.forEach(res => {
       const normName = lNormalizeName(res.userName);
       if (res.userId && normName) {
         nameToUserIdMap[normName] = res.userId;
@@ -1935,7 +1995,7 @@ export default function EmployeeDashboard({
     });
 
     const userGroups: Record<string, QuizResult[]> = {};
-    allResults.forEach(res => {
+    resultsForRankings.forEach(res => {
       const normName = lNormalizeName(res.userName);
       const resolvedUserId = res.userId || nameToUserIdMap[normName] || '';
       const resolvedNormalizedName = normName || (res.userId ? userIdToNameMap[res.userId] : '') || '';
@@ -2191,7 +2251,7 @@ export default function EmployeeDashboard({
         displayProof = `Thăng cấp Huyền thoại thâu đêm suốt sáng cực nhanh chỉ trong ${days} ngày kể từ khi được duyệt vào app!`;
       }
 
-      const personResultsList = allResults.filter(r => {
+      const personResultsList = resultsForRankings.filter(r => {
         const rNorm = lNormalizeName(r.userName);
         const rId = r.userId || '';
         return rId === best.name || rNorm === lNormalizeName(best.name);
@@ -2225,12 +2285,12 @@ export default function EmployeeDashboard({
       { id: 'thantoc', title: 'Kỷ Lục Thần Tốc', emoji: '🚀', ...bestThanToc },
       { id: 'batbai', title: 'Kỷ Lục Bất Bại', emoji: '🛡️', ...bestBatBai }
     ];
-  }, [allResults, allUsersList, levelRules]);
+  }, [resultsForRankings, allUsersList, levelRules]);
 
   // Top 5 patience calculation for Month (highest attempts inside last 30 days) with stats
   const topFivePatience = useMemo(() => {
     const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
-    const monthlyResults = allResults.filter(r => r.timestamp >= thirtyDaysAgo);
+    const monthlyResults = resultsForRankings.filter(r => r.timestamp >= thirtyDaysAgo);
 
     const lNormalizeName = (name: string | undefined | null): string => {
       if (!name) return '';
@@ -2242,7 +2302,7 @@ export default function EmployeeDashboard({
     const userIdToDeptMap: Record<string, string> = {};
     const userIdToBranchMap: Record<string, string> = {};
 
-    allResults.forEach(res => {
+    resultsForRankings.forEach(res => {
       const normName = lNormalizeName(res.userName);
       if (res.userId && normName) {
         nameToUserIdMap[normName] = res.userId;
@@ -2271,7 +2331,7 @@ export default function EmployeeDashboard({
       if (personKey === 'anonymous') return;
 
       if (!counts[personKey]) {
-        const personResults = allResults.filter(r => {
+        const personResults = resultsForRankings.filter(r => {
           const rNorm = lNormalizeName(r.userName);
           return r.userId === personKey || rNorm === personKey;
         });
@@ -2298,7 +2358,7 @@ export default function EmployeeDashboard({
     return Object.values(counts)
       .sort((a, b) => b.attempts - a.attempts)
       .slice(0, 5);
-  }, [allResults]);
+  }, [resultsForRankings]);
 
   // Combined real-time Universal Honor list uniting Monument-Legends, Records-3T and Monthly Top 5 Patience
   const allHonors = useMemo(() => {
@@ -3148,7 +3208,7 @@ export default function EmployeeDashboard({
         <div className="flex-1 overflow-y-auto pr-0.5 pb-4">
           <PersonalStats 
             users={deptUsers} 
-            results={allResults} 
+            results={resultsForRankings} 
             levelRulesFromCloud={levelRules} 
           />
         </div>

@@ -88,9 +88,43 @@ export default function PersonalStats({ users, results, levelRulesFromCloud }: P
   const approvedUsers = useMemo(() => {
     return users.filter(u => {
       const uStatus = (u.status || '').toUpperCase();
-      return uStatus === 'APPROVED' || uStatus === 'APPROVED_MEMBER';
+      const isApproved = uStatus === 'APPROVED' || uStatus === 'APPROVED_MEMBER';
+      if (!isApproved) return false;
+
+      const isExempt = u.role === 'admin' || u.role === 'executive';
+      if (isExempt) return false;
+
+      const deptNorm = (u.department || '').trim().toLowerCase();
+      if (deptNorm === 'ban tổng giám đốc') return false;
+
+      return true;
     }).sort((a, b) => a.name.localeCompare(b.name, 'vi'));
   }, [users]);
+
+  // Filtered results to exclude unapproved, deleted, admin, and executive (exempt) users
+  const resultsForRankings = useMemo(() => {
+    return results.filter(res => {
+      let found = users.find(u => u.id === res.userId);
+      if (!found && res.userName) {
+        const normName = res.userName.trim().normalize('NFC').toUpperCase().replace(/\s+/g, ' ');
+        found = users.find(u => {
+          const uNorm = u.name ? u.name.trim().normalize('NFC').toUpperCase().replace(/\s+/g, ' ') : '';
+          return uNorm === normName;
+        });
+      }
+      if (!found) return false;
+
+      const fStatus = (found.status || '').toUpperCase();
+      if (fStatus !== 'APPROVED' && fStatus !== 'APPROVED_MEMBER') return false;
+
+      if (found.role === 'admin' || found.role === 'executive') return false;
+
+      const dNameNorm = (found.department || '').trim().toLowerCase();
+      if (dNameNorm === 'ban tổng giám đốc') return false;
+
+      return true;
+    });
+  }, [results, users]);
 
   // Selected user ID state
   const [selectedUserId, setSelectedUserId] = useState<string>('');
@@ -404,7 +438,7 @@ export default function PersonalStats({ users, results, levelRulesFromCloud }: P
     const nameToUserIdMap: Record<string, string> = {};
     const userIdToNameMap: Record<string, string> = {};
 
-    results.forEach(res => {
+    resultsForRankings.forEach(res => {
       const normName = lNormalizeName(res.userName);
       if (res.userId && normName) {
         nameToUserIdMap[normName] = res.userId;
@@ -413,7 +447,7 @@ export default function PersonalStats({ users, results, levelRulesFromCloud }: P
     });
 
     const historicGroups: Record<string, QuizResult[]> = {};
-    results.forEach(res => {
+    resultsForRankings.forEach(res => {
       const normName = lNormalizeName(res.userName);
       const resolvedUserId = res.userId || nameToUserIdMap[normName] || '';
       const resolvedNormalizedName = normName || (res.userId ? userIdToNameMap[res.userId] : '') || '';
@@ -750,7 +784,7 @@ export default function PersonalStats({ users, results, levelRulesFromCloud }: P
       batbai: bestBatBaiUser,
       binhminh: bestBinhMinhUser
     };
-  }, [results, levelRulesFromCloud]);
+  }, [resultsForRankings, levelRulesFromCloud]);
 
   // Premium design rendering for KỶ LỤC tab
   const renderRecordsTab = () => {
