@@ -861,8 +861,8 @@ export default function EmployeeDashboard({
       // 1. KIÊN TRÌ Record Check
       if (baseline.maxAttempts > 0 && userAttempts > baseline.maxAttempts) {
         const isSelf = baseline.maxAttemptsHolderId === user.id || baseline.maxAttemptsHolderName === user.name;
-        // Only notify if it's a new champion OR self-breaking at a round milestone of 50
-        const shouldNotify = !isSelf || (userAttempts % 50 === 0);
+        // Only notify if it's a new champion OR self-breaking at a round milestone of 100
+        const shouldNotify = !isSelf || (userAttempts % 100 === 0);
         if (shouldNotify) {
           const detailText = isSelf
             ? `vừa tự phá vỡ cột mốc KIÊN TRÌ mới của chính mình với tổng cộng ${userAttempts} lượt rèn luyện bền bỉ! 🎯`
@@ -880,8 +880,8 @@ export default function EmployeeDashboard({
       // 2. TRÍ TUỆ Record Check
       if (baseline.maxPerfects > 0 && userPerfects > baseline.maxPerfects) {
         const isSelf = baseline.maxPerfectsHolderId === user.id || baseline.maxPerfectsHolderName === user.name;
-        // Only notify if it's a new champion OR self-breaking at a round milestone of 10
-        const shouldNotify = !isSelf || (userPerfects % 10 === 0);
+        // Only notify if it's a new champion OR self-breaking at a round milestone of 50
+        const shouldNotify = !isSelf || (userPerfects % 50 === 0);
         if (shouldNotify) {
           const detailText = isSelf
             ? `vừa củng cố kỷ lục TRÍ TUỆ của chính mình với cột mốc: ${userPerfects} lượt đại cát đạt 30/30 tối đa! 🧠`
@@ -2441,19 +2441,22 @@ export default function EmployeeDashboard({
 
   // Calculate stats for today's participants
   const participantsTodayCount = useMemo(() => {
-    const todayStr = formatDate(new Date());
-    const todayResults = allResults.filter(r => r.date === todayStr);
+    const now = new Date();
+    const startOfTodayMs = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const todayResults = allResults.filter(r => r.timestamp >= startOfTodayMs);
     return new Set(todayResults.map(r => r.userId || r.userName)).size;
   }, [allResults]);
 
   const attemptsTodayCount = useMemo(() => {
-    const todayStr = formatDate(new Date());
-    return allResults.filter(r => r.date === todayStr).length;
+    const now = new Date();
+    const startOfTodayMs = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    return allResults.filter(r => r.timestamp >= startOfTodayMs).length;
   }, [allResults]);
 
   const deptAttemptsTodayCount = useMemo(() => {
-    const todayStr = formatDate(new Date());
-    const todayResults = allResults.filter(r => r.date === todayStr);
+    const now = new Date();
+    const startOfTodayMs = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const todayResults = allResults.filter(r => r.timestamp >= startOfTodayMs);
     
     if (user.role === 'admin') {
       return todayResults.length;
@@ -5006,50 +5009,51 @@ export default function EmployeeDashboard({
   const [reviewQuestionIndex, setReviewQuestionIndex] = useState(0);
   const [analysisScope, setAnalysisScope] = useState<'personal' | 'collective'>('personal');
 
-  // One-time Firestore data loading on mount (No real-time onSnapshot)
+  // Real-time Firestore data loading on mount (sync across devices instantly)
   useEffect(() => {
     let active = true;
-    const loadInitialData = async () => {
+    
+    // Load initial static/dynamic configurations
+    const loadConfigData = async () => {
       try {
-        // Load initial questions
         const qs = await databaseService.getQuestions();
-        if (!active) return;
-        setQuestions(qs);
-
-        // Load initial level rules
+        if (active) setQuestions(qs);
+        
         try {
           const rules = await databaseService.getLevelRules();
           if (active) setLevelRules(rules);
         } catch (ruleErr) {
           console.error("Lỗi khi tải quy chế cấp độ:", ruleErr);
         }
-
-        // Fetch Quiz Results once using getQuizResults (forceRefresh = true to retrieve fresh DB data on startup)
-        const allRes = await databaseService.getQuizResults(false, true);
-        if (!active) return;
-        setAllResults(allRes);
-
-        // Filter results for this active logging in user
-        const userResults = allRes
-          .filter(r => r.userId === user.id)
-          .sort((a, b) => b.timestamp - a.timestamp);
-        setResults(userResults);
-
-        // Fetch All Users once using getUsers
-        const users = await databaseService.getUsers();
-        if (active) {
-          setAllUsersList(users);
-        }
-
       } catch (err) {
-        console.error("Lỗi khi tải dữ liệu khởi động:", err);
+        console.error("Lỗi khi tải cấu hình khởi động:", err);
       }
     };
+    
+    loadConfigData();
 
-    loadInitialData();
+    // Subscribe to all users in real-time
+    const unsubscribeUsers = databaseService.subscribeUsers((allUsers) => {
+      if (!active) return;
+      setAllUsersList(allUsers);
+    });
+
+    // Subscribe to all quiz results in real-time
+    const unsubscribeResults = databaseService.subscribeQuizResults((allRes) => {
+      if (!active) return;
+      setAllResults(allRes);
+      
+      // Filter results for this active logging in user
+      const userResults = allRes
+        .filter(r => r.userId === user.id)
+        .sort((a, b) => b.timestamp - a.timestamp);
+      setResults(userResults);
+    });
 
     return () => {
       active = false;
+      unsubscribeUsers();
+      unsubscribeResults();
     };
   }, [user.id]);
 
@@ -7701,6 +7705,27 @@ export default function EmployeeDashboard({
                 )}
               </AnimatePresence>
 
+              {/* Chat BQT Floating Action Button with Red Count Bubble */}
+              <motion.button
+                initial={{ scale: 0, opacity: 0, y: 10 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={() => {
+                  setActiveTab('quiz');
+                  setAdminMobileTab('exchange');
+                  scrollToTop();
+                }}
+                className="w-11 h-11 bg-blue-600 hover:bg-blue-700 text-white rounded-full flex items-center justify-center shadow-lg hover:shadow-xl border border-white/20 transition-all cursor-pointer group shrink-0 relative animate-fadeIn"
+                title="Chat Ban quản trị"
+              >
+                <MessageSquare className="h-5 w-5 group-hover:scale-110 transition-transform" />
+                {unreadExchangeCount > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 bg-red-600 text-white text-[9px] font-extrabold h-4.5 px-1 rounded-full border border-white flex items-center justify-center shadow-md min-w-[17px] leading-none animate-bounce">
+                    {unreadExchangeCount}
+                  </span>
+                )}
+              </motion.button>
+
               {/* Home Icon Button (Quay về Trang chủ) */}
               <motion.button
                 initial={{ scale: 0, opacity: 0, y: 10 }}
@@ -7738,6 +7763,27 @@ export default function EmployeeDashboard({
                 )}
               </AnimatePresence>
 
+              {/* Chat BQT Floating Action Button with Red Count Bubble */}
+              <motion.button
+                initial={{ scale: 0, opacity: 0, y: 10 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={() => {
+                  setActiveTab('quiz');
+                  setAdminMobileTab('exchange');
+                  scrollToTop();
+                }}
+                className="w-11 h-11 bg-blue-600 hover:bg-blue-700 text-white rounded-full flex items-center justify-center shadow-lg hover:shadow-xl border border-white/20 transition-all cursor-pointer group shrink-0 relative animate-fadeIn"
+                title="Chat Ban quản trị"
+              >
+                <MessageSquare className="h-5 w-5 group-hover:scale-110 transition-transform" />
+                {unreadExchangeCount > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 bg-red-600 text-white text-[9px] font-extrabold h-4.5 px-1 rounded-full border border-white flex items-center justify-center shadow-md min-w-[17px] leading-none animate-bounce">
+                    {unreadExchangeCount}
+                  </span>
+                )}
+              </motion.button>
+
               {/* Home Icon Button (Quay về Trang chủ) */}
               <motion.button
                 initial={{ scale: 0, opacity: 0, y: 10 }}
@@ -7774,6 +7820,26 @@ export default function EmployeeDashboard({
                   </motion.button>
                 )}
               </AnimatePresence>
+
+              {/* Chat BQT Floating Action Button with Red Count Bubble */}
+              <motion.button
+                initial={{ scale: 0, opacity: 0, y: 10 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={() => {
+                  setAdminMobileTab('exchange');
+                  scrollToTop();
+                }}
+                className="w-11 h-11 bg-blue-600 hover:bg-blue-700 text-white rounded-full flex items-center justify-center shadow-lg hover:shadow-xl border border-white/20 transition-all cursor-pointer group shrink-0 relative animate-fadeIn"
+                title="Chat Ban quản trị"
+              >
+                <MessageSquare className="h-5 w-5 group-hover:scale-110 transition-transform" />
+                {unreadExchangeCount > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 bg-red-600 text-white text-[9px] font-extrabold h-4.5 px-1 rounded-full border border-white flex items-center justify-center shadow-md min-w-[17px] leading-none animate-bounce">
+                    {unreadExchangeCount}
+                  </span>
+                )}
+              </motion.button>
 
               {/* Home Icon Button (Quay về Sảnh chính dạng Admin) */}
               <motion.button

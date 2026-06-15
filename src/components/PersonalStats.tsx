@@ -91,17 +91,12 @@ export default function PersonalStats({ users, results, levelRulesFromCloud }: P
       const isApproved = uStatus === 'APPROVED' || uStatus === 'APPROVED_MEMBER';
       if (!isApproved) return false;
 
-      const isExempt = u.role === 'admin' || u.role === 'executive';
-      if (isExempt) return false;
-
-      const deptNorm = (u.department || '').trim().toLowerCase();
-      if (deptNorm === 'ban tổng giám đốc') return false;
-
+      // Allow admins, executives, and all approved users to see/view their own personal performance analysis!
       return true;
     }).sort((a, b) => a.name.localeCompare(b.name, 'vi'));
   }, [users]);
 
-  // Filtered results to exclude unapproved, deleted, admin, and executive (exempt) users
+  // Filtered results to exclude unapproved or deleted users
   const resultsForRankings = useMemo(() => {
     return results.filter(res => {
       let found = users.find(u => u.id === res.userId);
@@ -117,11 +112,8 @@ export default function PersonalStats({ users, results, levelRulesFromCloud }: P
       const fStatus = (found.status || '').toUpperCase();
       if (fStatus !== 'APPROVED' && fStatus !== 'APPROVED_MEMBER') return false;
 
-      if (found.role === 'admin' || found.role === 'executive') return false;
-
-      const dNameNorm = (found.department || '').trim().toLowerCase();
-      if (dNameNorm === 'ban tổng giám đốc') return false;
-
+      // Keep it aligned with StatsDashboard: Don't exclude admin/executive/ban tổng giám đốc here,
+      // so their dynamic records and personal stats can be evaluated correctly
       return true;
     });
   }, [results, users]);
@@ -136,11 +128,12 @@ export default function PersonalStats({ users, results, levelRulesFromCloud }: P
   // Set default selected user
   useEffect(() => {
     if (approvedUsers.length > 0 && !selectedUserId) {
-      const todayStr = formatDate(new Date());
+      const now = new Date();
+      const startOfTodayMs = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
       let bestResult: QuizResult | null = null;
 
       // 1. Check today's results
-      const todayResults = results.filter(r => r.date === todayStr);
+      const todayResults = results.filter(r => r.timestamp >= startOfTodayMs);
       if (todayResults.length > 0) {
         bestResult = todayResults.reduce((best, curr) => {
           if (!best) return curr;
@@ -910,8 +903,8 @@ export default function PersonalStats({ users, results, levelRulesFromCloud }: P
                   <div className="bg-white p-2.5 rounded-lg border border-amber-200/40 space-y-2">
                     <span className="font-bold text-amber-900 border-b border-amber-100 pb-0.5 block">⚡ Tự phá kỷ lục cá nhân (Self-beating):</span>
                     <ul className="list-disc pl-4 space-y-1">
-                      <li><strong className="text-gray-800">Kiên Trì:</strong> Chỉ phát loa vinh danh sảnh thi khi đạt mốc tròn <span className="text-amber-900 font-black">50 lượt</span> thi đua (ví dụ: mốc 100, 150, 200 lượt...). Các mốc lẻ ở giữa sẽ được âm thầm cập nhật vào hồ sơ.</li>
-                      <li><strong className="text-gray-800">Trí Tuệ:</strong> Chỉ phát loa vinh danh khi đạt thêm mốc tròn <span className="text-amber-900 font-black">10 lượt đại cát 30/30</span> (ví dụ: mốc 10, 20, 30, 40 lượt...).</li>
+                      <li><strong className="text-gray-800">Kiên Trì:</strong> Chỉ phát loa vinh danh sảnh thi khi đạt mốc tròn <span className="text-amber-900 font-black">100 lượt</span> thi đua (ví dụ: mốc 100, 200, 300, 400 lượt...). Các mốc lẻ ở giữa sẽ được âm thầm cập nhật vào hồ sơ.</li>
+                      <li><strong className="text-gray-800">Trí Tuệ:</strong> Chỉ phát loa vinh danh khi đạt thêm mốc tròn <span className="text-amber-900 font-black">50 lượt đại cát 30/30</span> (ví dụ: mốc 50, 100, 150, 200 lượt...).</li>
                     </ul>
                   </div>
                   <div className="bg-white p-2.5 rounded-lg border border-amber-200/40 space-y-2">
@@ -939,7 +932,7 @@ export default function PersonalStats({ users, results, levelRulesFromCloud }: P
                       <td className="py-2.5 px-3">Tính tổng số lượt nộp bài rèn luyện thực tế của học viên trên toàn hệ sảnh thi (Toàn chiến dịch lũy kế).</td>
                       <td className="py-2.5 px-3">
                         <div>Số lượt thi tiếp theo phải <strong className="text-amber-900">&gt;</strong> kỷ lục cũ.</div>
-                        <div className="text-[10px] text-gray-500 font-medium">Spam block: Chỉ loa sảnh mốc tròn 50 đối với chính chủ.</div>
+                        <div className="text-[10px] text-gray-500 font-medium">Spam block: Chỉ loa sảnh mốc tròn 100 đối với chính chủ.</div>
                       </td>
                     </tr>
                     <tr>
@@ -947,7 +940,7 @@ export default function PersonalStats({ users, results, levelRulesFromCloud }: P
                       <td className="py-2.5 px-3">Tổng số bài thi làm đạt điểm số tuyệt đối 30/30 tối đa tích lũy toàn thời gian kể từ khi gia nhập app.</td>
                       <td className="py-2.5 px-3">
                         <div>Lũy kế tổng lượt đạt 30/30 phải <strong className="text-amber-900">&gt;=</strong> cột mốc cũ.</div>
-                        <div className="text-[10px] text-gray-500 font-medium">Spam block: Chỉ loa sảnh mốc tròn 10 đối với chính chủ.</div>
+                        <div className="text-[10px] text-gray-500 font-medium">Spam block: Chỉ loa sảnh mốc tròn 50 đối với chính chủ.</div>
                       </td>
                     </tr>
                     <tr>

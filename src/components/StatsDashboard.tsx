@@ -186,7 +186,12 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
       const uStatus = (u.status || '').toUpperCase();
       if (uStatus !== 'APPROVED' && uStatus !== 'APPROVED_MEMBER') return false;
 
-      if (u.role === 'admin' || u.role === 'executive') return false;
+      if (u.role === 'admin' || u.role === 'executive') {
+        const uId = u.id || '';
+        const normName = u.name ? u.name.trim().normalize('NFC').toUpperCase().replace(/\s+/g, ' ') : '';
+        const hasResults = rawResults.some(r => r.userId === uId || (r.userName && r.userName.trim().normalize('NFC').toUpperCase().replace(/\s+/g, ' ') === normName));
+        if (!hasResults) return false;
+      }
 
       const dNameNorm = (u.department || '').trim().normalize('NFC').toLowerCase();
       if (dNameNorm === 'ban tổng giám đốc') return false;
@@ -226,8 +231,6 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
 
       const uStatus = (foundUser.status || '').toUpperCase();
       if (uStatus !== 'APPROVED' && uStatus !== 'APPROVED_MEMBER') return false;
-
-      if (foundUser.role === 'admin' || foundUser.role === 'executive') return false;
 
       const dNameNorm = (r.department || '').trim().normalize('NFC').toLowerCase();
       if (dNameNorm === 'ban tổng giám đốc') return false;
@@ -2675,8 +2678,8 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
                     <span className="font-bold text-amber-900">🛡️ Cơ chế lọc Spam (Thông báo dồn dập):</span>
                     <ul className="list-disc pl-3.5 space-y-0.5">
                       <li><strong>Người mới:</strong> Luôn nổ thông báo vinh danh tức thì toàn sảnh thi khi soán ngôi thành công đối thủ cũ.</li>
-                      <li><strong>Kiên Trì (Tự bứt phá):</strong> Đối với chính chủ, sảnh thi chỉ loa truyền đạt khi chạm đúng <strong className="text-gray-900 font-extrabold">mốc tròn 50 lượt</strong> (ví dụ: mốc 100, 150, 200 lượt...).</li>
-                      <li><strong>Trí Tuệ (Tự bứt phá):</strong> Đối với chính chủ, sảnh thi chỉ loa truyền đạt mỗi khi tích lũy thêm <strong className="text-gray-900 font-extrabold">mốc tròn 10 lượt 30/30</strong> (ví dụ: mốc 10, 20, 30, 40 lượt...).</li>
+                      <li><strong>Kiên Trì (Tự bứt phá):</strong> Đối với chính chủ, sảnh thi chỉ loa truyền đạt khi chạm đúng <strong className="text-gray-900 font-extrabold">mốc tròn 100 lượt</strong> (ví dụ: mốc 100, 200, 300, 400 lượt...).</li>
+                      <li><strong>Trí Tuệ (Tự bứt phá):</strong> Đối với chính chủ, sảnh thi chỉ loa truyền đạt mỗi khi tích lũy thêm <strong className="text-gray-900 font-extrabold">mốc tròn 50 lượt 30/30</strong> (ví dụ: mốc 50, 100, 150, 200 lượt...).</li>
                       <li><strong>Tốc Độ / Bất Bại / Trước Bình Minh:</strong> Luôn phát thông báo trực tiếp toàn sảnh để tôn vinh sự nỗ lực bứt phá siêu hạng ngày đêm.</li>
                     </ul>
                   </div>

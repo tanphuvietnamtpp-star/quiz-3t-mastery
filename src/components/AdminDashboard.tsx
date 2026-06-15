@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { databaseService, getQuotaStats } from '../firebase';
 import { User, Question, QuizResult, BRANCHES, DEPARTMENTS, CompanyMapping, MotivationalSloganBand, LevelRulesConfig, LevelRuleItem } from '../types';
@@ -581,6 +581,11 @@ export default function AdminDashboard({
       setUsers(updatedUsers);
     });
 
+    // Subscribe to quiz results in real-time to guarantee 100% accurate statistics live
+    const unsubscribeResults = databaseService.subscribeQuizResults((updatedResults) => {
+      setResults(updatedResults);
+    });
+
     // Subscribe to system announcement in real-time
     const unsubscribeSystem = databaseService.subscribeSystemAnnouncement((text) => {
       if (text) {
@@ -606,6 +611,7 @@ export default function AdminDashboard({
 
     return () => {
       unsubscribeUsers();
+      unsubscribeResults();
       unsubscribeSystem();
       unsubscribeChat();
       clearInterval(tickerInterval);
@@ -1591,9 +1597,12 @@ export default function AdminDashboard({
   const pendingUsersCount = users.filter(u => u.status?.toLowerCase() === 'pending').length;
   const approvedUsersCount = users.filter(u => u.status?.toLowerCase() === 'approved').length;
   const totalQuestionsCount = questions.length;
-  const todayStr = formatDate(new Date());
-  const todayResults = results.filter(r => r.date === todayStr);
-  const participantsTodayCount = new Set(todayResults.map(r => r.userId)).size;
+  const todayResults = useMemo(() => {
+    const now = new Date();
+    const startOfTodayMs = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    return results.filter(r => r.timestamp >= startOfTodayMs);
+  }, [results]);
+  const participantsTodayCount = new Set(todayResults.map(r => r.userId || r.userName)).size;
   const attemptsTodayCount = todayResults.length;
 
   const handleExportUsers = () => {
