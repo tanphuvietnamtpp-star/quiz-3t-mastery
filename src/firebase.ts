@@ -1876,6 +1876,21 @@ export const databaseService = {
     setLocalData('3t_chat_topics', local);
   },
 
+  async deleteChatTopic(topicId: string): Promise<void> {
+    await initializeDatabase();
+    if (isFirebaseConfigured && db) {
+      try {
+        await deleteDoc(doc(db, 'chat_topics', topicId));
+        incrementQuota('deletes', 1);
+      } catch (err) {
+        handleFirestoreError(err, OperationType.DELETE, `chat_topics/${topicId}`);
+      }
+    }
+    const local = getLocalData<ChatTopic[]>('3t_chat_topics', []);
+    const filtered = local.filter(t => t.id !== topicId);
+    setLocalData('3t_chat_topics', filtered);
+  },
+
   subscribeChatTopics(onUpdate: (topics: ChatTopic[]) => void): () => void {
     if (!isFirebaseConfigured || !db) {
       const local = getLocalData<ChatTopic[]>('3t_chat_topics', []);

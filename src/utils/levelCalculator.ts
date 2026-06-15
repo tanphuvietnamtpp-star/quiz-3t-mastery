@@ -34,6 +34,20 @@ export function formatDateToDDMMYY(yyyyMmDd: string): string {
   return `${parts[2]}/${parts[1]}/${parts[0].substring(2)}`;
 }
 
+export function removeVNAccents(str: string): string {
+  if (!str) return '';
+  return str
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toUpperCase()
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+export const PRE_SEEDED_LEGEND_DATES: Record<string, string> = {};
+
 export function getVietnamDateString(): string {
   const d = new Date();
   const utc = d.getTime() + (d.getTimezoneOffset() * 60000);
@@ -68,6 +82,20 @@ export function calculateInactivityAugmentedLevel(
   // If test mode is enabled but no custom simulated today was provided, let's treat simulated today as the startDate
   if (options.isTestModeEnabled && !options.simulatedToday) {
     todayStr = policyStartDateStr; 
+  }
+
+  // Pre-seeded Level 5 date mapping
+  let preSeededDate = PRE_SEEDED_LEGEND_DATES[removeVNAccents(userIdOrNormalizedName)] || PRE_SEEDED_LEGEND_DATES[userIdOrNormalizedName];
+  if (!preSeededDate && userResults.length > 0) {
+    for (const res of userResults) {
+      if (res.userName) {
+        const normResName = removeVNAccents(res.userName);
+        if (PRE_SEEDED_LEGEND_DATES[normResName]) {
+          preSeededDate = PRE_SEEDED_LEGEND_DATES[normResName];
+          break;
+        }
+      }
+    }
   }
 
   // Parse rule attributes
@@ -124,6 +152,9 @@ export function calculateInactivityAugmentedLevel(
   if (firstActiveDateStr > policyStartDateStr) {
     firstActiveDateStr = policyStartDateStr;
   }
+  if (preSeededDate && firstActiveDateStr > preSeededDate) {
+    firstActiveDateStr = preSeededDate;
+  }
 
   // Generate sequence of dates from firstActiveDateStr to todayStr inclusive
   const dateSequence: string[] = [];
@@ -143,6 +174,13 @@ export function calculateInactivityAugmentedLevel(
 
   // Evaluate chronologically day-by-day
   dateSequence.forEach((dateStr, idx) => {
+    // Force pre-seeded level if this date matches their legendary pre-seed date
+    if (preSeededDate && dateStr === preSeededDate) {
+      currentLevel = 5;
+      consecutiveMax = 0;
+      consecutiveLow = 0;
+    }
+
     // 1. Process inactivity penalty from the PREVIOUS day if the policy is active
     // The policy starts on policyStartDateStr. So the first day that can have a penalty based on
     // previous day's inactivity is the day AFTER policyStartDateStr.

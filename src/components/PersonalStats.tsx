@@ -860,55 +860,99 @@ export default function PersonalStats({ users, results, levelRulesFromCloud }: P
           </button>
 
           {showRuleAccordion && (
-            <div className="border-t border-amber-200/50 p-5 bg-white/50 text-xs text-amber-950 space-y-3.5 leading-relaxed font-sans">
-              <p>
+            <div className="border-t border-amber-200/50 p-5 bg-white text-xs text-amber-955 space-y-4 leading-relaxed font-sans">
+              <p className="font-medium text-amber-950">
                 Bảng vàng vinh danh các <strong className="text-amber-900 font-black">Kỷ Lục 3T Master</strong> là nơi lưu trữ và tuyên dương các thành tựu thi đua đỉnh cao nhất sảnh thi từ trước đến nay của cá nhân học viên. Hệ thống sảnh rà quét và tự động cập nhật kỷ lục theo thời gian thực (real-time).
               </p>
+
+              <div className="bg-amber-50/50 border border-amber-200/80 rounded-xl p-4 space-y-3">
+                <h5 className="font-bold text-amber-900 uppercase tracking-wide text-[11px] sm:text-xs flex items-center gap-1">
+                  <span>🛡️ CƠ CHẾ TỐI ƯU CHỐNG THÔNG BÁO DỒN DẬP (ANTI-SPAM OPTIMIZATION)</span>
+                </h5>
+                <p className="text-[11px] text-amber-950/90 leading-relaxed">
+                  Để đảm bảo tính nghiêm túc của hệ thống thi đua và tránh làm loãng kênh chat sảnh thi bằng các thông báo lặp đi lặp lại dồn dập, sảnh thi áp dụng các cơ chế vinh danh thông minh sau:
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[11px] text-amber-955">
+                  <div className="bg-white p-2.5 rounded-lg border border-amber-200/40 space-y-2">
+                    <span className="font-bold text-amber-900 border-b border-amber-100 pb-0.5 block">⚡ Tự phá kỷ lục cá nhân (Self-beating):</span>
+                    <ul className="list-disc pl-4 space-y-1">
+                      <li><strong className="text-gray-800">Kiên Trì:</strong> Chỉ phát loa vinh danh sảnh thi khi đạt mốc tròn <span className="text-amber-900 font-black">50 lượt</span> thi đua (ví dụ: mốc 100, 150, 200 lượt...). Các mốc lẻ ở giữa sẽ được âm thầm cập nhật vào hồ sơ.</li>
+                      <li><strong className="text-gray-800">Trí Tuệ:</strong> Chỉ phát loa vinh danh khi đạt thêm mốc tròn <span className="text-amber-900 font-black">10 lượt đại cát 30/30</span> (ví dụ: mốc 10, 20, 30, 40 lượt...).</li>
+                    </ul>
+                  </div>
+                  <div className="bg-white p-2.5 rounded-lg border border-amber-200/40 space-y-2">
+                    <span className="font-bold text-amber-950 border-b border-amber-100 pb-0.5 block">👑 Soán ngôi lật đổ đối thủ (New Holder):</span>
+                    <ul className="list-disc pl-4 space-y-1">
+                      <li>Hệ thống ngay lập tức vinh danh nồng nhiệt toàn bộ sảnh thi bất kể mốc tròn lẻ khi có <strong className="text-amber-900 font-black">Người Mới</strong> chính thức san bằng hoặc lật đổ kỷ lục của người đi trước.</li>
+                      <li>Các kỷ lục nhảy số cực nhạy khó nhằn như <strong className="text-emerald-850">Tốc Độ (phản xạ)</strong>, <strong className="text-purple-800">Bất Bại (chuỗi)</strong>, và <strong className="text-blue-800">Trước Bình Minh</strong> luôn được vinh danh lập tức.</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
               <div className="overflow-x-auto max-w-full">
                 <table className="w-full text-left text-[11px] sm:text-xs">
                   <thead className="bg-amber-100/40 text-amber-950 font-black uppercase border-b border-amber-200">
                     <tr>
                       <th className="py-2 px-3">TÊN KỶ LỤC</th>
-                      <th className="py-2 px-3">PHƯƠNG THỨC XÉT DUYỆT TUYỂN CHỌN</th>
-                      <th className="py-2 px-3">TIÊU CHUẨN XÁC LẬP / XÔ ĐỔ</th>
+                      <th className="py-2 px-3">CÔNG THỨC & PHƯƠNG PHÁP TÍNH TOÁN CHI TIẾT</th>
+                      <th className="py-2 px-3">TIÊU CHUẨN XÔ ĐỔ & VINH DANH</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-amber-100 leading-normal">
+                  <tbody className="divide-y divide-amber-100 leading-normal text-amber-950/90 font-sans">
                     <tr>
-                      <td className="py-2.5 px-3 font-bold text-amber-900">Kiên Trì</td>
-                      <td className="py-2.5 px-3">Đếm tổng số lượt nộp bài rèn luyện của cá nhân (Toàn chiến dịch).</td>
-                      <td className="py-2.5 px-3">Số lượng lượt thi tiếp theo phải <strong>lớn hơn hẳn (&gt;)</strong> kỷ lục cũ đã xác lập.</td>
+                      <td className="py-2.5 px-3 font-bold text-amber-900">Kiên Trì 🎯</td>
+                      <td className="py-2.5 px-3">Tính tổng số lượt nộp bài rèn luyện thực tế của học viên trên toàn hệ sảnh thi (Toàn chiến dịch lũy kế).</td>
+                      <td className="py-2.5 px-3">
+                        <div>Số lượt thi tiếp theo phải <strong className="text-amber-900">&gt;</strong> kỷ lục cũ.</div>
+                        <div className="text-[10px] text-gray-500 font-medium">Spam block: Chỉ loa sảnh mốc tròn 50 đối với chính chủ.</div>
+                      </td>
                     </tr>
                     <tr>
-                      <td className="py-2.5 px-3 font-bold text-amber-900">Trí Tuệ</td>
-                      <td className="py-2.5 px-3">Số lượt nộp bài đạt điểm tối đa 30/30 (Toàn chiến dịch).</td>
-                      <td className="py-2.5 px-3">Lũy kế tổng lượt đạt 30/30 phải <strong>vượt qua</strong> cột mốc cũ.</td>
+                      <td className="py-2.5 px-3 font-bold text-amber-900">Trí Tuệ 🧠</td>
+                      <td className="py-2.5 px-3">Tổng số bài thi làm đạt điểm số tuyệt đối 30/30 tối đa tích lũy toàn thời gian kể từ khi gia nhập app.</td>
+                      <td className="py-2.5 px-3">
+                        <div>Lũy kế tổng lượt đạt 30/30 phải <strong className="text-amber-900">&gt;=</strong> cột mốc cũ.</div>
+                        <div className="text-[10px] text-gray-500 font-medium">Spam block: Chỉ loa sảnh mốc tròn 10 đối với chính chủ.</div>
+                      </td>
                     </tr>
                     <tr>
-                      <td className="py-2.5 px-3 font-bold text-amber-900">Tốc Độ</td>
-                      <td className="py-2.5 px-3">Tốc độ phản xạ trung bình một câu trên lượt thi đạt tối đa 30/30.</td>
-                      <td className="py-2.5 px-3">Thời gian phản xạ trung bình phải <strong>ngắn hơn (&lt;)</strong> kỷ lục cũ.</td>
+                      <td className="py-2.5 px-3 font-bold text-amber-900">Tốc Độ ⚡</td>
+                      <td className="py-2.5 px-3">Thời gian trả lời trung bình một câu trên một lượt thi duy nhất đạt 30/30 điểm (Thời gian / Số câu). Để ngăn ngừa may rủi ngẫu nhiên hoặc lụi đáp án cực nhanh, lượt thi bắt buộc phải có <strong className="font-semibold text-gray-800">tối thiểu 3 câu</strong> trở lên.</td>
+                      <td className="py-2.5 px-3">
+                        <div>Thời gian phản xạ trung bình phải <strong className="text-amber-900">ngắn hơn (&lt;)</strong> kỷ lục cũ.</div>
+                        <div className="text-[10px] text-gray-500 font-medium">Luôn vinh danh lập tức sảnh thi.</div>
+                      </td>
                     </tr>
                     <tr>
-                      <td className="py-2.5 px-3 font-bold text-amber-900">Thần Tốc</td>
-                      <td className="py-2.5 px-3">Thăng tiến thành công từ Cấp 1 lên Cấp 5 (Huyền Thoại) với số lượt làm bài tối giản.</td>
-                      <td className="py-2.5 px-3">Số lượng lượt thi cần thăng tiến ít hơn hẳn số mốc đạt đỉnh cũ.</td>
+                      <td className="py-2.5 px-3 font-bold text-amber-900">Thần Tốc 📈</td>
+                      <td className="py-2.5 px-3">Tổng số lượt làm bài kiểm tra tích lũy ít nhất được dùng để rèn luyện thăng tiến thành công từ vị trí Tân Binh (Cấp 1) lên tuyệt đỉnh Cấp 5 (Huyền Thoại).</td>
+                      <td className="py-2.5 px-3">
+                        <div>Số lượng lượt rèn luyện nâng cấp phải <strong className="text-amber-900">ít hơn hẳn (&lt;)</strong> kỷ lục cũ.</div>
+                        <div className="text-[10px] text-gray-500 font-medium">Ghi nhận và vinh danh trực tiếp sảnh thi.</div>
+                      </td>
                     </tr>
                     <tr>
-                      <td className="py-2.5 px-3 font-bold text-amber-900">Bất Bại</td>
-                      <td className="py-2.5 px-3">Chuỗi số bài thi liên tiếp đạt điểm tối đa 30/30 mà không bị điểm thấp ngắt quãng.</td>
-                      <td className="py-2.5 px-3">Chuỗi liên hoàn 30/30 tiếp theo phải <strong>vượt trội hơn</strong> mốc cũ.</td>
+                      <td className="py-2.5 px-3 font-bold text-amber-900">Bất Bại 🛡️</td>
+                      <td className="py-2.5 px-3">Số lượng các lượt thi liên tiếp đạt điểm tuyệt đối 30/30 dài nhất mà không bị đứt chuỗi hoặc bị hạ điểm xen giữa.</td>
+                      <td className="py-2.5 px-3">
+                        <div>Chuỗi liên hoàn 30/30 tiếp theo phải <strong className="text-amber-900">&gt;</strong> mốc chuỗi cũ.</div>
+                        <div className="text-[10px] text-gray-500 font-medium">Luôn vinh danh sảnh thi ngay lập tức để cổ vũ tinh thần.</div>
+                      </td>
                     </tr>
                     <tr>
-                      <td className="py-2.5 px-3 font-bold text-amber-900">Trước Bình Minh</td>
-                      <td className="py-2.5 px-3">Lượt làm bài đạt điểm tối đa 30/30 nộp sớm nhất trong ngày (00:00 - 10:00).</td>
-                      <td className="py-2.5 px-3">Khung thời gian nộp bài thi ngày đó phải <strong>sớm hơn</strong> mốc giờ cũ.</td>
+                      <td className="py-2.5 px-3 font-bold text-amber-900">Trước Bình Minh 🌅</td>
+                      <td className="py-2.5 px-3">Lượt thi nộp đạt điểm số tuyệt đối 30/30 sớm nhất ngày mới, được hệ thống rà quét tự động trong khoảng khoảng giờ từ <strong className="font-bold text-gray-800">00:00 sáng đến 10:00 sáng</strong>.</td>
+                      <td className="py-2.5 px-3">
+                        <div>Khung thời gian nộp bài phải <strong className="text-amber-900">sớm hơn (&lt;)</strong> mốc giờ cũ.</div>
+                        <div className="text-[10px] text-gray-500 font-medium">Luôn vinh danh trực tiếp tức thì sảnh thi.</div>
+                      </td>
                     </tr>
                   </tbody>
                 </table>
               </div>
-              <p className="text-[10px] text-amber-800/80 italic font-medium">
-                * Lưu ý: Khi có kết quả bằng hoặc vượt qua cột mốc kỷ lục hiện tại, hệ thống sẽ ngay lập tức tuyên truyền, gửi thông báo chúc mừng vinh danh toàn thể sảnh thi và ghi nhận chủ nhân kỷ lục mới nhất lên trang này!
+              <p className="text-[10px] text-amber-850 italic font-medium">
+                * Chú thích: Khi bạn thi đấu rèn luyện nâng cao thành tích của mình hoặc vượt qua đối thủ khác, hãy vững tâm hệ thống thông minh sảnh thi luôn ghi nhận chính xác 100% vào trang cá nhân và bảng vinh danh này, đồng thời lọc sạch mọi nhiễu tin rác dồn dập!
               </p>
             </div>
           )}

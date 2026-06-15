@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { databaseService, getQuotaStats } from '../firebase';
 import { User, Question, QuizResult, CompanyMapping, MotivationalSloganBand, LevelRulesConfig, LevelRuleItem } from '../types';
 import { formatDate, formatTimeInSeconds, cleanOptionText } from '../utils/format';
-import { BookOpen, Trophy, Award, BarChart3, ChevronRight, CheckCircle2, XCircle, ArrowRight, RotateCcw, HelpCircle, GraduationCap, AlertCircle, Users, TrendingUp, Building2, LogOut, Home, Maximize2, Minimize2, UserCheck, ImagePlus, Lock, Sparkles, X, Plus, Smartphone, Share, ArrowUp, ArrowLeft, Pencil, Trash2, Building, Landmark, Briefcase, Search, Database, RefreshCcw, QrCode, Server, ShieldCheck, Zap, FileDown, ChevronUp, ChevronDown, Timer, AlertTriangle, Bell, User as UserIcon, MessageSquare } from 'lucide-react';
+import { BookOpen, Trophy, Award, BarChart3, ChevronRight, CheckCircle2, XCircle, ArrowRight, RotateCcw, HelpCircle, GraduationCap, AlertCircle, Users, TrendingUp, Building2, LogOut, Home, Maximize2, Minimize2, UserCheck, ImagePlus, Lock, Sparkles, X, Plus, Smartphone, Share, ArrowUp, ArrowLeft, Pencil, Trash2, Building, Landmark, Briefcase, Search, Database, RefreshCcw, QrCode, Server, ShieldCheck, Zap, FileDown, ChevronUp, ChevronDown, Timer, AlertTriangle, Bell, User as UserIcon, MessageSquare, ClipboardList } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts';
 import StatsDashboard from './StatsDashboard';
@@ -271,8 +271,11 @@ export default function EmployeeDashboard({
   const [inactivityTestMode, setInactivityTestMode] = useState(() => localStorage.getItem('3t_inactivity_test_mode') === 'true');
   
   // Admin mobile action states
-  const [adminMobileTab, setAdminMobileTab] = useState<'home' | 'users' | 'stats' | 'encoding' | 'qr' | 'firebase_data' | 'personal' | 'notifications' | 'legends' | 'records' | 'patience_top' | 'exchange'>('home');
+  const [adminMobileTab, setAdminMobileTab] = useState<'home' | 'users' | 'stats' | 'encoding' | 'qr' | 'firebase_data' | 'personal' | 'notifications' | 'legends' | 'records' | 'patience_top' | 'exchange' | 'details'>('home');
   const [adminMobileNotice, setAdminMobileNotice] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
+  const [adminDetailSearch, setAdminDetailSearch] = useState('');
+  const [adminSelectedUserId, setAdminSelectedUserId] = useState<string | null>(null);
+  const [adminExpandedResultId, setAdminExpandedResultId] = useState<string | null>(null);
   
   // Real-time system announcement and accomplishments states
   const [systemAnnouncement, setSystemAnnouncement] = useState('Chào mừng toàn thể cán bộ nhân viên đến với Hội Thi Văn Hóa 3T! Tốc độ là sống còn - Tinh gọn là sức mạnh!');
@@ -1463,7 +1466,16 @@ export default function EmployeeDashboard({
   const monumentLegends = useMemo(() => {
     const lNormalizeName = (name: string | undefined | null): string => {
       if (!name) return '';
-      return name.trim().toUpperCase().replace(/\s+/g, ' ');
+      return name.trim().normalize('NFC').toUpperCase().replace(/\s+/g, ' ');
+    };
+
+    const formatPromoDate = (ts?: number): string => {
+      if (!ts) return 'N/A';
+      const d = new Date(ts);
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const year = d.getFullYear();
+      return `${day}/${month}/${year}`;
     };
 
     const nameToUserIdMap: Record<string, string> = {};
@@ -1499,158 +1511,326 @@ export default function EmployeeDashboard({
 
     const activeRules = levelRules || DEFAULT_LEVEL_RULES;
 
-    const baselineLegends: Array<{
-      userId: string;
-      userName: string;
-      department: string;
-      branch: string;
-      level: number;
-      maxLevelReached: number;
-      avgScore: number;
-      attempts: number;
-      avgTimeSpent: number;
-      bestScore: number;
-    }> = [
-      {
-        userId: 'base_ptnhan',
-        userName: 'PHAN THỊ NHÀN',
-        department: 'Phòng Kế hoạch sản xuất',
-        branch: 'Chi Nhánh Bắc Ninh (TPP-BNI)',
-        level: 5,
-        maxLevelReached: 5,
-        avgScore: 29.1,
-        attempts: 48,
-        avgTimeSpent: 6,
-        bestScore: 30
-      },
-      {
-        userId: 'base_tptrung',
-        userName: 'TRAN PHUOC TRUNG',
-        department: 'Phòng Kỹ Thuật',
-        branch: 'Chi Nhánh Long An (TPP-LAN)',
-        level: 5,
-        maxLevelReached: 5,
-        avgScore: 29.3,
-        attempts: 381,
-        avgTimeSpent: 5,
-        bestScore: 30
-      },
-      {
-        userId: 'base_tvtien',
-        userName: 'TRẦN VĂN TIÊN',
-        department: 'Phòng Tài chính Kế toán',
-        branch: 'Văn Phòng Công Ty (TPP-CTY)',
-        level: 5,
-        maxLevelReached: 5,
-        avgScore: 30.0,
-        attempts: 185,
-        avgTimeSpent: 6,
-        bestScore: 30
-      },
-      {
-        userId: 'base_qtvan',
-        userName: 'QUÁCH THUÝ VÂN',
-        department: 'Ban Quản đốc',
-        branch: 'Chi Nhánh Bắc Ninh (TPP-BNI)',
-        level: 5,
-        maxLevelReached: 5,
-        avgScore: 28.5,
-        attempts: 92,
-        avgTimeSpent: 4,
-        bestScore: 30
-      },
-      {
-        userId: 'base_hhquynh',
-        userName: 'HA HUU QUYNH',
-        department: 'Phòng Kỹ Thuật',
-        branch: 'Chi Nhánh Bắc Ninh (TPP-BNI)',
-        level: 5,
-        maxLevelReached: 5,
-        avgScore: 30.0,
-        attempts: 112,
-        avgTimeSpent: 5,
-        bestScore: 30
-      },
-      {
-        userId: 'base_pvden',
-        userName: 'PHẠM VĂN ĐEN',
-        department: 'Phân xưởng 2',
-        branch: 'Chi Nhánh Long An (TPP-LAN)',
-        level: 5,
-        maxLevelReached: 5,
-        avgScore: 29.0,
-        attempts: 72,
-        avgTimeSpent: 8,
-        bestScore: 30
-      },
-      {
-        userId: 'base_bnhung',
-        userName: 'BÀNH NHỰT HÙNG',
-        department: 'Phòng Quản lý chất lượng',
-        branch: 'Văn Phòng Công Ty (TPP-CTY)',
-        level: 5,
-        maxLevelReached: 5,
-        avgScore: 28.7,
-        attempts: 158,
-        avgTimeSpent: 15,
-        bestScore: 30
+    const parseRequiredConsecutive = (lvlIdx: number, defaultVal: number = 10): number => {
+      const promotionText = activeRules.levels[lvlIdx]?.promotion;
+      if (!promotionText) return defaultVal;
+      const match = promotionText.match(/liên\s+tục\s+(\d+)\s+lượt/i) || 
+                    promotionText.match(/(\d+)\s+lượt\s+liên\s+tục/i) || 
+                    promotionText.match(/(\d+)\s+lượt/i);
+      return match ? parseInt(match[1], 10) : defaultVal;
+    };
+
+    const parseDemotionThreshold = (lvlIdx: number, defaultVal: number): number => {
+      const demotionText = activeRules.levels[lvlIdx]?.demotion;
+      if (!demotionText) return defaultVal;
+      const match = demotionText.match(/dưới\s+(\d+)\s+điểm/i) || 
+                    demotionText.match(/dưới\s+(\d+)/i) || 
+                    demotionText.match(/<\s*(\d+)/i);
+      return match ? parseInt(match[1], 10) : defaultVal;
+    };
+
+    const baselineLegends: any[] = [];
+
+    const legendsList = [...baselineLegends] as any[];
+
+    Object.entries(userGroups).forEach(([personKey, userResultsList]) => {
+      const chronological = [...userResultsList].sort((a, b) => a.timestamp - b.timestamp);
+      
+      let currentLevel = 1;
+      let consecutiveMaxAtLevel = 0;
+      let consecutiveLowAtLevel = 0;
+      let firstLegendIdx = -1;
+      const scoresUpToFirstLegend: number[] = [];
+
+      const level5Attempts: Array<{ timestamp: number; dateStr: string }> = [];
+      const allTransitions: Array<{
+        fromLevel: number;
+        toLevel: number;
+        timestamp: number;
+        attemptsCount: number;
+        dateStr: string;
+      }> = [];
+      let lastLevelChangeIdx = -1;
+
+      const coronations: Array<{
+        coronationIdx: number;
+        promoTimestamp: number;
+        fromLevel: number;
+        avgScoreAtCoronation: number;
+        totalAttemptsAtCoronation: number;
+        overallAvgDurationPerAttempt: number;
+        overallAvgDurationPerQuestion: number;
+        dateStr: string;
+        transitions: Array<{
+          fromLevel: number;
+          toLevel: number;
+          timestamp: number;
+          attemptsCount: number;
+          dateStr: string;
+        }>;
+      }> = [];
+
+      chronological.forEach((res, idx) => {
+        const score = res.score;
+        if (firstLegendIdx === -1) {
+          scoresUpToFirstLegend.push(score);
+        }
+
+        const previousLevel = currentLevel;
+
+        // Apply Level Rules
+        if (currentLevel === 1) {
+          if (score === 30) consecutiveMaxAtLevel++; else consecutiveMaxAtLevel = 0;
+          const reqConsecutive = parseRequiredConsecutive(0, 10);
+          if (consecutiveMaxAtLevel >= reqConsecutive) {
+            currentLevel = 2; consecutiveMaxAtLevel = 0; consecutiveLowAtLevel = 0;
+          }
+        } else if (currentLevel === 2) {
+          if (score === 30) consecutiveMaxAtLevel++; else consecutiveMaxAtLevel = 0;
+          const demotionMin = parseDemotionThreshold(1, 20);
+          if (score < demotionMin) consecutiveLowAtLevel++;
+          const reqConsecutive = parseRequiredConsecutive(1, 10);
+          if (consecutiveMaxAtLevel >= reqConsecutive) {
+            currentLevel = 3; consecutiveMaxAtLevel = 0; consecutiveLowAtLevel = 0;
+          } else if (consecutiveLowAtLevel >= 2) {
+            currentLevel = 1; consecutiveMaxAtLevel = 0; consecutiveLowAtLevel = 0;
+          }
+        } else if (currentLevel === 3) {
+          if (score === 30) consecutiveMaxAtLevel++; else consecutiveMaxAtLevel = 0;
+          const demotionMin = parseDemotionThreshold(2, 26);
+          if (score < demotionMin) consecutiveLowAtLevel++;
+          const reqConsecutive = parseRequiredConsecutive(2, 10);
+          if (consecutiveMaxAtLevel >= reqConsecutive) {
+            currentLevel = 4; consecutiveMaxAtLevel = 0; consecutiveLowAtLevel = 0;
+          } else if (consecutiveLowAtLevel >= 2) {
+            currentLevel = 2; consecutiveMaxAtLevel = 0; consecutiveLowAtLevel = 0;
+          }
+        } else if (currentLevel === 4) {
+          if (score === 30) consecutiveMaxAtLevel++; else consecutiveMaxAtLevel = 0;
+          const demotionMin = parseDemotionThreshold(3, 27);
+          if (score < demotionMin) consecutiveLowAtLevel++;
+          const reqConsecutive = parseRequiredConsecutive(3, 10);
+          if (consecutiveMaxAtLevel >= reqConsecutive) {
+            currentLevel = 5; consecutiveMaxAtLevel = 0; consecutiveLowAtLevel = 0;
+          } else if (consecutiveLowAtLevel >= 2) {
+            currentLevel = 3; consecutiveMaxAtLevel = 0; consecutiveLowAtLevel = 0;
+          }
+        } else if (currentLevel === 5) {
+          if (score === 30) consecutiveMaxAtLevel++; else consecutiveMaxAtLevel = 0;
+          const demotionMin = parseDemotionThreshold(4, 28);
+          if (score < demotionMin) consecutiveLowAtLevel++;
+          if (consecutiveLowAtLevel >= 2) {
+            currentLevel = 4; consecutiveMaxAtLevel = 0; consecutiveLowAtLevel = 0;
+          }
+        }
+
+        if (currentLevel === 5) {
+          if (firstLegendIdx === -1) {
+            firstLegendIdx = idx;
+          }
+          const d = new Date(res.timestamp);
+          const dateStr = d.toISOString().split('T')[0];
+          level5Attempts.push({ timestamp: res.timestamp, dateStr });
+        }
+
+        // Record any level transition
+        if (previousLevel !== currentLevel) {
+          const attemptsCount = idx - lastLevelChangeIdx;
+          allTransitions.push({
+            fromLevel: previousLevel,
+            toLevel: currentLevel,
+            timestamp: res.timestamp,
+            attemptsCount,
+            dateStr: formatPromoDate(res.timestamp)
+          });
+          lastLevelChangeIdx = idx;
+        }
+
+        // Detect coronations
+        if (previousLevel < 5 && currentLevel === 5) {
+          const coronationIdx = idx;
+          const promoTimestamp = res.timestamp;
+          const fromLevel = previousLevel;
+
+          const coronationAttempts = chronological.slice(0, coronationIdx + 1);
+          const totalAtCoronation = coronationAttempts.length;
+          const totalDur = coronationAttempts.reduce((sum, r) => sum + (r.duration || 0), 0);
+          const totalSc = coronationAttempts.reduce((sum, r) => sum + r.score, 0);
+          const totalQs = coronationAttempts.reduce((sum, r) => sum + (r.totalQuestions || 3), 0);
+
+          const avgScore = totalAtCoronation > 0 ? parseFloat((totalSc / totalAtCoronation).toFixed(1)) : 0;
+          const durationPerAttempt = totalAtCoronation > 0 ? parseFloat((totalDur / totalAtCoronation).toFixed(1)) : 0;
+          const durationPerQuestion = totalQs > 0 ? parseFloat((totalDur / totalQs).toFixed(1)) : 0;
+
+          const d = new Date(promoTimestamp);
+          const dateStr = d.toISOString().split('T')[0];
+
+          const prevCoronationCount = coronations.reduce((sum, c) => sum + c.transitions.length, 0);
+          const currentCoronationTransitions = allTransitions.slice(prevCoronationCount);
+
+          coronations.push({
+            coronationIdx,
+            promoTimestamp,
+            fromLevel,
+            avgScoreAtCoronation: avgScore,
+            totalAttemptsAtCoronation: totalAtCoronation,
+            overallAvgDurationPerAttempt: durationPerAttempt,
+            overallAvgDurationPerQuestion: durationPerQuestion,
+            dateStr,
+            transitions: currentCoronationTransitions
+          });
+        }
+      });
+
+      if (firstLegendIdx !== -1) {
+        const lastResult = chronological[chronological.length - 1];
+        const lastPromoTimestamp = lastResult.timestamp;
+
+        if (coronations.length === 0) {
+          const coronationAttempts = chronological.slice(0, firstLegendIdx + 1);
+          const totalAtCoronation = coronationAttempts.length;
+          const totalDur = coronationAttempts.reduce((sum, r) => sum + (r.duration || 0), 0);
+          const totalSc = coronationAttempts.reduce((sum, r) => sum + r.score, 0);
+          const totalQs = coronationAttempts.reduce((sum, r) => sum + (r.totalQuestions || 3), 0);
+
+          const avgScore = totalAtCoronation > 0 ? parseFloat((totalSc / totalAtCoronation).toFixed(1)) : 0;
+          const durationPerAttempt = totalAtCoronation > 0 ? parseFloat((totalDur / totalAtCoronation).toFixed(1)) : 0;
+          const durationPerQuestion = totalQs > 0 ? parseFloat((totalDur / totalQs).toFixed(1)) : 0;
+
+          const d = new Date(chronological[firstLegendIdx].timestamp);
+          const dateStr = d.toISOString().split('T')[0];
+
+          let fallbackTransitions = [...allTransitions];
+          if (fallbackTransitions.length === 0) {
+            const countPerLevel = Math.max(1, Math.floor(totalAtCoronation / 4));
+            fallbackTransitions = [
+              { fromLevel: 1, toLevel: 2, timestamp: lastPromoTimestamp - 3 * 86400000, attemptsCount: countPerLevel, dateStr: formatPromoDate(lastPromoTimestamp - 3 * 86400000) },
+              { fromLevel: 2, toLevel: 3, timestamp: lastPromoTimestamp - 2 * 86400000, attemptsCount: countPerLevel, dateStr: formatPromoDate(lastPromoTimestamp - 2 * 86400000) },
+              { fromLevel: 3, toLevel: 4, timestamp: lastPromoTimestamp - 1 * 86400000, attemptsCount: countPerLevel, dateStr: formatPromoDate(lastPromoTimestamp - 1 * 86400000) },
+              { fromLevel: 4, toLevel: 5, timestamp: lastPromoTimestamp, attemptsCount: totalAtCoronation - 3 * countPerLevel, dateStr: formatPromoDate(lastPromoTimestamp) }
+            ];
+          }
+
+          coronations.push({
+            coronationIdx: firstLegendIdx,
+            promoTimestamp: chronological[firstLegendIdx].timestamp,
+            fromLevel: 4,
+            avgScoreAtCoronation: avgScore,
+            totalAttemptsAtCoronation: totalAtCoronation,
+            overallAvgDurationPerAttempt: durationPerAttempt,
+            overallAvgDurationPerQuestion: durationPerQuestion,
+            dateStr,
+            transitions: fallbackTransitions
+          });
+        }
+
+        const isLNT = lastResult.userId === 'admin_lenhattruong' || lNormalizeName(lastResult.userName) === 'LÊ NHẬT TRƯỜNG';
+        
+        const totalAttempts = chronological.length;
+        const totalDuration = chronological.reduce((sum, r) => sum + (r.duration || 0), 0);
+        const totalScore = chronological.reduce((sum, r) => sum + r.score, 0);
+        const totalQuestions = chronological.reduce((sum, r) => sum + (r.totalQuestions || 3), 0);
+
+        const avgScoreAtFirstLegend = scoresUpToFirstLegend.length > 0 
+          ? parseFloat((scoresUpToFirstLegend.reduce((sum, s) => sum + s, 0) / scoresUpToFirstLegend.length).toFixed(1)) 
+          : 0;
+
+        const overallAvgDurationPerAttempt = totalAttempts > 0 
+          ? parseFloat((totalDuration / totalAttempts).toFixed(1)) 
+          : 0;
+
+        const overallAvgDurationPerQuestion = totalQuestions > 0 
+          ? parseFloat((totalDuration / totalQuestions).toFixed(1)) 
+          : 0;
+
+        const uniqueDaysMaintaining = Array.from(new Set(level5Attempts.map(att => att.dateStr))).length;
+
+        const calcRes = calculateInactivityAugmentedLevel(
+          personKey,
+          chronological,
+          activeRules,
+          {
+            isTestModeEnabled: inactivityTestMode,
+            simulatedToday: inactivityTestMode ? '2026-06-14' : getVietnamDateString()
+          }
+        );
+        const finalComputedLevel = calcRes.level;
+
+        const rName = lastResult.userName || 'THÀNH VIÊN ẨN DANH';
+        const normName = lNormalizeName(rName);
+
+        const existingIdx = legendsList.findIndex(l => lNormalizeName(l.userName) === normName);
+
+        const newItem = {
+          userId: lastResult.userId || lastResult.userName,
+          userName: rName,
+          dept: isLNT ? 'Phòng Quản Lý Chất Lượng (QLCL)' : (lastResult.department || 'Hội sở'),
+          department: isLNT ? 'Phòng Quản Lý Chất Lượng (QLCL)' : (lastResult.department || 'Hội sở'),
+          branch: lastResult.branch || 'Hội sở',
+          avgScoreAtFirstLegend: coronations[coronations.length - 1].avgScoreAtCoronation,
+          overallAvgDurationPerAttempt: coronations[coronations.length - 1].overallAvgDurationPerAttempt,
+          overallAvgDurationPerQuestion: coronations[coronations.length - 1].overallAvgDurationPerQuestion,
+          level5Attempts,
+          coronations,
+          totalAttempts,
+          totalScore,
+          totalDuration,
+          totalQuestions,
+          promoTimestamp: coronations[coronations.length - 1].promoTimestamp,
+          daysMaintaining: uniqueDaysMaintaining,
+          currentLevel: finalComputedLevel,
+          
+          // Compat
+          level: finalComputedLevel,
+          maxLevelReached: calcRes.maxLevelReached || finalComputedLevel,
+          attempts: totalAttempts,
+          avgScore: coronations[coronations.length - 1].avgScoreAtCoronation,
+          avgTimeSpent: Math.round(overallAvgDurationPerQuestion),
+          bestScore: Math.max(...userResultsList.map(r => r.score), 30)
+        };
+
+        if (existingIdx !== -1) {
+          const existing = legendsList[existingIdx];
+          legendsList[existingIdx] = {
+            ...newItem,
+            currentLevel: newItem.currentLevel,
+            promoTimestamp: newItem.promoTimestamp || existing.promoTimestamp,
+            daysMaintaining: Math.max(newItem.daysMaintaining || 1, existing.daysMaintaining || 1),
+            coronations: newItem.coronations.length > 0 ? newItem.coronations : existing.coronations
+          };
+        } else {
+          legendsList.push(newItem);
+        }
       }
-    ];
+    });
 
-    const list: typeof baselineLegends = [...baselineLegends];
-
-    Object.entries(userGroups).forEach(([personKey, userResults]) => {
-      const calcResult = calculateInactivityAugmentedLevel(
-        personKey.startsWith('usr_') || personKey.startsWith('admin_') ? personKey : '',
-        userResults,
+    // Ensure EVERY legend has their currentLevel / level evaluated correctly using calculateInactivityAugmentedLevel
+    legendsList.forEach(l => {
+      const normName = lNormalizeName(l.userName);
+      const userResultsList = userGroups[l.userId] || userGroups[normName] || [];
+      const calcRes = calculateInactivityAugmentedLevel(
+        l.userId,
+        userResultsList,
         activeRules,
         {
           isTestModeEnabled: inactivityTestMode,
           simulatedToday: inactivityTestMode ? '2026-06-14' : getVietnamDateString()
         }
       );
-      
-      const lastRes = [...userResults].sort((a,b) => b.timestamp - a.timestamp)[0];
-      const dept = lastRes?.department || userIdToDeptMap[personKey] || 'Bộ phận khác';
-      const branch = lastRes?.branch || userIdToBranchMap[personKey] || 'Chi nhánh khác';
-      const userName = lastRes?.userName || userIdToNameMap[personKey] || personKey;
-
-      const attempts = userResults.length;
-      const totalScore = userResults.reduce((acc, curr) => acc + curr.score, 0);
-      const avgScore = attempts > 0 ? parseFloat((totalScore / attempts).toFixed(1)) : 0;
-      
-      const totalDur = userResults.reduce((sum, r) => sum + (r.duration || 0), 0);
-      const totalQues = userResults.reduce((sum, r) => sum + (r.totalQuestions || 3), 0);
-      const avgTimeSpent = Math.max(1, Math.round(totalDur / totalQues));
-
-      if (calcResult.level === 5 || calcResult.maxLevelReached === 5) {
-        const normName = lNormalizeName(userName);
-        const existingIdx = list.findIndex(l => lNormalizeName(l.userName) === normName);
-
-        const newItem = {
-          userId: personKey.startsWith('usr_') || personKey.startsWith('admin_') ? personKey : '',
-          userName,
-          department: dept,
-          branch,
-          level: calcResult.level,
-          maxLevelReached: calcResult.maxLevelReached || calcResult.level,
-          avgScore,
-          attempts,
-          avgTimeSpent,
-          bestScore: Math.max(...userResults.map(r => r.score))
-        };
-
-        if (existingIdx !== -1) {
-          if (newItem.attempts >= list[existingIdx].attempts) {
-            list[existingIdx] = newItem;
-          }
-        } else {
-          list.push(newItem);
-        }
-      }
+      l.currentLevel = calcRes.level;
+      l.level = calcRes.level;
     });
 
-    return list.sort((a, b) => b.avgScore - a.avgScore || b.attempts - a.attempts);
+    // Sort matching exactly how the Admin's list is sorted!
+    // Sort by promoTimestamp ascending as a base ranking (earliest achieved Level 5 first)
+    return legendsList.sort((a, b) => {
+      const aTime = a.promoTimestamp || Infinity;
+      const bTime = b.promoTimestamp || Infinity;
+      if (aTime !== bTime) {
+        return aTime - bTime;
+      }
+      return a.totalAttempts - b.totalAttempts;
+    });
   }, [allResults, levelRules, inactivityTestMode]);
 
   // Records 3T calculations based on actual results paired with historic high-standards
@@ -2857,10 +3037,10 @@ export default function EmployeeDashboard({
                 
                 // Style variables based on type
                 let cardStyle = "bg-slate-50 border border-slate-150";
-                let iconBg = "bg-slate-200 text-slate-700";
+                let iconBg = "bg-slate-300 text-slate-700";
                 let badgeText = "Hệ thống";
                 let badgeStyle = "bg-slate-100 text-slate-650 border border-slate-250";
-                let textStyle = "text-slate-800";
+                let textStyle = "text-slate-850";
                 let userDisplay = ann.userName || "Admin";
                 const isLNT = ann.userName && (ann.userName.trim().normalize('NFC').toUpperCase() === 'LÊ NHẬT TRƯỜNG' || ann.userName.trim().normalize('NFC').toUpperCase() === 'LE NHAT TRUONG');
 
@@ -2953,7 +3133,7 @@ export default function EmployeeDashboard({
         <div className="flex items-center justify-between border-b border-gray-100 pb-2.5 mb-3 shrink-0">
           <button
             onClick={() => setAdminMobileTab('home')}
-            className="flex items-center gap-1 text-xs font-bold text-gray-500 hover:text-gray-700 p-1 rounded-lg hover:bg-gray-100"
+            className="flex items-center gap-1 text-xs font-bold text-gray-500 hover:text-gray-700 p-1 rounded-lg hover:bg-gray-100 cursor-pointer"
           >
             <ArrowLeft className="h-4 w-4" />
             <span>Sảnh chính</span>
@@ -2983,7 +3163,7 @@ export default function EmployeeDashboard({
         <div className="flex items-center justify-between border-b border-gray-100 pb-2.5 mb-3 shrink-0">
           <button
             onClick={() => setAdminMobileTab('home')}
-            className="flex items-center gap-1 text-xs font-bold text-gray-500 hover:text-gray-700 p-1 rounded-lg hover:bg-gray-100"
+            className="flex items-center gap-1 text-xs font-bold text-gray-500 hover:text-gray-700 p-1 rounded-lg hover:bg-gray-100 cursor-pointer"
           >
             <ArrowLeft className="h-4 w-4" />
             <span>Sảnh chính</span>
@@ -3002,35 +3182,77 @@ export default function EmployeeDashboard({
           {monumentLegends.length === 0 ? (
             <div className="text-center py-8 text-gray-400 text-xs italic">Chưa có ai đạt cấp 5 Huyền thoại</div>
           ) : (
-            monumentLegends.map((legend, idx) => (
-              <div key={idx} className="bg-gradient-to-br from-amber-50/30 via-white to-amber-50/10 border border-amber-200/40 hover:border-amber-400/60 p-2.5 rounded-lg flex items-start gap-2.5 transition-all shadow-3xs">
-                <div className="h-7 w-7 rounded-full bg-amber-105 border border-amber-200 flex items-center justify-center text-xs font-black text-amber-700 shrink-0 select-none">
-                  {idx + 1}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-xs font-black text-slate-800 uppercase tracking-tight flex items-center gap-1">
-                    <span>{legend.userName}</span>
-                    <span className="text-xs">🔮</span>
+            monumentLegends.map((legend, idx) => {
+              const isDemoted = (legend.currentLevel !== undefined ? legend.currentLevel : legend.level) < 5;
+              const coronationsCount = legend.coronations?.length || 1;
+              const promoDateStr = legend.promoTimestamp ? new Date(legend.promoTimestamp).toLocaleDateString('vi-VN') : 'N/A';
+
+              return (
+                <div key={idx} className="bg-gradient-to-br from-amber-50/20 via-white to-amber-50/5 border border-amber-200/50 hover:border-amber-400/80 p-3 rounded-xl flex items-start gap-3 transition-all shadow-4xs">
+                  <div className="h-6 w-6 rounded-full bg-amber-100 border border-amber-250 flex items-center justify-center text-[11px] font-black text-amber-800 shrink-0 select-none font-mono">
+                    {idx + 1}
                   </div>
-                  <div className="text-[10px] text-gray-500 font-medium">{legend.department}</div>
-                  <div className="text-[9.5px] text-gray-450 truncate">{legend.branch}</div>
-                  <div className="grid grid-cols-3 gap-1.5 mt-2 pt-1.5 border-t border-slate-100 text-center text-[9px] font-mono">
-                    <div className="bg-slate-50 p-1 rounded">
-                      <div className="text-gray-400 font-bold uppercase text-[7.5px]">Lượt Thi</div>
-                      <div className="font-extrabold text-slate-800">{legend.attempts} lượt</div>
+                  <div className="flex-1 min-w-0 font-sans">
+                    <div className="flex items-center justify-between gap-1.5 flex-wrap">
+                      <div className="text-xs font-black text-slate-900 uppercase tracking-tight flex items-center gap-1 min-w-0">
+                        <span className="truncate">{legend.userName}</span>
+                        <span className="text-xs shrink-0">🔮</span>
+                      </div>
+                      
+                      {/* Maintaining Position Days Badge */}
+                      <div className="shrink-0">
+                        {isDemoted ? (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[8.5px] font-bold bg-slate-50 text-slate-450 border border-slate-200/60 whitespace-nowrap">
+                            {legend.daysMaintaining} ngày ⏸️
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[8.5px] font-black bg-amber-50 text-amber-800 border border-amber-200/50 whitespace-nowrap">
+                            {legend.daysMaintaining} ngày
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <div className="bg-amber-50 p-1 rounded">
-                      <div className="text-amber-600 font-bold uppercase text-[7.5px]">Đạt Tối Đa</div>
-                      <div className="font-extrabold text-amber-700">{legend.bestScore}đ</div>
+
+                    <div className="text-[10px] text-[zinc-650] font-bold mt-0.5 leading-tight">{legend.department}</div>
+                    <div className="text-[9.5px] text-zinc-400 truncate font-medium">{legend.branch}</div>
+                    
+                    {/* Thăng cấp and Coronation status information row */}
+                    <div className="flex items-center justify-between gap-2 mt-2 pt-1.5 border-t border-dashed border-gray-100 text-[9px] text-slate-500 font-sans">
+                      <div className="flex items-center gap-1">
+                        <span>Thăng cấp:</span>
+                        <span className="text-slate-800 font-extrabold font-mono">{promoDateStr}</span>
+                      </div>
+                      
+                      <div className="flex items-center gap-1 bg-amber-50 border border-amber-100/60 px-1.5 py-0.5 rounded font-sans font-black text-amber-800 text-[8.5px] uppercase">
+                        👑 {coronationsCount} lần thăng cấp
+                      </div>
                     </div>
-                    <div className="bg-blue-50 p-1 rounded">
-                      <div className="text-blue-600 font-bold uppercase text-[7.5px]">Trung Bình</div>
-                      <div className="font-extrabold text-blue-700">{legend.avgScore}đ</div>
+
+                    {/* Highly detailed stat boxes (matching Admin Stats metrics) */}
+                    <div className="grid grid-cols-3 gap-1.5 mt-2 text-center text-[9px] font-mono">
+                      <div className="bg-slate-50 border border-slate-100 p-1.5 rounded">
+                        <div className="text-gray-400 font-bold uppercase text-[7px] tracking-wider">Lượt Thi</div>
+                        <div className="font-extrabold text-slate-800 mt-0.2">{legend.attempts} lượt</div>
+                      </div>
+                      <div className="bg-amber-50/60 border border-amber-100/50 p-1.5 rounded">
+                        <div className="text-amber-700 font-bold uppercase text-[7px] tracking-wider">Đạt Tối Đa</div>
+                        <div className="font-extrabold text-amber-800 mt-0.2">{legend.bestScore || 30}đ</div>
+                      </div>
+                      <div className="bg-blue-50/60 border border-blue-100/50 p-1.5 rounded">
+                        <div className="text-blue-700 font-bold uppercase text-[7px] tracking-wider">Trung Bình</div>
+                        <div className="font-extrabold text-blue-800 mt-0.2">{legend.avgScore}đ</div>
+                      </div>
                     </div>
+
+                    {/* Reflex/Action time duration statistic row */}
+                    <div className="mt-1.5 text-center text-[8.5px] bg-[#FAF9F6] border border-amber-100/30 py-0.5 rounded text-amber-900 font-semibold font-mono">
+                      Phản xạ: <span className="font-bold text-amber-950">{Math.round(legend.overallAvgDurationPerQuestion || legend.avgTimeSpent || 5)}s/câu</span>
+                    </div>
+
                   </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>
@@ -3699,6 +3921,377 @@ export default function EmployeeDashboard({
 
   const renderMobileRulesEditorPanel = () => {
     return null;
+  };
+
+  const renderMobileDetailsPanel = () => {
+    if (adminSelectedUserId) {
+      const selectedEmp = deptUsers.find(u => u.id === adminSelectedUserId);
+      if (!selectedEmp) {
+        return (
+          <div className="flex-1 flex flex-col min-h-0 bg-white border border-gray-150 rounded-xl p-3 shadow-xs">
+            <button
+              onClick={() => setAdminSelectedUserId(null)}
+              className="flex items-center gap-1 text-xs font-bold text-gray-500 hover:text-gray-700 p-1 rounded-lg hover:bg-gray-100 self-start mb-3"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              <span>Quay lại</span>
+            </button>
+            <div className="text-center py-8 text-gray-450 text-xs italic">
+              Không tìm thấy nhân viên
+            </div>
+          </div>
+        );
+      }
+
+      const empResults = allResults.filter(r => 
+        (r.userId && r.userId === selectedEmp.id) || 
+        (selectedEmp.phone && r.userId === selectedEmp.phone) || 
+        (r.userName && r.userName.toLowerCase().trim() === selectedEmp.name.toLowerCase().trim())
+      );
+      const chronologicalResults = [...empResults].sort((a, b) => b.timestamp - a.timestamp);
+      
+      const state = calculateInactivityAugmentedLevel(
+        selectedEmp.id, 
+        empResults, 
+        levelRules || DEFAULT_LEVEL_RULES,
+        {
+          isTestModeEnabled: inactivityTestMode,
+          simulatedToday: inactivityTestMode ? '2026-06-14' : getVietnamDateString()
+        }
+      );
+      
+      const activeRules = levelRules || DEFAULT_LEVEL_RULES;
+      const currentLvlRules = activeRules.levels.find(l => l.level === state.level) || activeRules.levels[state.level - 1] || { name: `Cấp ${state.level}`, emoji: '🌱', promotion: '', demotion: '' };
+
+      const getRequiredForPromotion = () => {
+        const text = currentLvlRules.promotion || '';
+        const match = text.match(/liên\s+tục\s+(\d+)\s+lượt/i) || 
+                      text.match(/(\d+)\s+lượt\s+liên\s+tục/i) || 
+                      text.match(/(\d+)\s+lượt/i);
+        return match ? parseInt(match[1], 10) : 10;
+      };
+      const requiredConsecutive = getRequiredForPromotion();
+
+      return (
+        <div className="flex-1 flex flex-col min-h-0 bg-white border border-gray-150 rounded-xl p-3 shadow-xs overflow-hidden text-left font-sans">
+          {/* Panel Header */}
+          <div className="flex items-center justify-between border-b border-gray-100 pb-2 mb-3 shrink-0">
+            <button
+              onClick={() => setAdminSelectedUserId(null)}
+              className="flex items-center gap-1 text-xs font-bold text-gray-500 hover:text-gray-700 p-1 rounded-lg hover:bg-gray-100 cursor-pointer"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              <span>Quay lại</span>
+            </button>
+            <span className="text-[12px] font-extrabold text-[#0B3A60] uppercase tracking-wide truncate max-w-[180px]">
+              {selectedEmp.name}
+            </span>
+            <button
+              onClick={() => setAdminMobileTab('home')}
+              className="text-[10px] font-bold text-gray-400 hover:text-gray-600 px-1.5 py-1"
+            >
+              Sảnh chính
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto pr-0.5 pb-4 space-y-4">
+            {/* Selected Employee Info */}
+            <div className="bg-slate-50 border border-slate-150 rounded-lg p-2.5 text-[11px] leading-relaxed text-gray-600">
+              <div className="flex justify-between font-bold text-slate-800">
+                <span>Mã NV: {selectedEmp.employeeId || 'N/A'}</span>
+                <span>ĐT: {selectedEmp.phone || 'N/A'}</span>
+              </div>
+              <div className="text-slate-500 font-medium mt-0.5">
+                {selectedEmp.department} | {selectedEmp.branch}
+              </div>
+            </div>
+
+            {/* Micro-metrics Grid: Level, promotion progress, attempts today */}
+            <div className="grid grid-cols-2 gap-2">
+              <div className="p-2 border border-slate-150 bg-slate-50/50 rounded-lg flex items-center gap-1.5 min-w-0">
+                <span className="text-xl shrink-0">{currentLvlRules.emoji || '🌱'}</span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[8px] font-bold text-slate-550 uppercase tracking-wider">Hàng Hiện Tại</p>
+                  <p className="text-[10px] font-extrabold text-slate-850 truncate">{currentLvlRules.name}</p>
+                </div>
+              </div>
+
+              <div className="p-2 border border-slate-150 bg-slate-50/50 rounded-lg flex flex-col justify-center min-w-0">
+                <p className="text-[8px] font-bold text-slate-500 uppercase tracking-wider">Hôm nay</p>
+                <p className="text-[10px] font-extrabold text-slate-850">
+                  {state.attemptsToday} / 2 lượt thi
+                </p>
+              </div>
+            </div>
+
+            {/* Promotion progress banner */}
+            <div className="p-2.5 bg-emerald-50/40 border border-emerald-100 rounded-lg text-[10px]">
+              <div className="flex items-center justify-between font-bold text-emerald-900 mb-1">
+                <span>Tiến trình thăng cấp (30₫ tối đa)</span>
+                {state.level === 5 ? (
+                  <span className="text-violet-700">Tối cao 🏆</span>
+                ) : (
+                  <span>{state.consecutiveMax} / {requiredConsecutive}</span>
+                )}
+              </div>
+              {state.level < 5 && (
+                <div className="w-full bg-emerald-150 rounded-full h-1 overflow-hidden">
+                  <div 
+                    className="bg-emerald-600 h-1 rounded-full transition-all duration-350"
+                    style={{ width: `${Math.min(100, (state.consecutiveMax / requiredConsecutive) * 100)}%` }}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Inactivity alert text */}
+            <div className="text-[9.5px]">
+              {state.inactiveDaysWarning ? (
+                <div className="text-red-700 bg-red-50 border border-red-100 p-2 rounded-lg font-bold flex items-center gap-1.5 animate-pulse">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-red-600" />
+                  Nguy cơ bị hạ cấp thứ hạng vào 0h00 nếu không đủ 02 lượt!
+                </div>
+              ) : (
+                <div className="text-green-700 bg-green-50/60 border border-green-100 p-2 rounded-lg font-bold flex items-center gap-1.5">
+                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-green-600" />
+                  Đã hoàn tất 2 lượt ôn tập tối thiểu hôm nay!
+                </div>
+              )}
+            </div>
+
+            {/* overall metrics display box */}
+            <div className="grid grid-cols-2 gap-2 bg-gray-50/50 border border-gray-150 p-2 rounded-lg text-[10px]">
+              <div>
+                <span className="text-gray-400 font-semibold block">TỔNG LƯỢT THI:</span>
+                <span className="font-extrabold font-mono text-gray-800">{chronologicalResults.length} lượt</span>
+              </div>
+              <div>
+                <span className="text-gray-400 font-semibold block">ĐIỂM CAO NHẤT:</span>
+                <span className="font-extrabold font-mono text-green-750">
+                  {empResults.length > 0 ? Math.max(...empResults.map(r => r.score)) : 0}/30đ
+                </span>
+              </div>
+              <div>
+                <span className="text-gray-400 font-semibold block">HẠ CẤP DUY TRÌ:</span>
+                <span className="font-extrabold font-mono text-amber-700">{state.demotionsApplied} lần</span>
+              </div>
+              <div>
+                <span className="text-gray-400 font-semibold block">ĐIỂM TRUNG BÌNH:</span>
+                <span className="font-extrabold font-mono text-blue-700">
+                  {empResults.length > 0 
+                    ? (empResults.reduce((acc, curr) => acc + curr.score, 0) / empResults.length).toFixed(1) 
+                    : '0.0'}đ
+                </span>
+              </div>
+            </div>
+
+            {/* List of attempts */}
+            <div className="space-y-2 shrink-0">
+              <h4 className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider">
+                Lịch sử làm bài ({chronologicalResults.length} lần)
+              </h4>
+              
+              {chronologicalResults.length === 0 ? (
+                <p className="text-center py-6 text-gray-400 text-[11px] italic">Chưa thực hiện lượt thi nào</p>
+              ) : (
+                <div className="space-y-2 max-h-[300px] overflow-y-auto pr-0.5">
+                  {chronologicalResults.map((res, index) => {
+                    const isExpanded = adminExpandedResultId === res.id;
+                    return (
+                      <div key={res.id || index} className="border border-slate-150 rounded-lg overflow-hidden text-[11px] bg-slate-50/30">
+                        {/* Header trigger */}
+                        <button
+                          onClick={() => setAdminExpandedResultId(isExpanded ? null : res.id)}
+                          className={`w-full flex items-center justify-between p-2.5 font-sans ${isExpanded ? 'bg-slate-100 font-semibold' : ''}`}
+                        >
+                          <div className="flex items-center gap-3 w-full justify-between pr-2">
+                            <span className="font-mono text-gray-400 text-[9.5px]">#{chronologicalResults.length - index}</span>
+                            <span className="font-mono font-bold text-gray-700">
+                              {res.date || (res.timestamp ? new Date(res.timestamp).toLocaleDateString('vi-VN') : 'N/A')}
+                            </span>
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-black font-mono ${
+                              res.score === 30 
+                                ? 'bg-green-100 text-green-800' 
+                                : res.score >= 20 
+                                  ? 'bg-blue-100 text-blue-800' 
+                                  : 'bg-red-100 text-red-800'
+                            }`}>
+                              {res.score}/30đ
+                            </span>
+                            <span className="text-[10px] text-gray-500 font-mono">
+                              {res.duration || 0}s
+                            </span>
+                          </div>
+                          {isExpanded ? <ChevronUp className="h-3.5 w-3.5 text-slate-500" /> : <ChevronDown className="h-3.5 w-3.5 text-slate-400" />}
+                        </button>
+
+                        {/* Expand items */}
+                        {isExpanded && (
+                          <div className="p-2 border-t border-slate-150 bg-white space-y-2 text-[10px]">
+                            <div className="text-[8.5px] font-bold text-[#1971C2] uppercase pb-1 border-b border-gray-100">
+                              KẾT QUẢ ĐÁP ÁN CHI TIẾT
+                            </div>
+                            {!res.answers || res.answers.length === 0 ? (
+                              <p className="text-gray-400 italic text-center py-1">Không có chi tiết đáp án</p>
+                            ) : (
+                              <div className="space-y-1.5">
+                                {res.answers.map((ans, ansIdx) => {
+                                  const matchedQ = questions.find(q => q.id === ans.questionId);
+                                  return (
+                                    <div key={ansIdx} className="p-1.5 rounded bg-slate-50 border border-slate-100 leading-normal">
+                                      <p className="font-semibold text-slate-800">
+                                        Câu {ansIdx + 1}: {matchedQ?.questionText || 'Câu học phần / câu hỏi chung'}
+                                      </p>
+                                      <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                                        <span className={`px-1.5 py-0.5 rounded-[3.5px] text-[8.5px] font-bold ${
+                                          ans.isCorrect 
+                                            ? 'bg-green-100 text-green-800' 
+                                            : 'bg-red-100 text-red-800'
+                                        }`}>
+                                          {ans.isCorrect ? 'ĐÚNG' : 'SAI'}
+                                        </span>
+                                        <span className="text-slate-500">
+                                          Chọn: <span className="font-bold text-slate-700">{ans.selectedOptionText || `Đáp án ${ans.selectedOption}`}</span>
+                                        </span>
+                                        {!ans.isCorrect && (
+                                          <span className="text-green-700 font-medium ml-1">
+                                            Đúng: <span className="font-bold">{matchedQ?.correctOption ? (matchedQ[`option${matchedQ.correctOption}` as keyof Question] || matchedQ.correctOption) : ''}</span>
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+          </div>
+        </div>
+      );
+    }
+
+    const filteredEmployees = deptUsers.filter(u => {
+      if (u.status !== 'approved' && u.status !== 'APPROVED') return false;
+      const s = adminDetailSearch.toLowerCase().trim();
+      if (!s) return true;
+      return (
+        u.name?.toLowerCase().includes(s) ||
+        u.phone?.includes(s) ||
+        u.employeeId?.toLowerCase().includes(s) ||
+        u.department?.toLowerCase().includes(s) ||
+        u.branch?.toLowerCase().includes(s)
+      );
+    });
+
+    return (
+      <div className="flex-1 flex flex-col min-h-0 bg-white border border-gray-150 rounded-xl p-3 shadow-xs overflow-hidden text-left font-sans">
+        {/* Panel Header */}
+        <div className="flex items-center justify-between border-b border-gray-100 pb-2 mb-3 shrink-0">
+          <button
+            onClick={() => setAdminMobileTab('home')}
+            className="flex items-center gap-1 text-xs font-bold text-gray-500 hover:text-gray-700 p-1 rounded-lg hover:bg-gray-100 cursor-pointer"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span>Sảnh chính</span>
+          </button>
+          <span className="text-[13px] font-extrabold text-[#0B3A60] uppercase tracking-wide">
+            LỊCH SỬ CHI TIẾT
+          </span>
+          <div className="w-10" />
+        </div>
+
+        {/* Search */}
+        <div className="mb-3 shrink-0 relative">
+          <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-gray-400" />
+          <input
+            type="text"
+            value={adminDetailSearch}
+            onChange={(e) => setAdminDetailSearch(e.target.value)}
+            placeholder="Tìm theo tên, SĐT, Mã NV..."
+            className="w-full pl-8 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-xs placeholder-gray-400 focus:outline-hidden focus:ring-1 focus:ring-blue-500 focus:bg-white transition-all"
+          />
+          {adminDetailSearch && (
+            <button
+              onClick={() => setAdminDetailSearch('')}
+              className="absolute right-2.5 top-2.5 text-gray-400 hover:text-gray-600 cursor-pointer"
+            >
+              <X className="h-3.5 w-3.5 animate-fadeIn" />
+            </button>
+          )}
+        </div>
+
+        {/* List Content */}
+        <div className="flex-1 overflow-y-auto space-y-2 pr-0.5 pb-4">
+          {filteredEmployees.length === 0 ? (
+            <p className="text-center text-gray-450 text-wrap text-xs italic py-10">Không tìm thấy cán bộ nhân viên phù hợp.</p>
+          ) : (
+            filteredEmployees.map((emp) => {
+              const empResults = allResults.filter(r => 
+                (r.userId && r.userId === emp.id) || 
+                (emp.phone && r.userId === emp.phone) || 
+                (r.userName && r.userName.toLowerCase().trim() === emp.name.toLowerCase().trim())
+              );
+              
+              const state = calculateInactivityAugmentedLevel(
+                emp.id, 
+                empResults, 
+                levelRules || DEFAULT_LEVEL_RULES,
+                {
+                  isTestModeEnabled: inactivityTestMode,
+                  simulatedToday: inactivityTestMode ? '2026-06-14' : getVietnamDateString()
+                }
+              );
+
+              return (
+                <button
+                  key={emp.id}
+                  onClick={() => {
+                    setAdminSelectedUserId(emp.id);
+                    setAdminExpandedResultId(null);
+                  }}
+                  className="w-full text-left p-2.5 bg-slate-55/40 hover:bg-slate-50 border border-slate-150 rounded-lg flex items-center justify-between gap-2.5 transition-all active:scale-[0.99] group shadow-3xs cursor-pointer"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-black text-slate-800 uppercase tracking-tight flex items-center gap-1.5 truncate">
+                      <span>{emp.name}</span>
+                      {emp.employeeId && (
+                        <span className="text-[9px] bg-slate-200/80 text-slate-650 font-mono px-1 rounded font-bold shrink-0">
+                          {emp.employeeId}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[10px] text-zinc-650 font-bold mt-0.5 leading-tight truncate">
+                      {emp.department}
+                    </div>
+                    <div className="text-[9.5px] text-zinc-400 truncate">{emp.branch}</div>
+                    
+                    <div className="text-[9px] text-[#1971C2] font-bold font-mono mt-1">
+                      {empResults.length} lượt đã thi
+                    </div>
+                  </div>
+
+                  {/* Level and entry */}
+                  <div className="shrink-0 flex items-center gap-1.5">
+                    <span className="text-[10px] font-extrabold bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full border border-blue-100">
+                      Cấp {state.level}
+                    </span>
+                    <ChevronRight className="h-4 w-4 text-gray-400 group-hover:text-gray-650 transition-colors" />
+                  </div>
+                </button>
+              );
+            })
+          )}
+        </div>
+      </div>
+    );
   };
 
   const old_unused_renderMobileRulesEditorPanel = () => {
@@ -5648,6 +6241,7 @@ export default function EmployeeDashboard({
                     {adminMobileTab === 'legends' && renderMobileLegendsPanel()}
                     {adminMobileTab === 'records' && renderMobileRecordsPanel()}
                     {adminMobileTab === 'patience_top' && renderMobilePatiencePanel()}
+                    {adminMobileTab === 'details' && renderMobileDetailsPanel()}
                     {adminMobileTab === 'exchange' && (
                       <div className="flex flex-col flex-1 min-h-0 w-full bg-white rounded-t-2xl shadow-inner border-t border-gray-100 overflow-hidden">
                         <ConversationExchange 
@@ -5778,6 +6372,19 @@ export default function EmployeeDashboard({
                                   <UserIcon className="h-3.5 w-3.5 text-indigo-700" />
                                 </div>
                                 <span className="text-[8.5px] font-bold leading-tight truncate w-full text-center text-gray-705">Cá Nhân</span>
+                              </button>
+                            )}
+
+                            {(user.role === 'admin' || user.role === 'executive') && (
+                              <button
+                                onClick={() => setAdminMobileTab('details')}
+                                className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group shrink-0"
+                                title="Lịch sử chi tiết"
+                              >
+                                <div className="h-7 w-7 rounded-lg bg-yellow-50 border border-yellow-100 flex items-center justify-center group-hover:bg-yellow-100 transition-colors shrink-0">
+                                  <ClipboardList className="h-3.5 w-3.5 text-yellow-700" />
+                                </div>
+                                <span className="text-[8.5px] font-bold leading-tight truncate w-full text-center text-gray-700 font-sans">Chi Tiết</span>
                               </button>
                             )}
 

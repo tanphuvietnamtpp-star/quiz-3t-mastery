@@ -9,13 +9,14 @@ import {
   RefreshCcw, UserMinus, FileDown, Upload, Pencil, Lock, BarChart3,
   Database, Building, Briefcase, Landmark, Home, ChevronDown, ChevronUp,
   ShieldCheck, ShieldAlert, Zap, Activity, Server, Search, X,
-  Award, TrendingUp, RotateCcw, ArrowLeft, Bell, MessageSquare
+  Award, TrendingUp, RotateCcw, ArrowLeft, Bell, MessageSquare, ClipboardList
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import StatsDashboard from './StatsDashboard';
 import PersonalStats from './PersonalStats';
 import ConversationExchange from './ConversationExchange';
 import { cleanOptionText, formatDate } from '../utils/format';
+import { calculateInactivityAugmentedLevel, getVietnamDateString } from '../utils/levelCalculator';
 
 interface AdminDashboardProps {
   user: User;
@@ -130,15 +131,38 @@ export default function AdminDashboard({
   const [users, setUsers] = useState<User[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [results, setResults] = useState<QuizResult[]>([]);
+  const [excelPreviewQuestions, setExcelPreviewQuestions] = useState<Question[]>([]);
+  const [showExcelPreview, setShowExcelPreview] = useState(false);
+  const [excelFileName, setExcelFileName] = useState('');
   const [unreadExchangeCount, setUnreadExchangeCount] = useState(0);
   
-  const [activeTab, setActiveTab ] = useState<'users' | 'questions' | 'add_images' | 'qr' | 'stats' | 'encoding' | 'firebase_data' | 'rules' | 'personal' | 'notifications' | 'exchange'>('users');
+  const [activeTab, setActiveTab ] = useState<'users' | 'questions' | 'add_images' | 'qr' | 'stats' | 'encoding' | 'firebase_data' | 'rules' | 'personal' | 'notifications' | 'exchange' | 'details'>('users');
+
+  // Custom states for 'details' (CHI TIẾT) tab
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [expandedResultId, setExpandedResultId] = useState<string | null>(null);
+  const [detailSearch, setDetailSearch] = useState('');
 
   // System Announcement States
   const [systemAnnouncement, setSystemAnnouncement] = useState('Chào mừng toàn thể cán bộ nhân viên đến với Hội Thi Văn Hóa 3T! Tốc độ là sống còn - Tinh gọn là sức mạnh!');
   const [isEditingAnnouncement, setIsEditingAnnouncement] = useState(false);
   const [announcementEditText, setAnnouncementEditText] = useState('');
   const [allAnnouncements, setAllAnnouncements] = useState<any[]>([]);
+  const [lastReadAnnouncementAdminTimestamp, setLastReadAnnouncementAdminTimestamp] = useState<number>(() => Number(localStorage.getItem('3t_admin_last_read_ann_ts') || '0'));
+  const [unreadAnnouncementsCount, setUnreadAnnouncementsCount] = useState(0);
+
+  useEffect(() => {
+    const count = allAnnouncements.filter(a => a.timestamp > lastReadAnnouncementAdminTimestamp).length;
+    setUnreadAnnouncementsCount(count);
+  }, [allAnnouncements, lastReadAnnouncementAdminTimestamp]);
+
+  useEffect(() => {
+    if (activeTab === 'notifications') {
+      const now = Date.now();
+      setLastReadAnnouncementAdminTimestamp(now);
+      localStorage.setItem('3t_admin_last_read_ann_ts', String(now));
+    }
+  }, [activeTab]);
   const [newAnnouncementText, setNewAnnouncementText] = useState('');
   const [newAnnouncementType, setNewAnnouncementType] = useState<'admin_broadcast' | 'congrats'>('admin_broadcast');
   const [announcementToDelete, setAnnouncementToDelete] = useState<any | null>(null);
@@ -1023,6 +1047,235 @@ export default function AdminDashboard({
     } catch (err) {
       console.error(err);
       setNotice({ type: 'error', msg: 'Có lỗi xảy ra khi cập nhật và đồng bộ liên kết.' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Download Excel Template for Questions
+  const handleDownloadTemplate = () => {
+    const header = ['Câu hỏi', 'Đáp án A', 'Đáp án B', 'Đáp án C', 'Đáp án D', 'Đáp án đúng (A/B/C/D)', 'Giải thích dặn dò'];
+    const sampleRows = [
+      [
+        'Kiên trì, kỷ luật, tự học tập tự rèn luyện chính là tinh thần cốt lõi của chữ T nào trong 3T?',
+        'Tự lực',
+        'Tự học',
+        'Trí tuệ',
+        'Tất cả đều sai',
+        'B',
+        'Tự học là tinh thần chủ động nâng cao năng lực bản thân liên tục của người Tân Phú.'
+      ],
+      [
+        'Khi nhân viên thắc mắc về quyết định tuyển dụng kéo dài nhiều tuần, bạn nên phản hồi theo tinh thần nào?',
+        'Đổ lỗi cho bộ phận tuyển dụng hoặc cấp trên không duyệt.',
+        'Im lặng không trả lời để tránh xung đột.',
+        'Chủ động xin lỗi, giải thích rõ nút thắt tinh gọn quy trình và tìm giải pháp hỗ trợ kịp thời.',
+        'Yêu cầu nhân viên tự đi hỏi bộ phận nhân sự.',
+        'C',
+        'Ứng xử văn minh, thẳng thắn, trách nhiệm và hướng đến tinh giản mọi thủ tục phiền hà.'
+      ]
+    ];
+
+    const ws = XLSX.utils.aoa_to_sheet([header, ...sampleRows]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Mau_Cau_Hoi_3T');
+
+    ws['!cols'] = [
+      { wch: 55 }, // Câu hỏi
+      { wch: 20 }, // A
+      { wch: 20 }, // B
+      { wch: 20 }, // C
+      { wch: 20 }, // D
+      { wch: 25 }, // Đáp án đúng
+      { wch: 55 }  // Giải thích
+    ];
+
+    XLSX.writeFile(wb, 'Mau_Nap_Ngan_Hang_Cau_Hoi_3T.xlsx');
+    setNotice({ type: 'success', msg: 'Đã tải mẫu Excel thành công!' });
+  };
+
+  // Export existing questions to Excel
+  const handleExportQuestions = () => {
+    if (questions.length === 0) {
+      setNotice({ type: 'error', msg: 'Không có câu hỏi nào để xuất!' });
+      return;
+    }
+
+    const exportData = questions.map((q, idx) => ({
+      'STT': idx + 1,
+      'Mã câu hỏi': q.id,
+      'Nội dung câu hỏi': q.text,
+      'Đáp án A': q.options[0] || '',
+      'Đáp án B': q.options[1] || '',
+      'Đáp án C': q.options[2] || '',
+      'Đáp án D': q.options[3] || '',
+      'Đáp án đúng (A/B/C/D)': q.correctAnswerIndex === 0 ? 'A' : q.correctAnswerIndex === 1 ? 'B' : q.correctAnswerIndex === 2 ? 'C' : 'D',
+      'Giải thích dặn dò': q.explanation || ''
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Ngan_Hang_Cau_Hoi_3T');
+    
+    ws['!cols'] = [
+      { wch: 6 },  // STT
+      { wch: 15 }, // Mã câu hỏi
+      { wch: 55 }, // Nội dung câu hỏi
+      { wch: 25 }, // Đáp án A
+      { wch: 25 }, // Đáp án B
+      { wch: 25 }, // Đáp án C
+      { wch: 25 }, // Đáp án D
+      { wch: 25 }, // Đáp án đúng
+      { wch: 55 }  // Giải thích
+    ];
+
+    XLSX.writeFile(wb, `Ngan_Hang_Cau_Hoi_3T_${Date.now()}.xlsx`);
+    setNotice({ type: 'success', msg: `Đã xuất thành công ${questions.length} câu hỏi ra file Excel!` });
+  };
+
+  // Excel File Input Handler
+  const handleExcelImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setExcelFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const data = new Uint8Array(evt.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+
+        if (jsonData.length === 0) {
+          setNotice({ type: 'error', msg: 'File Excel không có dữ liệu!' });
+          return;
+        }
+
+        // Detect columns dynamically
+        const headers = jsonData[0].map(h => String(h || '').trim().toLowerCase());
+        
+        let textIdx = headers.findIndex(h => h.includes('câu hỏi') || h.includes('nội dung') || h.includes('question') || h.includes('text'));
+        let optAIdx = headers.findIndex(h => h.includes('đáp án a') || h.includes('lựa chọn a') || h.includes('option a') || h === 'a');
+        let optBIdx = headers.findIndex(h => h.includes('đáp án b') || h.includes('lựa chọn b') || h.includes('option b') || h === 'b');
+        let optCIdx = headers.findIndex(h => h.includes('đáp án c') || h.includes('lựa chọn c') || h.includes('option c') || h === 'c');
+        let optDIdx = headers.findIndex(h => h.includes('đáp án d') || h.includes('lựa chọn d') || h.includes('option d') || h === 'd');
+        let correctIdx = headers.findIndex(h => h.includes('đáp án đúng') || h.includes('đáp án') || h.includes('correct') || h.includes('trả lời') || h.includes('chỉ mục'));
+        let expIdx = headers.findIndex(h => h.includes('giải thích') || h.includes('dặn d') || h.includes('explanation') || h.includes('chú dẫn'));
+
+        // Fallbacks for default row locations
+        if (textIdx === -1) textIdx = 0;
+        if (optAIdx === -1) optAIdx = 1;
+        if (optBIdx === -1) optBIdx = 2;
+        if (optCIdx === -1) optCIdx = 3;
+        if (optDIdx === -1) optDIdx = 4;
+        if (correctIdx === -1) correctIdx = 5;
+        if (expIdx === -1) expIdx = 6;
+
+        const isFirstRowHeader = jsonData[0].some(cell => {
+          const s = String(cell || '').toLowerCase();
+          return s.includes('câu hỏi') || s.includes('nội dung') || s.includes('đáp án') || s.includes('giải thích') || s.includes('dặn d') || s === 'a' || s === 'b' || s === 'c' || s === 'd' || s === 'stt';
+        });
+        const startRow = isFirstRowHeader ? 1 : 0;
+
+        const parsedQuestions: Question[] = [];
+        for (let i = startRow; i < jsonData.length; i++) {
+          const row = jsonData[i];
+          if (!row || row.length === 0) continue;
+
+          const textVal = String(row[textIdx] || '').trim();
+          if (!textVal) continue;
+
+          const optA = String(row[optAIdx] || '').trim();
+          const optB = String(row[optBIdx] || '').trim();
+          const optC = String(row[optCIdx] || '').trim();
+          const optD = String(row[optDIdx] || '').trim();
+
+          if (!optA || !optB) continue;
+
+          const optionsList = [optA, optB];
+          if (optC) optionsList.push(optC);
+          if (optD) optionsList.push(optD);
+
+          const cleanOpts = optionsList.map(o => cleanOptionText(o));
+
+          const rawCorrect = String(row[correctIdx] || '').trim();
+          let correctIndex = 0;
+
+          const normCorrect = rawCorrect.toUpperCase();
+          if (normCorrect === 'A' || normCorrect.startsWith('A.') || normCorrect === 'DÁP ÁN A' || normCorrect === 'ĐÁP ÁN A' || normCorrect === '1') {
+            correctIndex = 0;
+          } else if (normCorrect === 'B' || normCorrect.startsWith('B.') || normCorrect === 'DÁP ÁN B' || normCorrect === 'ĐÁP ÁN B' || normCorrect === '2') {
+            correctIndex = 1;
+          } else if (normCorrect === 'C' || normCorrect.startsWith('C.') || normCorrect === 'DÁP ÁN C' || normCorrect === 'ĐÁP ÁN C' || normCorrect === '3') {
+            correctIndex = 2;
+          } else if (normCorrect === 'D' || normCorrect.startsWith('D.') || normCorrect === 'DÁP ÁN D' || normCorrect === 'ĐÁP ÁN D' || normCorrect === '4') {
+            correctIndex = 3;
+          } else {
+            const parsedNum = parseInt(rawCorrect, 10);
+            if (!isNaN(parsedNum)) {
+              if (parsedNum >= 1 && parsedNum <= 4) {
+                correctIndex = parsedNum - 1;
+              } else if (parsedNum >= 0 && parsedNum <= 3) {
+                correctIndex = parsedNum;
+              }
+            }
+          }
+
+          const explanationVal = String(row[expIdx] || '').trim() || 'Văn hóa 3T - Đồng hành cùng Tân Phú Việt Nam!';
+
+          parsedQuestions.push({
+            id: 'q_excel_' + Math.random().toString(36).substring(2, 9) + '_' + Date.now().toString().slice(-4),
+            text: textVal,
+            options: cleanOpts,
+            correctAnswerIndex: correctIndex,
+            explanation: explanationVal
+          });
+        }
+
+        if (parsedQuestions.length === 0) {
+          setNotice({ type: 'error', msg: 'Không tìm thấy câu hỏi hợp lệ nào trong file Excel!' });
+          return;
+        }
+
+        setExcelPreviewQuestions(parsedQuestions);
+        setShowExcelPreview(true);
+      } catch (err) {
+        console.error(err);
+        setNotice({ type: 'error', msg: 'Lỗi đọc file Excel. Vui lòng kiểm tra lại cấu trúc file!' });
+      }
+    };
+    reader.readAsArrayBuffer(file);
+    e.target.value = ''; // clean input
+  };
+
+  // Confirm Excel Import (either all or non-duplicated questions)
+  const handleConfirmImport = async (importOnlyNew: boolean) => {
+    setLoading(true);
+    try {
+      let toSave = [...excelPreviewQuestions];
+      if (importOnlyNew) {
+        toSave = excelPreviewQuestions.filter(newQ => 
+          !questions.some(q => q.text.trim().toLowerCase() === newQ.text.trim().toLowerCase())
+        );
+      }
+
+      if (toSave.length === 0) {
+        setNotice({ type: 'error', msg: 'Không có câu hỏi mới nào để lưu (tất cả đều đã bị trùng lặp)!' });
+        setShowExcelPreview(false);
+        setExcelPreviewQuestions([]);
+        return;
+      }
+
+      await databaseService.saveQuestions(toSave);
+      setNotice({ type: 'success', msg: `Đã nhập và lưu thành công ${toSave.length} câu hỏi mới từ Excel!` });
+      setShowExcelPreview(false);
+      setExcelPreviewQuestions([]);
+      await loadData();
+    } catch (err) {
+      console.error(err);
+      setNotice({ type: 'error', msg: 'Có lỗi xảy ra khi lưu câu hỏi vào cơ sở dữ liệu!' });
     } finally {
       setLoading(false);
     }
@@ -1946,13 +2199,24 @@ export default function AdminDashboard({
             <span translate="no" className="notranslate">CÁ NHÂN</span>
           </button>
           <button
-            onClick={() => { setActiveTab('notifications'); setNotice(null); }}
+            onClick={() => { 
+              setActiveTab('notifications'); 
+              setNotice(null); 
+              const now = Date.now();
+              setLastReadAnnouncementAdminTimestamp(now);
+              localStorage.setItem('3t_admin_last_read_ann_ts', String(now));
+            }}
             className={`pb-3 px-2 lg:px-3 text-[11.5px] md:text-[12px] font-medium border-b-2 transition-all flex items-center gap-1.5 shrink-0 ${
               activeTab === 'notifications' ? 'border-[#1971C2] text-[#1971C2] font-bold' : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
             <div className="relative flex items-center justify-center p-0.5">
               <Bell className="h-[21px] w-[21px] text-current" />
+              {unreadAnnouncementsCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 text-[8.5px] font-black leading-none bg-red-600 text-white rounded-full min-w-[15px] h-[15px] flex items-center justify-center px-1 shadow-xs ring-1 ring-white animate-pulse">
+                  {unreadAnnouncementsCount}
+                </span>
+              )}
             </div>
             <span translate="no" className="notranslate">THÔNG BÁO</span>
           </button>
@@ -1971,6 +2235,17 @@ export default function AdminDashboard({
               )}
             </div>
             <span translate="no" className="notranslate">TRAO ĐỔI</span>
+          </button>
+          <button
+            onClick={() => { setActiveTab('details'); setNotice(null); }}
+            className={`pb-3 px-2 lg:px-3 text-[11.5px] md:text-[12px] font-medium border-b-2 transition-all flex items-center gap-1.5 shrink-0 ${
+              activeTab === 'details' ? 'border-[#1971C2] text-[#1971C2] font-bold' : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <div className="relative flex items-center justify-center p-0.5">
+              <ClipboardList className="h-[21px] w-[21px] text-current" />
+            </div>
+            <span translate="no" className="notranslate">CHI TIẾT</span>
           </button>
         </div>
 
@@ -2510,13 +2785,47 @@ export default function AdminDashboard({
                   </h3>
                   <p className="text-xs text-gray-400 mt-0.5">Quản lý và điều chỉnh danh sách câu hỏi trắc nghiệm 3T.</p>
                 </div>
-                <button
-                  onClick={onSimulateEmployee}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-green-600 hover:bg-green-700 rounded-md shadow-xs transition-all cursor-pointer active:scale-95 whitespace-nowrap"
-                >
-                  <Home className="h-3.5 w-3.5" />
-                  <span>MOBILE</span>
-                </button>
+                <div className="flex items-center flex-wrap gap-2">
+                  <button
+                    onClick={handleDownloadTemplate}
+                    title="Tải tệp Excel mẫu để chuẩn bị câu hỏi"
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-gray-700 bg-gray-100 hover:bg-gray-200 border border-gray-200 rounded-md transition-all cursor-pointer active:scale-95 whitespace-nowrap"
+                  >
+                    <FileDown className="h-3.5 w-3.5 text-gray-500" />
+                    <span>TẢI FILE MẪU</span>
+                  </button>
+
+                  <label
+                    title="Nhập danh sách câu hỏi từ tệp Excel"
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-gray-700 bg-blue-50 hover:bg-blue-100 hover:text-blue-800 border border-blue-200 rounded-md transition-all cursor-pointer active:scale-95 whitespace-nowrap"
+                  >
+                    <Upload className="h-3.5 w-3.5 text-blue-600" />
+                    <span>NHẬP EXCEL</span>
+                    <input
+                      type="file"
+                      accept=".xlsx, .xls"
+                      onChange={handleExcelImport}
+                      className="hidden"
+                    />
+                  </label>
+
+                  <button
+                    onClick={handleExportQuestions}
+                    title="Xuất toàn bộ câu hỏi hiện tại ra file Excel"
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-xs transition-all cursor-pointer active:scale-95 whitespace-nowrap"
+                  >
+                    <FileDown className="h-3.5 w-3.5" />
+                    <span>XUẤT EXCEL</span>
+                  </button>
+
+                  <button
+                    onClick={onSimulateEmployee}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-green-600 hover:bg-green-700 rounded-md shadow-xs transition-all cursor-pointer active:scale-95 whitespace-nowrap"
+                  >
+                    <Home className="h-3.5 w-3.5" />
+                    <span>MOBILE</span>
+                  </button>
+                </div>
               </div>
 
               {/* Seed controller help */}
@@ -4128,6 +4437,482 @@ export default function AdminDashboard({
             </motion.div>
           )}
 
+          {/* CHI TIẾT (Assessment Details History) Panel View */}
+          {activeTab === 'details' && (
+            <motion.div
+              key="details_view"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="space-y-6"
+            >
+              <div className="flex flex-col lg:flex-row gap-6 items-stretch">
+                
+                {/* 1. LEFT COLUMN: LIST OF EMPLOYEES */}
+                <div className="w-full lg:w-1/3 bg-white rounded-lg border border-gray-150 p-4 shadow-xs flex flex-col h-[750px] lg:h-auto lg:min-h-[750px] font-sans">
+                  <div className="space-y-3 pb-3 border-b border-gray-100 shrink-0">
+                    <h3 className="text-sm font-bold text-gray-900 flex items-center gap-1.5 uppercase tracking-wide">
+                      <Users className="h-4 w-4 text-[#1971C2]" />
+                      <span>Danh Sách Nhân Viên</span>
+                    </h3>
+                    
+                    {/* Search Field */}
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-gray-400" />
+                      <input
+                        type="text"
+                        value={detailSearch}
+                        onChange={(e) => setDetailSearch(e.target.value)}
+                        placeholder="Tìm theo tên, SĐT, Mã NV..."
+                        className="w-full pl-8 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-xs placeholder-gray-400 focus:outline-hidden focus:ring-1 focus:ring-blue-500 focus:bg-white transition-all"
+                      />
+                      {detailSearch && (
+                        <button
+                          onClick={() => setDetailSearch('')}
+                          className="absolute right-2.5 top-2.5 text-gray-400 hover:text-gray-600 cursor-pointer"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* List Container */}
+                  <div className="flex-1 overflow-y-auto divide-y divide-gray-100 pr-1 mt-2 space-y-1">
+                    {(() => {
+                      const filteredEmployees = users.filter(u => {
+                        // Show all approved/active employees
+                        if (u.status !== 'approved' && u.status !== 'APPROVED') return false;
+                        const s = detailSearch.toLowerCase().trim();
+                        if (!s) return true;
+                        return (
+                          u.name?.toLowerCase().includes(s) ||
+                          u.phone?.includes(s) ||
+                          u.employeeId?.toLowerCase().includes(s) ||
+                          u.department?.toLowerCase().includes(s) ||
+                          u.branch?.toLowerCase().includes(s)
+                        );
+                      });
+
+                      if (filteredEmployees.length === 0) {
+                        return (
+                          <div className="text-center py-12 text-gray-400 text-xs shadow-3xs">
+                            Không tìm thấy nhân viên nào phù hợp.
+                          </div>
+                        );
+                      }
+
+                      return filteredEmployees.map((emp) => {
+                        // Calculate current level
+                        const empResults = results.filter(r => 
+                          (r.userId && r.userId === emp.id) || 
+                          (emp.phone && r.userId === emp.phone) || 
+                          (r.userName && r.userName.toLowerCase().trim() === emp.name.toLowerCase().trim())
+                        );
+                        
+                        const state = calculateInactivityAugmentedLevel(emp.id, empResults, levelRules);
+                        const isSelected = selectedUserId === emp.id;
+
+                        // Return item row
+                        return (
+                          <button
+                            key={emp.id}
+                            onClick={() => {
+                              setSelectedUserId(emp.id);
+                              setExpandedResultId(null);
+                            }}
+                            className={`w-full text-left p-2.5 rounded-lg transition-all flex items-center justify-between gap-3 border ${
+                              isSelected 
+                                ? 'bg-blue-50/50 border-blue-200 shadow-3xs' 
+                                : 'border-transparent hover:bg-gray-50'
+                            }`}
+                          >
+                            <div className="min-w-0 flex-1">
+                              <p className="font-semibold text-xs text-gray-950 truncate flex items-center gap-1.5">
+                                {emp.name}
+                                {emp.employeeId && (
+                                  <span className="text-[9px] bg-slate-100 text-slate-500 font-mono px-1 rounded font-bold">
+                                    {emp.employeeId}
+                                  </span>
+                                )}
+                              </p>
+                              <p className="text-[10px] text-gray-400 mt-0.5 truncate uppercase font-semibold">
+                                {emp.department} • {emp.branch}
+                              </p>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <span className="text-[9px] text-gray-400 font-bold font-mono">
+                                  {empResults.length} lượt thi
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Level Badge */}
+                            <div className="shrink-0 flex flex-col items-end gap-1">
+                              <span className={`text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-0.5 border ${
+                                state.level === 5 ? 'bg-amber-50 border-amber-300 text-amber-800' :
+                                state.level === 4 ? 'bg-indigo-50 border-indigo-200 text-indigo-700' :
+                                state.level === 3 ? 'bg-emerald-50 border-emerald-250 text-emerald-800' :
+                                state.level === 2 ? 'bg-blue-50 border-blue-250 text-blue-700' :
+                                'bg-zinc-50 border-zinc-200 text-zinc-650'
+                              }`}>
+                                <span>Cấp {state.level}</span>
+                              </span>
+                            </div>
+                          </button>
+                        );
+                      });
+                    })()}
+                  </div>
+                </div>
+
+                {/* 2. RIGHT COLUMN: EMPLOYEE DETAIL HISTORY */}
+                <div className="flex-1 bg-white rounded-lg border border-gray-150 p-6 shadow-xs flex flex-col min-h-[750px] font-sans">
+                  {(() => {
+                    const selectedEmp = users.find(u => u.id === selectedUserId);
+                    if (!selectedEmp) {
+                      return (
+                        <div className="flex-1 flex flex-col items-center justify-center text-center p-8 space-y-3">
+                          <div className="p-3 bg-gray-50 rounded-full text-gray-400 border border-gray-100">
+                            <Activity className="h-8 w-8 text-[#1971C2]" />
+                          </div>
+                          <div>
+                            <p className="font-bold text-gray-800 text-sm">Chưa chọn nhân viên</p>
+                            <p className="text-xs text-gray-400 max-w-sm mt-1 leading-relaxed">
+                              Vui lòng chọn một CBNV từ danh sách bên trái để xem đầy đủ chi tiết lịch sử đánh giá của họ.
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    // Selected employee detail data
+                    const empResults = results.filter(r => 
+                      (r.userId && r.userId === selectedEmp.id) || 
+                      (selectedEmp.phone && r.userId === selectedEmp.phone) || 
+                      (r.userName && r.userName.toLowerCase().trim() === selectedEmp.name.toLowerCase().trim())
+                    );
+                    const chronologicalResults = [...empResults].sort((a, b) => b.timestamp - a.timestamp); // latest first
+                    
+                    const state = calculateInactivityAugmentedLevel(selectedEmp.id, empResults, levelRules);
+                    const currentLvlRules = levelRules.levels.find(l => l.level === state.level) || DEFAULT_LEVEL_RULES.levels[state.level - 1] || { name: `Cấp ${state.level}`, emoji: '🌱', promotion: '', demotion: '' };
+
+                    // Parse consecutive max required for current level to display progress towards promotion
+                    const getRequiredForPromotion = () => {
+                      const text = currentLvlRules.promotion || '';
+                      const match = text.match(/liên\s+tục\s+(\d+)\s+lượt/i) || 
+                                    text.match(/(\d+)\s+lượt\s+liên\s+tục/i) || 
+                                    text.match(/(\d+)\s+lượt/i);
+                      return match ? parseInt(match[1], 10) : 10;
+                    };
+                    const requiredConsecutive = getRequiredForPromotion();
+
+                    return (
+                      <div className="flex-1 flex flex-col space-y-6">
+                        
+                        {/* Selected Employee Info Row */}
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-gray-100">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h2 className="text-base font-extrabold text-gray-950">{selectedEmp.name}</h2>
+                              {selectedEmp.employeeId && (
+                                <span className="text-xs font-mono font-bold bg-[#1971C2]/10 text-[#1971C2] px-2 py-0.5 rounded">
+                                  {selectedEmp.employeeId}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[11px] text-gray-400 uppercase mt-1 font-semibold tracking-wider">
+                              {selectedEmp.department} | {selectedEmp.branch}
+                            </p>
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              SĐT liên lạc: <span className="font-mono font-bold text-gray-700">{selectedEmp.phone}</span>
+                            </p>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-gray-400">ĐĂNG KÝ:</span>
+                            <span className="text-xs font-mono text-gray-600 bg-gray-50 px-2 py-1 rounded border border-gray-150">
+                              {selectedEmp.createdAt ? new Date(selectedEmp.createdAt).toLocaleDateString('vi-VN') : 'N/A'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Top Summary Grid (Rank, promotion progress, Warns) */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          
+                          {/* Box 1: Level Badge info */}
+                          <div className="p-4 bg-slate-50 border border-slate-150 rounded-lg flex items-center gap-3">
+                            <div className="p-2.5 bg-white rounded-full border border-slate-200">
+                              <span className="text-2xl">{currentLvlRules.emoji || '🌱'}</span>
+                            </div>
+                            <div>
+                              <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Cấp Bậc Hiện Tại</p>
+                              <p className="text-xs font-black text-slate-850 mt-0.5">{currentLvlRules.name || `Cấp ${state.level}`}</p>
+                            </div>
+                          </div>
+
+                          {/* Box 2: Promotion Progress */}
+                          <div className="p-4 bg-emerald-50/50 border border-emerald-150 rounded-lg flex flex-col justify-between space-y-1.5">
+                            <div className="flex items-center justify-between">
+                              <p className="text-[9px] font-bold text-emerald-800 uppercase tracking-widest">Tiến Trình Thăng Cấp</p>
+                              <TrendingUp className="h-4 w-4 text-emerald-600" />
+                            </div>
+                            {state.level === 5 ? (
+                              <p className="text-xs font-semibold text-emerald-800">Cấp tối cao (Huyền Thoại 🏆)</p>
+                            ) : (
+                              <div className="space-y-1">
+                                <div className="flex items-center justify-between text-xs font-mono">
+                                  <span className="font-bold text-emerald-900">{state.consecutiveMax} / {requiredConsecutive}</span>
+                                  <span className="text-[10px] text-emerald-600 font-bold">đạt 30/30 liên tiếp</span>
+                                </div>
+                                <div className="w-full bg-emerald-200/50 rounded-full h-1">
+                                  <div 
+                                    className="bg-emerald-600 h-1 rounded-full transition-all duration-550"
+                                    style={{ width: `${Math.min(100, (state.consecutiveMax / requiredConsecutive) * 100)}%` }}
+                                  />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Box 3: Inactivity Status */}
+                          <div className="p-4 bg-amber-50/50 border border-amber-150 rounded-lg flex flex-col justify-between space-y-1.5">
+                            <div className="flex items-center justify-between">
+                              <p className="text-[9px] font-bold text-amber-800 uppercase tracking-widest">Duy Trì Điều Kiện (Ngày)</p>
+                              <Zap className="h-4 w-4 text-amber-600" />
+                            </div>
+                            <div className="text-xs space-y-0.5 text-amber-900">
+                              <p className="font-medium">
+                                Hôm nay: <span className="font-bold font-mono">{state.attemptsToday} / 2 lượt</span>
+                              </p>
+                              {state.inactiveDaysWarning ? (
+                                <p className="text-[9px] text-red-650 font-bold flex items-center gap-1 animate-pulse">
+                                  <AlertTriangle className="h-3 w-3 shrink-0" />
+                                  Có nguy cơ hạ cấp nếu không đủ 2 lượt!
+                                </p>
+                              ) : (
+                                <p className="text-[9px] text-green-700 font-bold flex items-center gap-1">
+                                  <CheckCircle2 className="h-3 w-3 shrink-0" />
+                                  Đã đạt chuẩn giữ hạng hôm nay!
+                                </p>
+                              )}
+                            </div>
+                          </div>
+
+                        </div>
+
+                        {/* Summary numbers details */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-gray-50 border border-gray-150 p-3.5 rounded-md text-xs">
+                          <div>
+                            <span className="text-gray-400 block font-semibold text-[9px] uppercase">Tổng lượt thi:</span>
+                            <span className="text-xs font-black text-gray-800 font-mono">{chronologicalResults.length} lượt</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-400 block font-semibold text-[9px] uppercase">Hạ cấp (Inactivity):</span>
+                            <span className="text-xs font-black text-amber-700 font-mono">{state.demotionsApplied} lần</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-400 block font-semibold text-[9px] uppercase">Điểm cao nhất:</span>
+                            <span className="text-xs font-black text-green-800 font-mono">
+                              {empResults.length > 0 ? Math.max(...empResults.map(r => r.score)) : 0}/30
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-gray-400 block font-semibold text-[9px] uppercase">Điểm trung bình:</span>
+                            <span className="text-xs font-black text-blue-800 font-mono">
+                              {empResults.length > 0 
+                                ? (empResults.reduce((acc, curr) => acc + curr.score, 0) / empResults.length).toFixed(1) 
+                                : '0.0'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* List of attempts */}
+                        <div className="space-y-3 flex-1 flex flex-col">
+                          <h4 className="text-[11px] font-bold text-gray-400 uppercase tracking-widest shrink-0">
+                            Chi Tiết Lịch Sử Làm Bài Đánh Giá ({chronologicalResults.length})
+                          </h4>
+
+                          {chronologicalResults.length === 0 ? (
+                            <div className="flex-1 flex items-center justify-center border border-dashed border-gray-200 rounded-lg p-12 text-gray-400 text-xs text-center shadow-3xs">
+                              Chưa ghi nhận lượt tự đánh giá nào từ tài khoản nhân viên này. 
+                            </div>
+                          ) : (
+                            <div className="space-y-2.5 max-h-[420px] overflow-y-auto pr-1">
+                              {chronologicalResults.map((res, index) => {
+                                const isExpanded = expandedResultId === res.id;
+                                return (
+                                  <div 
+                                    key={res.id || index}
+                                    className="border border-gray-200 rounded-lg bg-white overflow-hidden shadow-2xs hover:border-blue-300 transition-all text-xs"
+                                  >
+                                    
+                                    {/* Accordion Trigger Header */}
+                                    <button
+                                      onClick={() => {
+                                        setExpandedResultId(isExpanded ? null : res.id);
+                                      }}
+                                      className={`w-full text-left p-3 flex items-center justify-between gap-4 transition-colors ${
+                                        isExpanded ? 'bg-slate-50' : 'hover:bg-gray-50/50'
+                                      }`}
+                                    >
+                                      <div className="flex flex-wrap items-center gap-2 md:gap-4 flex-1">
+                                        <div className="min-w-[100px]">
+                                          <p className="text-[10px] font-semibold text-gray-400 uppercase">Lượt đánh giá</p>
+                                          <p className="text-xs font-bold font-mono text-gray-700"># {chronologicalResults.length - index}</p>
+                                        </div>
+
+                                        <div className="min-w-[100px]">
+                                          <p className="text-[10px] font-semibold text-gray-400 uppercase">Ngày Thực Hiện</p>
+                                          <p className="text-xs font-bold text-gray-900 font-mono">
+                                            {res.date || (res.timestamp ? new Date(res.timestamp).toLocaleDateString('vi-VN') : 'N/A')}
+                                          </p>
+                                        </div>
+
+                                        <div className="min-w-[100px]">
+                                          <p className="text-[10px] font-semibold text-gray-400 uppercase">Kết Quả Lượt Này</p>
+                                          <div className="flex items-center gap-1 mt-0.5">
+                                            <span className={`text-xs font-mono font-black border px-2 py-0.5 rounded ${
+                                              res.score === 30 
+                                                ? 'bg-green-50 border-green-200 text-green-800' 
+                                                : res.score >= 20 
+                                                  ? 'bg-blue-50 border-blue-200 text-blue-800' 
+                                                  : 'bg-red-50 border-red-200 text-red-800'
+                                            }`}>
+                                              {res.score} / {res.totalQuestions || 30}
+                                            </span>
+                                          </div>
+                                        </div>
+
+                                        <div className="min-w-[120px]">
+                                          <p className="text-[10px] font-semibold text-gray-400 uppercase">Thời Gian Hoàn Thành</p>
+                                          <p className="text-xs font-semibold text-gray-700 font-mono mt-0.5">
+                                            {res.duration || 0} giây ({Math.round((res.duration || 0) / (res.totalQuestions || 30))}s/câu)
+                                          </p>
+                                        </div>
+                                      </div>
+
+                                      <div className="shrink-0 text-gray-400 p-1">
+                                        {isExpanded ? (
+                                          <ChevronUp className="h-4 w-4 text-[#1971C2]" />
+                                        ) : (
+                                          <ChevronDown className="h-4 w-4" />
+                                        )}
+                                      </div>
+                                    </button>
+
+                                    {/* Expanded Detail View */}
+                                    {isExpanded && (
+                                      <div className="p-3 border-t border-gray-150 bg-slate-50/50 space-y-3">
+                                        <div className="flex justify-between items-center pb-1.5 border-b border-gray-100">
+                                          <h5 className="text-[10px] font-bold text-[#1971C2] uppercase tracking-wider">
+                                            BÁO CÁO KẾT QUẢ TỪNG CÂU HỎI TRONG ĐỀ
+                                          </h5>
+                                        </div>
+
+                                        {/* Questions result grid or list */}
+                                        <div className="space-y-2.5">
+                                          {(() => {
+                                            if (!res.answers || res.answers.length === 0) {
+                                              return (
+                                                <div className="text-center py-4 text-xs text-gray-400">
+                                                  Không tìm thấy chi tiết đáp án của lượt này.
+                                                </div>
+                                              );
+                                            }
+
+                                            return res.answers.map((ans, ansIdx) => {
+                                              // Find matched original question
+                                              const matchedQ = questions.find(q => q.id === ans.questionId);
+                                              
+                                              return (
+                                                <div 
+                                                  key={ansIdx} 
+                                                  className="bg-white rounded-md border border-gray-150 p-3 shadow-3xs space-y-1.5 text-xs"
+                                                >
+                                                  <div className="flex items-start justify-between gap-3">
+                                                    <span className="font-bold text-gray-400 font-mono shrink-0">
+                                                      Câu {ansIdx + 1}:
+                                                    </span>
+                                                    
+                                                    {ans.correct ? (
+                                                      <span className="bg-green-100 text-green-800 font-bold px-1.5 py-0.5 rounded text-[8px] uppercase tracking-wider flex items-center gap-0.5">
+                                                        <CheckCircle2 className="h-2.5 w-2.5 text-green-700" />
+                                                        ĐÚNG
+                                                      </span>
+                                                    ) : (
+                                                      <span className="bg-red-100 text-red-800 font-bold px-1.5 py-0.5 rounded text-[8px] uppercase tracking-wider flex items-center gap-0.5">
+                                                        <AlertTriangle className="h-2.5 w-2.5 text-red-700" />
+                                                        SAI
+                                                      </span>
+                                                    )}
+                                                  </div>
+
+                                                  <p className="font-semibold text-gray-900 leading-relaxed text-xs">
+                                                    {matchedQ ? matchedQ.text : `Hỏi cũ/bị xóa (mã: ${ans.questionId})`}
+                                                  </p>
+
+                                                  {/* Show Option context */}
+                                                  {matchedQ && (
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-[10px] pt-1 text-gray-700">
+                                                      {matchedQ.options.map((opt, optIdx) => {
+                                                        const isCorrect = matchedQ.correctAnswerIndex === optIdx;
+                                                        const isSelected = ans.selectedIndex === optIdx;
+
+                                                        let optionStyle = "bg-gray-50 border-gray-150";
+                                                        if (isCorrect) {
+                                                          optionStyle = "bg-green-50 border-green-200 text-green-800 font-bold";
+                                                        } else if (isSelected && !isCorrect) {
+                                                          optionStyle = "bg-red-50 border-red-150 text-red-800 font-medium";
+                                                        }
+
+                                                        return (
+                                                          <div 
+                                                            key={optIdx} 
+                                                            className={`px-2 py-1 rounded border flex items-start gap-1 ${optionStyle}`}
+                                                          >
+                                                            <span className="font-bold shrink-0">{String.fromCharCode(65 + optIdx)}.</span>
+                                                            <span>{opt}</span>
+                                                          </div>
+                                                        );
+                                                      })}
+                                                    </div>
+                                                  )}
+
+                                                  {/* Detail specs of answer: timeSpent, correctness explanation */}
+                                                  <div className="flex flex-wrap items-center gap-4 text-[10px] text-gray-400 italic pt-1 border-t border-gray-50 bg-gray-50/20 p-1 rounded">
+                                                    {ans.timeSpent !== undefined && (
+                                                      <span>⏱️ Tốc độ phản xạ: <strong className="font-bold text-gray-650 not-italic">{ans.timeSpent}giây</strong></span>
+                                                    )}
+                                                    {matchedQ && matchedQ.explanation && (
+                                                      <span className="text-gray-500 font-sans">
+                                                        💡 <strong className="font-bold text-gray-600 not-italic">Dặn dò:</strong> {matchedQ.explanation}
+                                                      </span>
+                                                    )}
+                                                  </div>
+                                                </div>
+                                              );
+                                            });
+                                          })()}
+                                        </div>
+                                      </div>
+                                    )}
+
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+
+                      </div>
+                    );
+                  })()}
+                </div>
+
+              </div>
+            </motion.div>
+          )}
+
 
         </AnimatePresence>
       </main>
@@ -4643,6 +5428,131 @@ export default function AdminDashboard({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Excel Import Preview Modal */}
+      {showExcelPreview && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center overflow-y-auto p-4 backdrop-blur-xs font-sans">
+          <div className="bg-white rounded-lg border border-gray-150 max-w-4xl w-full p-6 shadow-xl space-y-4 my-8">
+            <div className="flex justify-between items-center border-b border-gray-100 pb-3">
+              <h3 className="text-base font-bold text-gray-950 flex items-center gap-2">
+                <Database className="h-5 w-5 text-green-600" />
+                <span>Xem Trước Danh Sách Câu Hỏi Excel - {excelFileName}</span>
+              </h3>
+              <button
+                onClick={() => {
+                  setShowExcelPreview(false);
+                  setExcelPreviewQuestions([]);
+                }}
+                className="text-gray-400 hover:text-gray-700 text-lg font-bold cursor-pointer"
+              >
+                &times;
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="bg-blue-50 border border-blue-150 text-blue-800 p-3.5 rounded-md text-xs leading-relaxed space-y-1">
+                <p className="font-bold">✨ Thống kê tệp nạp vào:</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-1">
+                  <div>• Tổng số câu bóc tách được: <span className="font-bold text-sm text-blue-900">{excelPreviewQuestions.length}</span> câu.</div>
+                  <div>• Số câu trùng lặp nội dung: <span className="font-bold text-sm text-amber-600">{
+                    excelPreviewQuestions.filter(q => questions.some(ex => ex.text.trim().toLowerCase() === q.text.trim().toLowerCase())).length
+                  }</span> câu.</div>
+                  <div>• Số câu mới có thể thêm: <span className="font-bold text-sm text-green-700">{
+                    excelPreviewQuestions.filter(q => !questions.some(ex => ex.text.trim().toLowerCase() === q.text.trim().toLowerCase())).length
+                  }</span> câu.</div>
+                </div>
+              </div>
+
+              {/* List container of parsed questions */}
+              <div className="max-h-[350px] overflow-y-auto border border-gray-200 rounded-md p-2 bg-gray-50 space-y-3">
+                {excelPreviewQuestions.map((q, idx) => {
+                  const isDup = questions.some(ex => ex.text.trim().toLowerCase() === q.text.trim().toLowerCase());
+                  return (
+                    <div 
+                      key={q.id || idx} 
+                      className={`p-3 rounded-md border text-xs bg-white space-y-1.5 transition-all ${
+                        isDup ? 'border-amber-200 bg-amber-50/20' : 'border-gray-200 hover:border-blue-300'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="font-bold text-gray-500 shrink-0">CÂU TRẮC NGHIỆM {idx + 1}:</span>
+                        {isDup && (
+                          <span className="bg-amber-100 text-amber-800 font-bold px-1.5 py-0.5 rounded text-[9px] shrink-0 uppercase tracking-widest flex items-center gap-1">
+                            <AlertTriangle className="h-2.5 w-2.5 text-amber-600" />
+                            Trùng lặp
+                          </span>
+                        )}
+                      </div>
+                      
+                      <p className="font-semibold text-gray-900 text-sm">{q.text}</p>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-gray-700">
+                        {q.options.map((opt, optIdx) => (
+                          <div 
+                            key={optIdx} 
+                            className={`px-2.5 py-1.5 rounded border ${
+                              q.correctAnswerIndex === optIdx 
+                                ? 'bg-green-50 border-green-200 text-green-800 font-medium' 
+                                : 'bg-gray-50 border-gray-150'
+                            }`}
+                          >
+                            <span className="font-bold mr-1">{String.fromCharCode(65 + optIdx)}.</span> {opt}
+                          </div>
+                        ))}
+                      </div>
+
+                      {q.explanation && (
+                        <p className="text-gray-500 italic mt-1 text-[11px] bg-gray-100 p-1.5 rounded border border-gray-150">
+                          <span className="font-bold text-gray-700 not-italic">Dặn dò:</span> {q.explanation}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row justify-between gap-3 pt-3 border-t border-gray-100 font-sans">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowExcelPreview(false);
+                  setExcelPreviewQuestions([]);
+                }}
+                className="px-4 py-2 bg-gray-50 hover:bg-gray-150 border border-gray-250 rounded-md font-bold text-gray-650 transition-colors cursor-pointer text-xs"
+              >
+                HỦY BỎ
+              </button>
+
+              <div className="flex flex-wrap gap-2">
+                {/* Save only non-duplicates */}
+                <button
+                  type="button"
+                  onClick={() => handleConfirmImport(true)}
+                  disabled={loading}
+                  className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md font-bold transition-all shadow-xs cursor-pointer disabled:opacity-50 text-xs flex items-center gap-1"
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                  <span>CHỈ NẠP CÂU MỚI ({
+                    excelPreviewQuestions.filter(q => !questions.some(ex => ex.text.trim().toLowerCase() === q.text.trim().toLowerCase())).length
+                  })</span>
+                </button>
+
+                {/* Save all */}
+                <button
+                  type="button"
+                  onClick={() => handleConfirmImport(false)}
+                  disabled={loading}
+                  className="px-4 py-2 bg-[#1971C2] hover:bg-[#155d9e] text-white rounded-md font-bold transition-all shadow-xs cursor-pointer disabled:opacity-50 text-xs flex items-center gap-1"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>NẠP TẤT CẢ ({excelPreviewQuestions.length})</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

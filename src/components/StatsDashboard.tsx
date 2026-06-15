@@ -936,260 +936,7 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
           dateStr: string;
         }>;
       }>;
-    }> = [
-      {
-        userId: 'base_ptnhan',
-        userName: 'PHAN THỊ NHÀN',
-        dept: 'Phòng Kế hoạch sản xuất',
-        branch: 'Chi Nhánh Bắc Ninh (TPP-BNI)',
-        avgScoreAtFirstLegend: 29.1,
-        overallAvgDurationPerAttempt: 18.0,
-        overallAvgDurationPerQuestion: 6.0,
-        level5Attempts: [
-          { timestamp: new Date('2026-06-09T08:00:00Z').getTime(), dateStr: '2026-06-09' }
-        ],
-        totalAttempts: 48,
-        totalScore: 48 * 29.1,
-        totalDuration: 48 * 18,
-        totalQuestions: 48 * 3,
-        promoTimestamp: new Date('2026-06-09T08:00:00Z').getTime(),
-        daysMaintaining: 5,
-        coronations: [
-          {
-            coronationIdx: 0,
-            promoTimestamp: new Date('2026-06-09T08:00:00Z').getTime(),
-            fromLevel: 4,
-            avgScoreAtCoronation: 29.1,
-            totalAttemptsAtCoronation: 48,
-            overallAvgDurationPerAttempt: 18.0,
-            overallAvgDurationPerQuestion: 6.0,
-            dateStr: '2026-06-09',
-            transitions: [
-              { fromLevel: 1, toLevel: 2, timestamp: new Date('2026-06-05T08:00:00Z').getTime(), attemptsCount: 12, dateStr: '05/06/2026' },
-              { fromLevel: 2, toLevel: 3, timestamp: new Date('2026-06-06T08:00:00Z').getTime(), attemptsCount: 12, dateStr: '06/06/2026' },
-              { fromLevel: 3, toLevel: 4, timestamp: new Date('2026-06-08T08:00:00Z').getTime(), attemptsCount: 12, dateStr: '08/06/2026' },
-              { fromLevel: 4, toLevel: 5, timestamp: new Date('2026-06-09T08:00:00Z').getTime(), attemptsCount: 12, dateStr: '09/06/2526' }
-            ]
-          }
-        ]
-      },
-      {
-        userId: 'base_tptrung',
-        userName: 'TRAN PHUOC TRUNG',
-        dept: 'Phòng Kỹ Thuật',
-        branch: 'Chi Nhánh Long An (TPP-LAN)',
-        avgScoreAtFirstLegend: 29.3,
-        overallAvgDurationPerAttempt: 15.0,
-        overallAvgDurationPerQuestion: 5.0,
-        level5Attempts: [
-          { timestamp: new Date('2026-06-12T08:00:00Z').getTime(), dateStr: '2026-06-12' }
-        ],
-        totalAttempts: 381,
-        totalScore: 381 * 29.3,
-        totalDuration: 381 * 15,
-        totalQuestions: 381 * 3,
-        promoTimestamp: new Date('2026-06-12T08:00:00Z').getTime(),
-        daysMaintaining: 2,
-        coronations: [
-          {
-            coronationIdx: 0,
-            promoTimestamp: new Date('2026-06-12T08:00:00Z').getTime(),
-            fromLevel: 4,
-            avgScoreAtCoronation: 29.3,
-            totalAttemptsAtCoronation: 381,
-            overallAvgDurationPerAttempt: 15.0,
-            overallAvgDurationPerQuestion: 5.0,
-            dateStr: '2026-06-12',
-            transitions: [
-              { fromLevel: 1, toLevel: 2, timestamp: new Date('2026-06-08T08:00:00Z').getTime(), attemptsCount: 95, dateStr: '08/06/2026' },
-              { fromLevel: 2, toLevel: 3, timestamp: new Date('2026-06-09T08:00:00Z').getTime(), attemptsCount: 95, dateStr: '09/06/2026' },
-              { fromLevel: 3, toLevel: 4, timestamp: new Date('2026-06-11T08:00:00Z').getTime(), attemptsCount: 95, dateStr: '11/06/2026' },
-              { fromLevel: 4, toLevel: 5, timestamp: new Date('2026-06-12T08:00:00Z').getTime(), attemptsCount: 96, dateStr: '12/06/2026' }
-            ]
-          }
-        ]
-      },
-      {
-        userId: 'base_tvtien',
-        userName: 'TRẦN VĂN TIÊN',
-        dept: 'Phòng Tài chính Kế toán',
-        branch: 'Văn Phòng Công Ty (TPP-CTY)',
-        avgScoreAtFirstLegend: 30.0,
-        overallAvgDurationPerAttempt: 18.0,
-        overallAvgDurationPerQuestion: 6.0,
-        level5Attempts: [
-          { timestamp: new Date('2026-06-11T08:00:00Z').getTime(), dateStr: '2026-06-11' }
-        ],
-        totalAttempts: 185,
-        totalScore: 185 * 30.0,
-        totalDuration: 185 * 18,
-        totalQuestions: 185 * 3,
-        promoTimestamp: new Date('2026-06-11T08:00:00Z').getTime(),
-        daysMaintaining: 3,
-        coronations: [
-          {
-            coronationIdx: 0,
-            promoTimestamp: new Date('2026-06-11T08:00:00Z').getTime(),
-            fromLevel: 4,
-            avgScoreAtCoronation: 30.0,
-            totalAttemptsAtCoronation: 185,
-            overallAvgDurationPerAttempt: 18.0,
-            overallAvgDurationPerQuestion: 6.0,
-            dateStr: '2026-06-11',
-            transitions: [
-              { fromLevel: 1, toLevel: 2, timestamp: new Date('2026-06-06T08:00:00Z').getTime(), attemptsCount: 46, dateStr: '06/06/2026' },
-              { fromLevel: 2, toLevel: 3, timestamp: new Date('2026-06-08T08:00:00Z').getTime(), attemptsCount: 46, dateStr: '08/06/2026' },
-              { fromLevel: 3, toLevel: 4, timestamp: new Date('2026-06-10T08:00:00Z').getTime(), attemptsCount: 46, dateStr: '10/06/2026' },
-              { fromLevel: 4, toLevel: 5, timestamp: new Date('2026-06-11T08:00:00Z').getTime(), attemptsCount: 47, dateStr: '11/06/2026' }
-            ]
-          }
-        ]
-      },
-      {
-        userId: 'base_qtvan',
-        userName: 'QUÁCH THUÝ VÂN',
-        dept: 'Ban Quản đốc',
-        branch: 'Chi Nhánh Bắc Ninh (TPP-BNI)',
-        avgScoreAtFirstLegend: 28.5,
-        overallAvgDurationPerAttempt: 12.0,
-        overallAvgDurationPerQuestion: 4.0,
-        level5Attempts: [
-          { timestamp: new Date('2026-06-12T08:00:00Z').getTime(), dateStr: '2026-06-12' }
-        ],
-        totalAttempts: 92,
-        totalScore: 92 * 28.5,
-        totalDuration: 92 * 12,
-        totalQuestions: 92 * 3,
-        promoTimestamp: new Date('2026-06-12T08:00:00Z').getTime(),
-        daysMaintaining: 2,
-        coronations: [
-          {
-            coronationIdx: 0,
-            promoTimestamp: new Date('2026-06-12T08:00:00Z').getTime(),
-            fromLevel: 4,
-            avgScoreAtCoronation: 28.5,
-            totalAttemptsAtCoronation: 92,
-            overallAvgDurationPerAttempt: 12.0,
-            overallAvgDurationPerQuestion: 4.0,
-            dateStr: '2026-06-12',
-            transitions: [
-              { fromLevel: 1, toLevel: 2, timestamp: new Date('2026-06-08T08:00:00Z').getTime(), attemptsCount: 23, dateStr: '08/06/2026' },
-              { fromLevel: 2, toLevel: 3, timestamp: new Date('2026-06-09T08:00:00Z').getTime(), attemptsCount: 23, dateStr: '09/06/2026' },
-              { fromLevel: 3, toLevel: 4, timestamp: new Date('2026-06-11T08:00:00Z').getTime(), attemptsCount: 23, dateStr: '11/06/2026' },
-              { fromLevel: 4, toLevel: 5, timestamp: new Date('2026-06-12T08:00:00Z').getTime(), attemptsCount: 23, dateStr: '12/06/2026' }
-            ]
-          }
-        ]
-      },
-      {
-        userId: 'base_hhquynh',
-        userName: 'HA HUU QUYNH',
-        dept: 'Phòng Kỹ Thuật',
-        branch: 'Chi Nhánh Bắc Ninh (TPP-BNI)',
-        avgScoreAtFirstLegend: 30.0,
-        overallAvgDurationPerAttempt: 15.0,
-        overallAvgDurationPerQuestion: 5.0,
-        level5Attempts: [
-          { timestamp: new Date('2026-06-09T08:00:00Z').getTime(), dateStr: '2026-06-09' }
-        ],
-        totalAttempts: 112,
-        totalScore: 112 * 30.0,
-        totalDuration: 112 * 15,
-        totalQuestions: 112 * 3,
-        promoTimestamp: new Date('2026-06-09T08:00:00Z').getTime(),
-        daysMaintaining: 5,
-        coronations: [
-          {
-            coronationIdx: 0,
-            promoTimestamp: new Date('2026-06-09T08:00:00Z').getTime(),
-            fromLevel: 4,
-            avgScoreAtCoronation: 30.0,
-            totalAttemptsAtCoronation: 112,
-            overallAvgDurationPerAttempt: 15.0,
-            overallAvgDurationPerQuestion: 5.0,
-            dateStr: '2026-06-09',
-            transitions: [
-              { fromLevel: 1, toLevel: 2, timestamp: new Date('2026-06-05T08:00:00Z').getTime(), attemptsCount: 28, dateStr: '05/06/2026' },
-              { fromLevel: 2, toLevel: 3, timestamp: new Date('2026-06-06T08:00:00Z').getTime(), attemptsCount: 28, dateStr: '06/06/2026' },
-              { fromLevel: 3, toLevel: 4, timestamp: new Date('2026-06-08T08:00:00Z').getTime(), attemptsCount: 28, dateStr: '08/06/2026' },
-              { fromLevel: 4, toLevel: 5, timestamp: new Date('2026-06-09T08:00:00Z').getTime(), attemptsCount: 28, dateStr: '09/06/2026' }
-            ]
-          }
-        ]
-      },
-      {
-        userId: 'base_pvden',
-        userName: 'PHẠM VĂN ĐEN',
-        dept: 'Phân xưởng 2',
-        branch: 'Chi Nhánh Long An (TPP-LAN)',
-        avgScoreAtFirstLegend: 29.0,
-        overallAvgDurationPerAttempt: 24.0,
-        overallAvgDurationPerQuestion: 8.0,
-        level5Attempts: [
-          { timestamp: new Date('2026-06-14T08:00:00Z').getTime(), dateStr: '2026-06-14' }
-        ],
-        totalAttempts: 72,
-        totalScore: 72 * 29.0,
-        totalDuration: 72 * 24,
-        totalQuestions: 72 * 3,
-        promoTimestamp: new Date('2026-06-14T08:00:00Z').getTime(),
-        daysMaintaining: 1,
-        coronations: [
-          {
-            coronationIdx: 0,
-            promoTimestamp: new Date('2026-06-14T08:00:00Z').getTime(),
-            fromLevel: 4,
-            avgScoreAtCoronation: 29.0,
-            totalAttemptsAtCoronation: 72,
-            overallAvgDurationPerAttempt: 24.0,
-            overallAvgDurationPerQuestion: 8.0,
-            dateStr: '2026-06-14',
-            transitions: [
-              { fromLevel: 1, toLevel: 2, timestamp: new Date('2026-06-10T08:00:00Z').getTime(), attemptsCount: 18, dateStr: '10/06/2026' },
-              { fromLevel: 2, toLevel: 3, timestamp: new Date('2026-06-11T08:00:00Z').getTime(), attemptsCount: 18, dateStr: '11/06/2026' },
-              { fromLevel: 3, toLevel: 4, timestamp: new Date('2026-06-13T08:00:00Z').getTime(), attemptsCount: 18, dateStr: '13/06/2026' },
-              { fromLevel: 4, toLevel: 5, timestamp: new Date('2026-06-14T08:00:00Z').getTime(), attemptsCount: 18, dateStr: '14/06/2026' }
-            ]
-          }
-        ]
-      },
-      {
-        userId: 'base_bnhung',
-        userName: 'BÀNH NHỰT HÙNG',
-        dept: 'Phòng Quản lý chất lượng',
-        branch: 'Văn Phòng Công Ty (TPP-CTY)',
-        avgScoreAtFirstLegend: 28.7,
-        overallAvgDurationPerAttempt: 14.8,
-        overallAvgDurationPerQuestion: 4.9,
-        level5Attempts: [
-          { timestamp: 1781230421826, dateStr: '2026-06-12' }
-        ],
-        totalAttempts: 158,
-        totalScore: 4536,
-        totalDuration: 2338,
-        totalQuestions: 474,
-        promoTimestamp: 1781230421826,
-        daysMaintaining: 1,
-        coronations: [
-          {
-            coronationIdx: 0,
-            promoTimestamp: 1781230421826,
-            fromLevel: 4,
-            avgScoreAtCoronation: 28.7,
-            totalAttemptsAtCoronation: 158,
-            overallAvgDurationPerAttempt: 14.8,
-            overallAvgDurationPerQuestion: 4.9,
-            dateStr: '2026-06-12',
-            transitions: [
-              { fromLevel: 1, toLevel: 2, timestamp: new Date('2026-06-08T08:00:00Z').getTime(), attemptsCount: 39, dateStr: '08/06/2026' },
-              { fromLevel: 2, toLevel: 3, timestamp: new Date('2026-06-09T08:00:00Z').getTime(), attemptsCount: 39, dateStr: '09/06/2026' },
-              { fromLevel: 3, toLevel: 4, timestamp: new Date('2026-06-11T08:00:00Z').getTime(), attemptsCount: 40, dateStr: '11/06/2026' },
-              { fromLevel: 4, toLevel: 5, timestamp: new Date('2026-06-12T08:00:00Z').getTime(), attemptsCount: 40, dateStr: '12/06/2026' }
-            ]
-          }
-        ]
-      }
-    ];
+    }> = [];
 
     const legendsList: Array<{
       userId: string;
@@ -1459,6 +1206,18 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
 
         const uniqueDaysMaintaining = Array.from(new Set(level5Attempts.map(att => att.dateStr))).length;
 
+        const inactivityTestMode = localStorage.getItem('3t_inactivity_test_mode') === 'true';
+        const calcRes = calculateInactivityAugmentedLevel(
+          personKey,
+          chronological,
+          activeRules,
+          {
+            isTestModeEnabled: inactivityTestMode,
+            simulatedToday: inactivityTestMode ? '2026-06-14' : getVietnamDateString()
+          }
+        );
+        const finalComputedLevel = calcRes.level;
+
         const rName = lastResult.userName || 'THÀNH VIÊN ẨN DANH';
         const normName = normalizeName(rName);
 
@@ -1480,7 +1239,7 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
           totalQuestions,
           promoTimestamp: coronations[coronations.length - 1].promoTimestamp,
           daysMaintaining: uniqueDaysMaintaining,
-          currentLevel: currentLevel
+          currentLevel: finalComputedLevel
         };
 
         if (existingIdx !== -1) {
@@ -1496,6 +1255,23 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
           legendsList.push(newItem);
         }
       }
+    });
+
+    // Ensure EVERY legend has their currentLevel evaluated correctly using calculateInactivityAugmentedLevel
+    legendsList.forEach(l => {
+      const normName = normalizeName(l.userName);
+      const userResultsList = grouped[l.userId] || grouped[normName] || [];
+      const inactivityTestMode = localStorage.getItem('3t_inactivity_test_mode') === 'true';
+      const calcRes = calculateInactivityAugmentedLevel(
+        l.userId,
+        userResultsList,
+        activeRules,
+        {
+          isTestModeEnabled: inactivityTestMode,
+          simulatedToday: inactivityTestMode ? '2026-06-14' : getVietnamDateString()
+        }
+      );
+      l.currentLevel = calcRes.level;
     });
 
     return legendsList;
@@ -2855,17 +2631,28 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
                 className="w-full flex items-center justify-between px-3 py-2 text-[11px] font-bold text-amber-900 hover:bg-amber-50/50 active:bg-amber-50/80 transition-colors cursor-pointer select-none"
               >
                 <div className="flex items-center gap-1.5 font-extrabold uppercase tracking-wider text-amber-955">
-                  <span>📌 QUY CHẾ KỶ LỤC 3T</span>
+                  <span>📌 QUY CHẾ & MẸO TRÁNH SPAM THÔNG BÁO</span>
                 </div>
                 <div className="flex items-center gap-1 text-gray-400">
-                  <span className="text-[9px] font-normal">{showRule3T ? 'Thu gọn' : 'Xem quy chế'}</span>
+                  <span className="text-[9px] font-normal">{showRule3T ? 'Thu gọn' : 'Xem chi tiết'}</span>
                   <ChevronDown className={`h-3 w-3 transition-transform duration-250 ${showRule3T ? 'rotate-180' : ''}`} />
                 </div>
               </button>
               
               {showRule3T && (
-                <div className="px-3 pb-2.5 pt-0.5 text-[11px] text-amber-900 leading-relaxed font-sans border-t border-amber-100/50 bg-amber-50/10">
-                  Tất cả kỷ lục hiện tại được đặt làm <strong className="text-amber-955 font-bold">thước đo tiêu chuẩn (benchmark)</strong>. Kỷ lục tiếp theo chỉ được ghi nhận và cập nhật khi có kết quả <strong className="text-amber-955 font-bold">bằng hoặc vượt qua</strong> kỷ lục trước đó.
+                <div className="px-3 pb-2.5 pt-1.5 text-[10.5px] text-amber-950/90 leading-relaxed font-sans border-t border-amber-100/50 bg-amber-50/10 space-y-2">
+                  <p>
+                    Tất cả kỷ lục hiện tại được đặt làm <strong className="text-amber-900 font-bold">thước đo tiêu chuẩn (benchmark)</strong>. Kỷ lục mới ghi nhận khi <strong className="text-amber-900 font-bold">&gt;=</strong> mốc cũ.
+                  </p>
+                  <div className="space-y-1 block bg-white p-2 rounded border border-amber-200/40 text-[10px]">
+                    <span className="font-bold text-amber-900">🛡️ Cơ chế lọc Spam (Thông báo dồn dập):</span>
+                    <ul className="list-disc pl-3.5 space-y-0.5">
+                      <li><strong>Người mới:</strong> Luôn nổ thông báo vinh danh tức thì toàn sảnh thi khi soán ngôi thành công đối thủ cũ.</li>
+                      <li><strong>Kiên Trì (Tự bứt phá):</strong> Đối với chính chủ, sảnh thi chỉ loa truyền đạt khi chạm đúng <strong className="text-gray-900 font-extrabold">mốc tròn 50 lượt</strong> (ví dụ: mốc 100, 150, 200 lượt...).</li>
+                      <li><strong>Trí Tuệ (Tự bứt phá):</strong> Đối với chính chủ, sảnh thi chỉ loa truyền đạt mỗi khi tích lũy thêm <strong className="text-gray-900 font-extrabold">mốc tròn 10 lượt 30/30</strong> (ví dụ: mốc 10, 20, 30, 40 lượt...).</li>
+                      <li><strong>Tốc Độ / Bất Bại / Trước Bình Minh:</strong> Luôn phát thông báo trực tiếp toàn sảnh để tôn vinh sự nỗ lực bứt phá siêu hạng ngày đêm.</li>
+                    </ul>
+                  </div>
                 </div>
               )}
             </div>
