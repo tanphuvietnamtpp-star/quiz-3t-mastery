@@ -9,11 +9,12 @@ import {
   RefreshCcw, UserMinus, FileDown, Upload, Pencil, Lock, BarChart3,
   Database, Building, Briefcase, Landmark, Home, ChevronDown, ChevronUp,
   ShieldCheck, ShieldAlert, Zap, Activity, Server, Search, X,
-  Award, TrendingUp, RotateCcw, ArrowLeft, Bell
+  Award, TrendingUp, RotateCcw, ArrowLeft, Bell, MessageSquare
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import StatsDashboard from './StatsDashboard';
 import PersonalStats from './PersonalStats';
+import ConversationExchange from './ConversationExchange';
 import { cleanOptionText, formatDate } from '../utils/format';
 
 interface AdminDashboardProps {
@@ -129,8 +130,9 @@ export default function AdminDashboard({
   const [users, setUsers] = useState<User[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [results, setResults] = useState<QuizResult[]>([]);
+  const [unreadExchangeCount, setUnreadExchangeCount] = useState(0);
   
-  const [activeTab, setActiveTab ] = useState<'users' | 'questions' | 'add_images' | 'qr' | 'stats' | 'encoding' | 'firebase_data' | 'rules' | 'personal' | 'notifications'>('users');
+  const [activeTab, setActiveTab ] = useState<'users' | 'questions' | 'add_images' | 'qr' | 'stats' | 'encoding' | 'firebase_data' | 'rules' | 'personal' | 'notifications' | 'exchange'>('users');
 
   // System Announcement States
   const [systemAnnouncement, setSystemAnnouncement] = useState('Chào mừng toàn thể cán bộ nhân viên đến với Hội Thi Văn Hóa 3T! Tốc độ là sống còn - Tinh gọn là sức mạnh!');
@@ -562,6 +564,16 @@ export default function AdminDashboard({
       }
     });
 
+    // Subscribe to chat topics in real-time to compute the unread exchange badge
+    const unsubscribeChat = databaseService.subscribeChatTopics((allTopics) => {
+      if (!allTopics) {
+        setUnreadExchangeCount(0);
+        return;
+      }
+      const count = allTopics.filter(topic => topic.unreadForAdmin === true).length;
+      setUnreadExchangeCount(count);
+    });
+
     // Create a periodic visual ticker running every 20 seconds to make sure that as Date.now() increments,
     // the online user filters dynamically re-evaluate and stay completely accurate
     const tickerInterval = setInterval(() => {
@@ -571,6 +583,7 @@ export default function AdminDashboard({
     return () => {
       unsubscribeUsers();
       unsubscribeSystem();
+      unsubscribeChat();
       clearInterval(tickerInterval);
     };
   }, []);
@@ -1942,6 +1955,22 @@ export default function AdminDashboard({
               <Bell className="h-[21px] w-[21px] text-current" />
             </div>
             <span translate="no" className="notranslate">THÔNG BÁO</span>
+          </button>
+          <button
+            onClick={() => { setActiveTab('exchange'); setNotice(null); }}
+            className={`pb-3 px-2 lg:px-3 text-[11.5px] md:text-[12px] font-medium border-b-2 transition-all flex items-center gap-1.5 shrink-0 ${
+              activeTab === 'exchange' ? 'border-[#1971C2] text-[#1971C2] font-bold' : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <div className="relative flex items-center justify-center p-0.5">
+              <MessageSquare className="h-[21px] w-[21px] text-current" />
+              {unreadExchangeCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 bg-red-600 text-white text-[8px] font-extrabold h-4 px-1 rounded-full border border-white flex items-center justify-center shadow-md min-w-[15px] leading-none animate-bounce">
+                  {unreadExchangeCount}
+                </span>
+              )}
+            </div>
+            <span translate="no" className="notranslate">TRAO ĐỔI</span>
           </button>
         </div>
 
@@ -4042,9 +4071,15 @@ export default function AdminDashboard({
                                   }`}>
                                     {isBroadcast ? '📢 Phát Sóng' : '🎉 Biểu Dương'}
                                   </span>
-                                  <span className="text-[10px] text-gray-600 font-bold">
-                                    Người tạo: <span className="text-slate-900 font-extrabold">{ann.userName || 'Hệ thống'}</span>
-                                  </span>
+                                  {ann.userName && (ann.userName.trim().normalize('NFC').toUpperCase() === 'LÊ NHẬT TRƯỜNG' || ann.userName.trim().normalize('NFC').toUpperCase() === 'LE NHAT TRUONG') ? (
+                                    <span className="bg-[#FFE066] text-[#E67E22] text-[9px] font-black px-1.5 py-0.5 rounded-md uppercase border border-[#FFE066]">
+                                      BAN QUẢN TRỊ
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] text-gray-600 font-bold">
+                                      Người tạo: <span className="text-slate-900 font-extrabold">{ann.userName || 'Hệ thống'}</span>
+                                    </span>
+                                  )}
                                 </div>
                                 <div className="flex items-center gap-2">
                                   <span className="text-[10px] text-gray-400 font-medium">
@@ -4073,6 +4108,23 @@ export default function AdminDashboard({
                 </div>
 
               </div>
+            </motion.div>
+          )}
+
+          {/* TRAO ĐỔI (Conversation Exchange) Panel View */}
+          {activeTab === 'exchange' && (
+            <motion.div
+              key="exchange_view"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="w-full h-full flex-1"
+            >
+              <ConversationExchange 
+                user={user} 
+                onBackToHome={() => setActiveTab('users')}
+                isMobileView={false}
+              />
             </motion.div>
           )}
 

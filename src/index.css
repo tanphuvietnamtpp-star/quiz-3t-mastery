@@ -11,10 +11,20 @@
   100% { transform: translateX(-100%); }
 }
 
+@keyframes magicColorChange {
+  0% { color: #FFE066; }
+  50% { color: #FF922B; }
+  100% { color: #FFE066; }
+}
+
 .animate-marquee {
   display: inline-block;
   padding-left: 10%;
   animation: marquee 16s linear infinite;
+}
+
+.animate-magic-color-slow {
+  animation: magicColorChange 6s ease-in-out infinite;
 }
 
 .animate-marquee:hover {

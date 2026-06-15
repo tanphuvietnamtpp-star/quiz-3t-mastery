@@ -39,5 +39,24 @@ service cloud.firestore {
       allow create: if isSignedIn();
       allow update, delete: if false;
     }
+
+    // Rules logic for config collection
+    match /config/{configId} {
+      allow read, write: if true;
+    }
+
+    // Rules logic for announcements collection
+    match /congratulations_announcements/{annId} {
+      allow read, write: if true;
+    }
+
+    // Rules logic for chat_topics and sub-collection messages
+    match /chat_topics/{topicId} {
+      allow read, write: if true;
+
+      match /messages/{messageId} {
+        allow read, write: if true;
+      }
+    }
   }
 }

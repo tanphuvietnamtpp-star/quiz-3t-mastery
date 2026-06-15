@@ -3669,7 +3669,7 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
                     <tr key={stat.userId + idx} className="hover:bg-slate-50/50 text-xs transition-colors">
                       <td className="py-3 px-4 text-center font-mono font-semibold text-gray-400">{idx + 1}</td>
                       <td className="py-3 px-4">
-                        <div className="font-bold text-gray-800 line-clamp-1">{stat.userName}</div>
+                        <div className="font-bold text-gray-800 whitespace-normal break-words leading-tight">{stat.userName}</div>
                         <div className="text-[10px] text-gray-400 font-mono mt-0.5 space-y-0.5">
                           <div>MS: {stat.employeeId}</div>
                           <div className="text-gray-500 font-semibold">SĐT: {stat.phone}</div>

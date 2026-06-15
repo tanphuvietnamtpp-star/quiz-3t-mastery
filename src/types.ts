@@ -111,3 +111,25 @@ export interface LevelRulesConfig {
   inactivityRule2: string;
   levels: LevelRuleItem[];
 }
+
+export interface ChatTopic {
+  id: string;
+  title: string;
+  createdBy: string;
+  createdByName: string;
+  createdAt: string; // ISO String
+  lastMessageAt: string; // ISO String
+  lastMessageText?: string;
+  unreadForAdmin?: boolean;
+  unreadForUser?: boolean;
+}
+
+export interface ChatMessage {
+  id: string;
+  topicId: string;
+  senderId: string;
+  senderName: string;
+  senderRole: 'employee' | 'approver' | 'admin' | 'executive';
+  text: string;
+  createdAt: string; // ISO String
+}

@@ -2,11 +2,12 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { databaseService, getQuotaStats } from '../firebase';
 import { User, Question, QuizResult, CompanyMapping, MotivationalSloganBand, LevelRulesConfig, LevelRuleItem } from '../types';
 import { formatDate, formatTimeInSeconds, cleanOptionText } from '../utils/format';
-import { BookOpen, Trophy, Award, BarChart3, ChevronRight, CheckCircle2, XCircle, ArrowRight, RotateCcw, HelpCircle, GraduationCap, AlertCircle, Users, TrendingUp, Building2, LogOut, Home, Maximize2, Minimize2, UserCheck, ImagePlus, Lock, Sparkles, X, Plus, Smartphone, Share, ArrowUp, ArrowLeft, Pencil, Trash2, Building, Landmark, Briefcase, Search, Database, RefreshCcw, QrCode, Server, ShieldCheck, Zap, FileDown, ChevronUp, ChevronDown, Timer, AlertTriangle, Bell, User as UserIcon } from 'lucide-react';
+import { BookOpen, Trophy, Award, BarChart3, ChevronRight, CheckCircle2, XCircle, ArrowRight, RotateCcw, HelpCircle, GraduationCap, AlertCircle, Users, TrendingUp, Building2, LogOut, Home, Maximize2, Minimize2, UserCheck, ImagePlus, Lock, Sparkles, X, Plus, Smartphone, Share, ArrowUp, ArrowLeft, Pencil, Trash2, Building, Landmark, Briefcase, Search, Database, RefreshCcw, QrCode, Server, ShieldCheck, Zap, FileDown, ChevronUp, ChevronDown, Timer, AlertTriangle, Bell, User as UserIcon, MessageSquare } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts';
 import StatsDashboard from './StatsDashboard';
 import PersonalStats from './PersonalStats';
+import ConversationExchange from './ConversationExchange';
 import { calculateInactivityAugmentedLevel, getVietnamDateString } from '../utils/levelCalculator';
 
 interface EmployeeDashboardProps {
@@ -270,13 +271,14 @@ export default function EmployeeDashboard({
   const [inactivityTestMode, setInactivityTestMode] = useState(() => localStorage.getItem('3t_inactivity_test_mode') === 'true');
   
   // Admin mobile action states
-  const [adminMobileTab, setAdminMobileTab] = useState<'home' | 'users' | 'stats' | 'encoding' | 'qr' | 'firebase_data' | 'personal' | 'notifications' | 'legends' | 'records' | 'patience_top'>('home');
+  const [adminMobileTab, setAdminMobileTab] = useState<'home' | 'users' | 'stats' | 'encoding' | 'qr' | 'firebase_data' | 'personal' | 'notifications' | 'legends' | 'records' | 'patience_top' | 'exchange'>('home');
   const [adminMobileNotice, setAdminMobileNotice] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
   
   // Real-time system announcement and accomplishments states
   const [systemAnnouncement, setSystemAnnouncement] = useState('Chào mừng toàn thể cán bộ nhân viên đến với Hội Thi Văn Hóa 3T! Tốc độ là sống còn - Tinh gọn là sức mạnh!');
   const [allAnnouncements, setAllAnnouncements] = useState<any[]>([]);
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
+  const [unreadExchangeCount, setUnreadExchangeCount] = useState(0);
   const [lastReadAnnouncementTimestamp, setLastReadAnnouncementTimestamp] = useState<number>(() => Number(localStorage.getItem('3t_last_read_ann_ts') || '0'));
   const [isEditingAnnouncement, setIsEditingAnnouncement] = useState(false);
   const [announcementEditText, setAnnouncementEditText] = useState('');
@@ -311,6 +313,25 @@ export default function EmployeeDashboard({
       unsubAnnouncements();
     };
   }, []);
+
+  useEffect(() => {
+    const isChatAdmin = user.role === 'admin' || user.role === 'executive';
+    const unsubscribe = databaseService.subscribeChatTopics((allTopics) => {
+      if (!allTopics) {
+        setUnreadExchangeCount(0);
+        return;
+      }
+      const count = allTopics.filter(topic => {
+        if (isChatAdmin) {
+          return topic.unreadForAdmin === true;
+        } else {
+          return topic.createdBy === user.id && topic.unreadForUser === true;
+        }
+      }).length;
+      setUnreadExchangeCount(count);
+    });
+    return () => unsubscribe();
+  }, [user.id, user.role]);
 
   // States for Mobile QR and Firebase Data tabs
   const [customQrUrl, setCustomQrUrl] = useState('https://quiz3t.vercel.app');
@@ -671,25 +692,54 @@ export default function EmployeeDashboard({
     });
 
     let maxAttempts = 0;
+    let maxAttemptsHolderId = '';
+    let maxAttemptsHolderName = '';
+
     let maxPerfects = 0;
+    let maxPerfectsHolderId = '';
+    let maxPerfectsHolderName = '';
+
     let minAvgDurationPerQ = Infinity;
+    let minAvgDurationHolderId = '';
+    let minAvgDurationHolderName = '';
+
     let maxStreak = 0;
+    let maxStreakHolderId = '';
+    let maxStreakHolderName = '';
+
     let minSunriseTime = Infinity;
+    let minSunriseTimeHolderId = '';
+    let minSunriseTimeHolderName = '';
 
     Object.entries(userGroups).forEach(([personKey, userResults]) => {
       const chronological = [...userResults].sort((a, b) => a.timestamp - b.timestamp);
+      const firstRes = chronological[0];
+      const hId = firstRes?.userId || personKey;
+      const hName = firstRes?.userName || personKey;
       
       const attemptsCount = chronological.length;
-      if (attemptsCount > maxAttempts) maxAttempts = attemptsCount;
+      if (attemptsCount > maxAttempts) {
+        maxAttempts = attemptsCount;
+        maxAttemptsHolderId = hId;
+        maxAttemptsHolderName = hName;
+      }
 
       const perfectsCount = chronological.filter(r => r.score === 30).length;
-      if (perfectsCount > maxPerfects) maxPerfects = perfectsCount;
+      if (perfectsCount > maxPerfects) {
+        maxPerfects = perfectsCount;
+        maxPerfectsHolderId = hId;
+        maxPerfectsHolderName = hName;
+      }
 
       const totalQ = chronological.reduce((sum, r) => sum + (r.totalQuestions || 3), 0);
       const totalD = chronological.reduce((sum, r) => sum + (r.duration || 0), 0);
       if (totalQ > 0) {
         const avgD = totalD / totalQ;
-        if (avgD < minAvgDurationPerQ) minAvgDurationPerQ = avgD;
+        if (avgD < minAvgDurationPerQ) {
+          minAvgDurationPerQ = avgD;
+          minAvgDurationHolderId = hId;
+          minAvgDurationHolderName = hName;
+        }
       }
 
       let currentStreak = 0;
@@ -702,7 +752,11 @@ export default function EmployeeDashboard({
           currentStreak = 0;
         }
       });
-      if (userMaxStreak > maxStreak) maxStreak = userMaxStreak;
+      if (userMaxStreak > maxStreak) {
+        maxStreak = userMaxStreak;
+        maxStreakHolderId = hId;
+        maxStreakHolderName = hName;
+      }
 
       chronological.forEach(r => {
         if (r.score === 30) {
@@ -711,7 +765,11 @@ export default function EmployeeDashboard({
           const mins = d.getMinutes();
           if (hours >= 0 && hours < 10) {
             const timeVal = hours * 60 + mins;
-            if (timeVal < minSunriseTime) minSunriseTime = timeVal;
+            if (timeVal < minSunriseTime) {
+              minSunriseTime = timeVal;
+              minSunriseTimeHolderId = hId;
+              minSunriseTimeHolderName = hName;
+            }
           }
         }
       });
@@ -719,10 +777,20 @@ export default function EmployeeDashboard({
 
     return {
       maxAttempts,
+      maxAttemptsHolderId,
+      maxAttemptsHolderName,
       maxPerfects,
+      maxPerfectsHolderId,
+      maxPerfectsHolderName,
       minAvgDurationPerQ,
+      minAvgDurationHolderId,
+      minAvgDurationHolderName,
       maxStreak,
-      minSunriseTime
+      maxStreakHolderId,
+      maxStreakHolderName,
+      minSunriseTime,
+      minSunriseTimeHolderId,
+      minSunriseTimeHolderName
     };
   };
 
@@ -787,54 +855,101 @@ export default function EmployeeDashboard({
         userSunriseStr = `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
       }
 
+      // 1. KIÊN TRÌ Record Check
       if (baseline.maxAttempts > 0 && userAttempts > baseline.maxAttempts) {
-        await databaseService.saveAnnouncement({
-          id: 'ann_' + Date.now() + '_qt',
-          userName: user.name,
-          type: 'record_broken',
-          detail: `vừa phá kỷ lục KIÊN TRÌ với tổng cộng ${userAttempts} lượt rèn luyện bền bỉ! 🎯`,
-          timestamp: Date.now()
-        });
+        const isSelf = baseline.maxAttemptsHolderId === user.id || baseline.maxAttemptsHolderName === user.name;
+        // Only notify if it's a new champion OR self-breaking at a round milestone of 50
+        const shouldNotify = !isSelf || (userAttempts % 50 === 0);
+        if (shouldNotify) {
+          const detailText = isSelf
+            ? `vừa tự phá vỡ cột mốc KIÊN TRÌ mới của chính mình với tổng cộng ${userAttempts} lượt rèn luyện bền bỉ! 🎯`
+            : `vừa soán ngôi vị ${baseline.maxAttemptsHolderName || 'đối thủ'} để lập kỷ lục KIÊN TRÌ mới với tổng cộng ${userAttempts} lượt rèn luyện bền bỉ! 🎯`;
+          await databaseService.saveAnnouncement({
+            id: 'ann_' + Date.now() + '_qt',
+            userName: user.name,
+            type: 'record_broken',
+            detail: detailText,
+            timestamp: Date.now()
+          });
+        }
       }
 
+      // 2. TRÍ TUỆ Record Check
       if (baseline.maxPerfects > 0 && userPerfects > baseline.maxPerfects) {
-        await databaseService.saveAnnouncement({
-          id: 'ann_' + Date.now() + '_tt',
-          userName: user.name,
-          type: 'record_broken',
-          detail: `vừa phá kỷ lục TRÍ TUỆ với ${userPerfects} lượt đại cát đạt 30/30 tối đa! 🧠`,
-          timestamp: Date.now()
-        });
+        const isSelf = baseline.maxPerfectsHolderId === user.id || baseline.maxPerfectsHolderName === user.name;
+        // Only notify if it's a new champion OR self-breaking at a round milestone of 10
+        const shouldNotify = !isSelf || (userPerfects % 10 === 0);
+        if (shouldNotify) {
+          const detailText = isSelf
+            ? `vừa củng cố kỷ lục TRÍ TUỆ của chính mình với cột mốc: ${userPerfects} lượt đại cát đạt 30/30 tối đa! 🧠`
+            : `vừa vượt mặt ${baseline.maxPerfectsHolderName || 'người giữ kỷ lục cũ'} để thiết lập kỷ lục TRÍ TUỆ mới với ${userPerfects} lượt đại cát đạt 30/30 tối đa! 🧠`;
+          await databaseService.saveAnnouncement({
+            id: 'ann_' + Date.now() + '_tt',
+            userName: user.name,
+            type: 'record_broken',
+            detail: detailText,
+            timestamp: Date.now()
+          });
+        }
       }
 
+      // 3. TỐC ĐỘ Record Check
       if (baseline.minAvgDurationPerQ < Infinity && userAvgSpeed < baseline.minAvgDurationPerQ && userTotalQ >= 9) {
-        await databaseService.saveAnnouncement({
-          id: 'ann_' + Date.now() + '_td',
-          userName: user.name,
-          type: 'record_broken',
-          detail: `vừa thiết lập kỷ lục TỐC ĐỘ phản xạ cực hạn với ${userAvgSpeed.toFixed(1)}s/câu! ⚡`,
-          timestamp: Date.now()
-        });
+        const isSelf = baseline.minAvgDurationHolderId === user.id || baseline.minAvgDurationHolderName === user.name;
+        // Only notify if it's a new champion OR if self-breaking is significant (at least 0.25s faster)
+        const improvement = baseline.minAvgDurationPerQ - userAvgSpeed;
+        const shouldNotify = !isSelf || (improvement >= 0.25);
+        if (shouldNotify) {
+          const detailText = isSelf
+            ? `vừa tự bứt phá kỷ lục TỐC ĐỘ phản xạ cực hạn của chính mình lên tầm cao mới: ${userAvgSpeed.toFixed(2)} giây/câu! ⚡`
+            : `vừa phá kỷ lục TỐC ĐỘ phản xạ cực hạn của ${baseline.minAvgDurationHolderName || 'tiền bối'} với thành tích ấn tượng: ${userAvgSpeed.toFixed(2)} giây/câu! ⚡`;
+          await databaseService.saveAnnouncement({
+            id: 'ann_' + Date.now() + '_td',
+            userName: user.name,
+            type: 'record_broken',
+            detail: detailText,
+            timestamp: Date.now()
+          });
+        }
       }
 
+      // 4. BẤT BẠI Record Check
       if (baseline.maxStreak > 0 && userMaxStreak > baseline.maxStreak) {
-        await databaseService.saveAnnouncement({
-          id: 'ann_' + Date.now() + '_bb',
-          userName: user.name,
-          type: 'record_broken',
-          detail: `vừa thiết lập kỷ lục BẤT BẠI mới với chuỗi ${userMaxStreak} lượt liên hoàn đạt 30/30! 🛡️`,
-          timestamp: Date.now()
-        });
+        const isSelf = baseline.maxStreakHolderId === user.id || baseline.maxStreakHolderName === user.name;
+        // Only notify if it's a new champion OR self-breaking at a round milestone of 5
+        const shouldNotify = !isSelf || (userMaxStreak % 5 === 0);
+        if (shouldNotify) {
+          const detailText = isSelf
+            ? `vừa nối dài chuỗi kỷ lục BẤT BẠI tự đặt ra lên mốc huy hoàng mới: ${userMaxStreak} lượt đạt 30/30 liên hoàn! 🛡️`
+            : `vừa hạ gục chuỗi kỷ lục BẤT BẠI của ${baseline.maxStreakHolderName || 'nhân tài cũ'} với chuỗi ${userMaxStreak} lượt liên hoàn đạt 30/30 tối đa! 🛡️`;
+          await databaseService.saveAnnouncement({
+            id: 'ann_' + Date.now() + '_bb',
+            userName: user.name,
+            type: 'record_broken',
+            detail: detailText,
+            timestamp: Date.now()
+          });
+        }
       }
 
+      // 5. TRƯỚC BÌNH MINH Record Check
       if (newResult.score === 30 && baseline.minSunriseTime < Infinity && userSunriseInMins < baseline.minSunriseTime) {
-        await databaseService.saveAnnouncement({
-          id: 'ann_' + Date.now() + '_bm',
-          userName: user.name,
-          type: 'record_broken',
-          detail: `vừa thắp sáng sảnh thi lúc ${userSunriseStr} để thiết lập kỷ lục TRƯỚC BÌNH MINH! 🌅`,
-          timestamp: Date.now()
-        });
+        const isSelf = baseline.minSunriseTimeHolderId === user.id || baseline.minSunriseTimeHolderName === user.name;
+        // Only notify if it's a new champion OR self-breaking by at least 10 minutes earlier
+        const diffInMins = baseline.minSunriseTime - userSunriseInMins;
+        const shouldNotify = !isSelf || (diffInMins >= 10);
+        if (shouldNotify) {
+          const detailText = isSelf
+            ? `vừa thức dậy sớm hơn nữa, tự phá kỷ lục TRƯỚC BÌNH MINH của chính mình lúc ${userSunriseStr}! 🌅`
+            : `vừa thi đạt điểm tối đa lúc ${userSunriseStr}, phá vỡ kỷ lục TRƯỚC BÌNH MINH của ${baseline.minSunriseTimeHolderName || 'người cũ'}! 🌅`;
+          await databaseService.saveAnnouncement({
+            id: 'ann_' + Date.now() + '_bm',
+            userName: user.name,
+            type: 'record_broken',
+            detail: detailText,
+            timestamp: Date.now()
+          });
+        }
       }
     } catch (err) {
       console.warn("Lỗi trong lúc tính toán phá kỷ lục:", err);
@@ -2747,6 +2862,7 @@ export default function EmployeeDashboard({
                 let badgeStyle = "bg-slate-100 text-slate-650 border border-slate-250";
                 let textStyle = "text-slate-800";
                 let userDisplay = ann.userName || "Admin";
+                const isLNT = ann.userName && (ann.userName.trim().normalize('NFC').toUpperCase() === 'LÊ NHẬT TRƯỜNG' || ann.userName.trim().normalize('NFC').toUpperCase() === 'LE NHAT TRUONG');
 
                 if (ann.type === 'admin_broadcast') {
                   cardStyle = "bg-[#FFF9DB] border-l-4 border-l-[#F59F00] border-y border-r border-[#FFE066] shadow-3xs";
@@ -2798,11 +2914,19 @@ export default function EmployeeDashboard({
                       <Bell className="h-3.5 w-3.5" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span translate="no" className="notranslate text-xs font-black text-slate-800">{userDisplay}</span>
-                        <span className={`text-[8.5px] font-black px-1.5 py-0.5 rounded-md uppercase shrink-0 ${badgeStyle}`}>
-                          {badgeText}
-                        </span>
+                      <div className="flex items-center gap-1.5 flex-wrap font-sans">
+                        {isLNT ? (
+                          <span className="text-[9.5px] font-black px-1.5 py-0.5 rounded-md uppercase shrink-0 bg-[#FFE066] text-[#E67E22] border border-[#FFE066]">
+                            BAN QUẢN TRỊ
+                          </span>
+                        ) : (
+                          <>
+                            <span translate="no" className="notranslate text-xs font-black text-slate-800">{userDisplay}</span>
+                            <span className={`text-[8.5px] font-black px-1.5 py-0.5 rounded-md uppercase shrink-0 ${badgeStyle}`}>
+                              {badgeText}
+                            </span>
+                          </>
+                        )}
                         <span className="text-[10px] text-gray-400 font-mono ml-auto">{dateStr}</span>
                       </div>
                       <p className={`text-xs mt-1 leading-normal ${textStyle}`}>
@@ -5524,302 +5648,258 @@ export default function EmployeeDashboard({
                     {adminMobileTab === 'legends' && renderMobileLegendsPanel()}
                     {adminMobileTab === 'records' && renderMobileRecordsPanel()}
                     {adminMobileTab === 'patience_top' && renderMobilePatiencePanel()}
+                    {adminMobileTab === 'exchange' && (
+                      <div className="flex flex-col flex-1 min-h-0 w-full bg-white rounded-t-2xl shadow-inner border-t border-gray-100 overflow-hidden">
+                        <ConversationExchange 
+                          user={user} 
+                          onBackToHome={() => setAdminMobileTab('home')}
+                          isMobileView={true}
+                        />
+                      </div>
+                    )}
                   </div>
                 ) : (
                   // Landing Screen for Practice Exams
                   <div className="flex flex-col items-center justify-between text-center flex-1 h-full pt-1 pb-0.5 sm:pt-1.5 sm:pb-1 relative">
-                  {/* Centered Top & Mid content wrapper to keep them tight together */}
-                  <div className="flex flex-col items-center justify-center text-center space-y-3 sm:space-y-4 flex-1 w-full shrink-0">
-                    
-                    {/* Admin rapid action buttons */}
-                    {isAdminReview && (user.role === 'admin' || user.role === 'executive') && (
-                      <div className="w-full max-w-sm mx-auto bg-slate-50/90 border border-slate-200/60 rounded-xl p-2 shadow-xs mb-4 sm:mb-5 font-sans">
-                        <div className="text-[9px] font-extrabold text-[#0B3A60]/85 uppercase tracking-wider mb-2 text-center flex items-center justify-center gap-1.5 whitespace-nowrap">
-                          <span>CÔNG CỤ QUẢN TRỊ HỆ THỐNG</span>
-                          {(user.role === 'admin' || user.role === 'executive') && (
-                            <span className="flex items-center gap-1 bg-emerald-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full shadow-2xs shrink-0 normal-case">
-                              <span className="h-1 w-1 rounded-full bg-white block animate-ping" />
-                              <span>{onlineUsersCount} Online</span>
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex flex-row items-center justify-between gap-1 overflow-x-auto no-scrollbar px-1 pt-2.5 pb-1 mb-1">
-                          {(user.role === 'admin' || user.role === 'executive') && (
+                    {/* Centered Top & Mid content wrapper to keep them tight together */}
+                    <div className="flex flex-col items-center justify-center text-center space-y-3 sm:space-y-4 flex-1 w-full shrink-0">
+                      
+                      {/* Admin rapid action buttons */}
+                      {isAdminReview && (user.role === 'admin' || user.role === 'executive') && (
+                        <div className="w-full max-w-sm mx-auto bg-slate-50/90 border border-slate-200/60 rounded-xl p-2 shadow-xs mb-4 sm:mb-5 font-sans">
+                          <div className="text-[9px] font-extrabold text-[#0B3A60]/85 uppercase tracking-wider mb-2 text-center flex items-center justify-center gap-1.5 whitespace-nowrap">
+                            <span>CÔNG CỤ QUẢN TRỊ HỆ THỐNG</span>
+                            {(user.role === 'admin' || user.role === 'executive') && (
+                              <span className="flex items-center gap-1 bg-emerald-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full shadow-2xs shrink-0 normal-case">
+                                <span className="h-1 w-1 rounded-full bg-white block animate-ping" />
+                                <span>{onlineUsersCount} Online</span>
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex flex-row items-center justify-between gap-1 overflow-x-auto no-scrollbar px-1 pt-2.5 pb-1 mb-1">
+                            {(user.role === 'admin' || user.role === 'executive') && (
+                              <button
+                                onClick={() => setAdminMobileTab('users')}
+                                className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group shrink-0"
+                                title="Phê Duyệt & Phân Quyền"
+                              >
+                                <div className="h-7 w-7 rounded-lg bg-blue-50 border border-blue-100/60 flex items-center justify-center group-hover:bg-blue-100 transition-colors shrink-0 relative">
+                                  <UserCheck className="h-3.5 w-3.5 text-[#1971C2]" />
+                                  {pendingUsersCount > 0 && (
+                                    <span className="absolute -top-2 -right-1.5 bg-red-600 text-white text-[9.5px] font-extrabold h-4 px-1 rounded-full border border-white flex items-center justify-center shadow-md min-w-[16px] leading-none animate-bounce">
+                                      {pendingUsersCount}
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="text-[8.5px] font-bold leading-tight truncate w-full text-center text-gray-700 font-sans">Phê Duyệt</span>
+                              </button>
+                            )}
+
                             <button
-                              onClick={() => setAdminMobileTab('users')}
+                              onClick={() => setAdminMobileTab('qr')}
                               className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group shrink-0"
-                              title="Phê Duyệt & Phân Quyền"
+                              title="Mã QR"
                             >
-                              <div className="h-7 w-7 rounded-lg bg-blue-50 border border-blue-100/60 flex items-center justify-center group-hover:bg-blue-100 transition-colors shrink-0 relative">
-                                <UserCheck className="h-3.5 w-3.5 text-[#1971C2]" />
-                                {pendingUsersCount > 0 && (
-                                  <span className="absolute -top-2 -right-1.5 bg-red-600 text-white text-[9.5px] font-extrabold h-4 px-1 rounded-full border border-white flex items-center justify-center shadow-md min-w-[16px] leading-none animate-bounce">
-                                    {pendingUsersCount}
+                              <div className="h-7 w-7 rounded-lg bg-indigo-50 border border-indigo-100/60 flex items-center justify-center group-hover:bg-indigo-100 transition-colors shrink-0">
+                                <QrCode className="h-3.5 w-3.5 text-indigo-600" />
+                              </div>
+                              <span className="text-[8.5px] font-bold leading-tight truncate w-full text-center text-gray-700">Mã QR</span>
+                            </button>
+
+                            <button
+                              onClick={() => setAdminMobileTab('stats')}
+                              className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group shrink-0"
+                              title="Trang Thống Kê"
+                            >
+                              <div className="h-7 w-7 rounded-lg bg-emerald-50 border border-emerald-100/60 flex items-center justify-center group-hover:bg-emerald-100 transition-colors shrink-0 relative">
+                                <BarChart3 className="h-3.5 w-3.5 text-emerald-600" />
+                                {attemptsTodayCount > 0 && (
+                                  <span className="absolute -top-1.5 -left-2.5 bg-[#12B886] text-white text-[8px] font-extrabold h-4 px-1 rounded-full border border-white flex items-center justify-center shadow-md min-w-[15px] leading-none animate-bounce z-10" title="Tổng số lượt làm trong hôm nay">
+                                    {attemptsTodayCount}
+                                  </span>
+                                )}
+                                {participantsTodayCount > 0 && (
+                                  <span className="absolute -top-1.5 -right-1.5 bg-[#1C7ED6] text-white text-[8px] font-extrabold h-4 px-1 rounded-full border border-white flex items-center justify-center shadow-md min-w-[15px] leading-none animate-bounce z-10" title="Tổng số người tham gia ôn tập trong hôm nay">
+                                    {participantsTodayCount}
                                   </span>
                                 )}
                               </div>
-                              <span className="text-[8.5px] font-bold leading-tight truncate w-full text-center text-gray-700 font-sans">Phê Duyệt</span>
+                              <span className="text-[8.5px] font-bold leading-tight truncate w-full text-center text-gray-700 font-sans">Thống Kê</span>
                             </button>
-                          )}
 
-                          <button
-                            onClick={() => setAdminMobileTab('qr')}
-                            className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group shrink-0"
-                            title="Mã QR"
-                          >
-                            <div className="h-7 w-7 rounded-lg bg-indigo-50 border border-indigo-100/60 flex items-center justify-center group-hover:bg-indigo-100 transition-colors shrink-0">
-                              <QrCode className="h-3.5 w-3.5 text-indigo-600" />
-                            </div>
-                            <span className="text-[8.5px] font-bold leading-tight truncate w-full text-center text-gray-700">Mã QR</span>
-                          </button>
-
-                          <button
-                            onClick={() => setAdminMobileTab('stats')}
-                            className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group shrink-0"
-                            title="Trang Thống Kê"
-                          >
-                            <div className="h-7 w-7 rounded-lg bg-emerald-50 border border-emerald-100/60 flex items-center justify-center group-hover:bg-emerald-100 transition-colors shrink-0 relative">
-                              <BarChart3 className="h-3.5 w-3.5 text-emerald-600" />
-                              {attemptsTodayCount > 0 && (
-                                <span className="absolute -top-1.5 -left-2.5 bg-[#12B886] text-white text-[8px] font-extrabold h-4 px-1 rounded-full border border-white flex items-center justify-center shadow-md min-w-[15px] leading-none animate-bounce z-10" title="Tổng số lượt làm trong hôm nay">
-                                  {attemptsTodayCount}
-                                </span>
-                              )}
-                              {participantsTodayCount > 0 && (
-                                <span className="absolute -top-1.5 -right-1.5 bg-[#1C7ED6] text-white text-[8px] font-extrabold h-4 px-1 rounded-full border border-white flex items-center justify-center shadow-md min-w-[15px] leading-none animate-bounce z-10" title="Tổng số người tham gia ôn tập trong hôm nay">
-                                  {participantsTodayCount}
-                                </span>
-                              )}
-                            </div>
-                            <span className="text-[8.5px] font-bold leading-tight truncate w-full text-center text-gray-700">Thống Kê</span>
-                          </button>
-
-                          {/* Dynamic Notifications Button */}
-                          <button
-                            onClick={() => {
-                              setAdminMobileTab('notifications');
-                              const ts = Date.now();
-                              localStorage.setItem('3t_last_read_ann_ts', String(ts));
-                              setUnreadNotificationsCount(0);
-                            }}
-                            className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group shrink-0"
-                            title="Thông Báo"
-                          >
-                            <div className="h-7 w-7 rounded-lg bg-orange-50 border border-orange-100 flex items-center justify-center group-hover:bg-orange-100 transition-colors shrink-0 relative animate-fadeIn">
-                              <Bell className="h-3.5 w-3.5 text-orange-600" />
-                              {unreadNotificationsCount > 0 && (
-                                <span className="absolute -top-2 -right-1.5 bg-red-600 text-white text-[9px] font-extrabold h-4 px-1 rounded-full border border-white flex items-center justify-center shadow-md min-w-[16px] leading-none animate-bounce">
-                                  {unreadNotificationsCount}
-                                </span>
-                              )}
-                            </div>
-                            <span className="text-[8.5px] font-bold leading-tight truncate w-full text-center text-gray-700 font-sans">Thông Báo</span>
-                          </button>
-
-                          {(user.role === 'admin' || user.role === 'executive') && (
+                            {/* Dynamic Notifications Button */}
                             <button
-                              onClick={() => setAdminMobileTab('personal')}
+                              onClick={() => {
+                                setAdminMobileTab('notifications');
+                                const ts = Date.now();
+                                localStorage.setItem('3t_last_read_ann_ts', String(ts));
+                                setUnreadNotificationsCount(0);
+                              }}
                               className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group shrink-0"
-                              title="Tiến độ cá nhân"
+                              title="Thông Báo"
                             >
-                              <div className="h-7 w-7 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center group-hover:bg-indigo-100 transition-colors shrink-0">
-                                <UserIcon className="h-3.5 w-3.5 text-indigo-700" />
+                              <div className="h-7 w-7 rounded-lg bg-orange-50 border border-orange-100 flex items-center justify-center group-hover:bg-orange-100 transition-colors shrink-0 relative animate-fadeIn">
+                                <Bell className="h-3.5 w-3.5 text-orange-600" />
+                                {unreadNotificationsCount > 0 && (
+                                  <span className="absolute -top-2 -right-1.5 bg-red-600 text-white text-[9px] font-extrabold h-4 px-1 rounded-full border border-white flex items-center justify-center shadow-md min-w-[16px] leading-none animate-bounce">
+                                    {unreadNotificationsCount}
+                                  </span>
+                                )}
                               </div>
-                              <span className="text-[8.5px] font-bold leading-tight truncate w-full text-center text-gray-700">Cá Nhân</span>
+                              <span className="text-[8.5px] font-bold leading-tight truncate w-full text-center text-gray-700 font-sans">Thông Báo</span>
                             </button>
-                          )}
 
-                          {user.role === 'admin' && (
+                            {/* Trao Đổi Support Chat Button */}
                             <button
-                              onClick={() => setAdminMobileTab('firebase_data')}
+                              onClick={() => {
+                                setAdminMobileTab('exchange');
+                              }}
                               className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group shrink-0"
-                              title="Dữ Liệu"
+                              title="Chat BQT"
                             >
-                              <div className="h-7 w-7 rounded-lg bg-cyan-50 border border-cyan-100/60 flex items-center justify-center group-hover:bg-cyan-100 transition-colors shrink-0">
-                                <Database className="h-3.5 w-3.5 text-[#0B7285]" />
+                              <div className="h-7 w-7 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center group-hover:bg-blue-100 transition-colors shrink-0 relative animate-fadeIn">
+                                <MessageSquare className="h-3.5 w-3.5 text-blue-600" />
+                                {unreadExchangeCount > 0 && (
+                                  <span className="absolute -top-2 -right-1.5 bg-red-600 text-white text-[9px] font-extrabold h-4 px-1 rounded-full border border-white flex items-center justify-center shadow-md min-w-[16px] leading-none animate-bounce">
+                                    {unreadExchangeCount}
+                                  </span>
+                                )}
                               </div>
-                              <span className="text-[8.5px] font-bold leading-tight truncate w-full text-center text-gray-700 font-sans">Dữ Liệu</span>
+                              <span className="text-[8.5px] font-bold leading-tight truncate w-full text-center text-gray-700 font-sans">Chat BQT</span>
                             </button>
-                          )}
+
+                            {(user.role === 'admin' || user.role === 'executive') && (
+                              <button
+                                onClick={() => setAdminMobileTab('personal')}
+                                className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-705 font-sans cursor-pointer group shrink-0"
+                                title="Tiến độ cá nhân"
+                              >
+                                <div className="h-7 w-7 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center group-hover:bg-indigo-100 transition-colors shrink-0">
+                                  <UserIcon className="h-3.5 w-3.5 text-indigo-700" />
+                                </div>
+                                <span className="text-[8.5px] font-bold leading-tight truncate w-full text-center text-gray-705">Cá Nhân</span>
+                              </button>
+                            )}
+
+                            {user.role === 'admin' && (
+                              <button
+                                onClick={() => setAdminMobileTab('firebase_data')}
+                                className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group shrink-0"
+                                title="Dữ Liệu"
+                              >
+                                <div className="h-7 w-7 rounded-lg bg-cyan-50 border border-cyan-100/60 flex items-center justify-center group-hover:bg-cyan-100 transition-colors shrink-0">
+                                  <Database className="h-3.5 w-3.5 text-[#0B7285]" />
+                                </div>
+                                <span className="text-[8.5px] font-bold leading-tight truncate w-full text-center text-gray-700 font-sans">Dữ Liệu</span>
+                              </button>
+                            )}
+                          </div>
                         </div>
-                        {/* Integrated exit button for mobile users where headers are hidden */}
-                        {onBackToAdmin && user.role !== 'executive' && (
-                          <button
-                            onClick={() => onBackToAdmin?.()}
-                            className="w-full mt-1.5 px-3 py-1 bg-red-50 hover:bg-red-100 border border-red-250 text-[#C92A2A] active:scale-95 transition-all rounded-lg text-[9px] font-extrabold tracking-wider flex items-center justify-center gap-1 cursor-pointer shadow-3xs"
-                          >
-                            <LogOut className="h-3 w-3 shrink-0" />
-                            <span>QUAY LẠI TRANG QUẢN TRỊ VIÊN</span>
-                          </button>
-                        )}
-                      </div>
-                    )}
+                      )}
 
-                    {/* Duyệt viên / Người xem thống kê (Trưởng bộ phận) rapid action buttons */}
-                    {!(user.role === 'admin' || user.role === 'executive') && (user.role === 'approver' || user.canViewStats) && (
-                      <div className="w-full max-w-sm mx-auto bg-gradient-to-br from-[#F3F0FF]/95 via-[#F3F0FF]/85 to-pink-50/80 rounded-xl p-2 shadow-xs mb-3 sm:mb-3.5 font-sans relative overflow-hidden backdrop-blur-xs">
-                         {/* Title banner */}
-                        <div className="text-[8.5px] font-black text-purple-900 uppercase tracking-wider mb-2 px-1 text-center flex items-center justify-center gap-1.5 whitespace-nowrap">
-                          <span className="h-1 w-1 rounded-full bg-purple-650 animate-pulse" />
-                          <span>QUẢN LÝ BAN ĐIỀU HÀNH BỘ PHẬN</span>
-                          <span className="h-1 w-1 rounded-full bg-purple-650 animate-pulse" />
+                      {/* CBNV (Nhân viên thường) rapid action buttons */}
+                      {!(user.role === 'admin' || user.role === 'executive') && !(user.role === 'approver' || user.canViewStats) && (
+                        <div className="w-full max-w-sm mx-auto bg-gradient-to-br from-amber-50/95 via-amber-50/85 to-yellow-50/70 rounded-xl p-2 shadow-xs mb-3 sm:mb-3.5 font-sans relative overflow-hidden backdrop-blur-xs">
+                            {/* Title banner */}
+                          <div className="text-[8.5px] font-black text-amber-900 uppercase tracking-wider mb-2 px-1 text-center flex items-center justify-center gap-1.5 whitespace-nowrap">
+                            <span className="h-1 w-1 rounded-full bg-amber-600 animate-pulse" />
+                            <span>THANH CÔNG CỤ</span>
+                            <span className="h-1 w-1 rounded-full bg-amber-600 animate-pulse" />
+                          </div>
+                          
+                          <div className="flex flex-row items-center justify-around gap-1 px-1 pt-2 pb-1">
+                            {/* Tượng đài huyền thoại */}
+                            <button
+                              onClick={() => setAdminMobileTab('legends')}
+                              className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-violet-50/20 active:scale-95 transition-all text-amber-950 font-sans cursor-pointer group shrink-0"
+                              title="Tượng Đài Huyền Thoại"
+                            >
+                              <div className="h-7 w-7 rounded-lg bg-violet-50 border border-violet-100 flex items-center justify-center group-hover:bg-violet-100 transition-colors shrink-0">
+                                <Trophy className="h-3.5 w-3.5 text-violet-600" />
+                              </div>
+                              <span className="text-[8.5px] font-extrabold leading-tight text-center text-amber-950 truncate max-w-[64px]">Tượng Đài</span>
+                            </button>
+
+                            {/* Kỷ lục 3T */}
+                            <button
+                              onClick={() => setAdminMobileTab('records')}
+                              className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-amber-50/25 active:scale-95 transition-all text-amber-950 font-sans cursor-pointer group shrink-0"
+                              title="Kỷ Lục 3T"
+                            >
+                              <div className="h-7 w-7 rounded-lg bg-amber-50 border border-amber-100 flex items-center justify-center group-hover:bg-amber-100 transition-colors shrink-0">
+                                <Award className="h-3.5 w-3.5 text-amber-600" />
+                              </div>
+                              <span className="text-[8.5px] font-extrabold leading-tight text-center text-amber-950 truncate max-w-[64px]">Kỷ Lục 3T</span>
+                            </button>
+
+                            {/* Top 5 kiên trì */}
+                            <button
+                              onClick={() => setAdminMobileTab('patience_top')}
+                              className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-emerald-50/20 active:scale-95 transition-all text-amber-950 font-sans cursor-pointer group shrink-0"
+                              title="Top 5 Kiên Trì Hôm Nay"
+                            >
+                              <div className="h-7 w-7 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-center group-hover:bg-emerald-100 transition-colors shrink-0">
+                                <Zap className="h-3.5 w-3.5 text-emerald-600 animate-pulse" />
+                              </div>
+                              <span className="text-[8.5px] font-extrabold leading-tight text-center text-amber-950 truncate max-w-[64px]">Top Kiên Trì</span>
+                            </button>
+
+                            {/* Thông báo */}
+                            <button
+                              onClick={() => {
+                                setAdminMobileTab('notifications');
+                                const ts = Date.now();
+                                localStorage.setItem('3t_last_read_ann_ts', String(ts));
+                                setUnreadNotificationsCount(0);
+                              }}
+                              className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-orange-50/20 active:scale-95 transition-all text-amber-950 font-sans cursor-pointer group shrink-0 relative"
+                              title="Thông Báo"
+                            >
+                              <div className="h-7 w-7 rounded-lg bg-orange-50 border border-orange-100 flex items-center justify-center group-hover:bg-orange-100 transition-colors shrink-0 relative">
+                                <Bell className="h-3.5 w-3.5 text-orange-600" />
+                                {unreadNotificationsCount > 0 && (
+                                  <span className="absolute -top-2 -right-1.5 bg-red-600 text-white text-[9px] font-extrabold h-4 px-1 rounded-full border border-white flex items-center justify-center shadow-md min-w-[16px] leading-none animate-bounce">
+                                    {unreadNotificationsCount}
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-[8.5px] font-extrabold leading-tight text-center text-amber-950 truncate max-w-[64px]">Thông Báo</span>
+                            </button>
+
+                            {/* Trao Đổi Support Chat Button */}
+                            <button
+                              onClick={() => {
+                                setAdminMobileTab('exchange');
+                              }}
+                              className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-blue-50/20 active:scale-95 transition-all text-amber-950 font-sans cursor-pointer group shrink-0"
+                              title="Chat BQT"
+                            >
+                              <div className="h-7 w-7 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center group-hover:bg-blue-100 transition-colors shrink-0 relative animate-fadeIn">
+                                <MessageSquare className="h-3.5 w-3.5 text-blue-600" />
+                                {unreadExchangeCount > 0 && (
+                                  <span className="absolute -top-2 -right-1.5 bg-red-600 text-white text-[9px] font-extrabold h-4 px-1 rounded-full border border-white flex items-center justify-center shadow-md min-w-[16px] leading-none animate-bounce">
+                                    {unreadExchangeCount}
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-[8.5px] font-extrabold leading-tight text-center text-amber-950 truncate max-w-[64px]">Chat BQT</span>
+                            </button>
+                          </div>
                         </div>
-                        
-                        <div className="flex flex-row items-center justify-around gap-1 px-1 pt-2 pb-1">
-                          {/* Phê duyệt */}
-                          <button
-                            onClick={() => setShowApprovalPanel(true)}
-                            className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-purple-600/10 active:scale-95 transition-all text-purple-950 font-sans cursor-pointer group shrink-0 relative"
-                            title="Phê Duyệt Nhân Sự"
-                          >
-                            <div className="h-7 w-7 rounded-lg bg-purple-50 border border-purple-100/65 flex items-center justify-center group-hover:bg-purple-100 transition-colors shrink-0 relative">
-                              <UserCheck className="h-3.5 w-3.5 text-purple-700" />
-                              {pendingUsersCount > 0 && (
-                                <span className="absolute -top-2 -right-1.5 bg-red-600 text-white text-[9px] font-extrabold h-4 px-1 rounded-full border border-white flex items-center justify-center shadow-md min-w-[16px] leading-none animate-bounce">
-                                  {pendingUsersCount}
-                                </span>
-                              )}
-                            </div>
-                            <span className="text-[8.5px] font-extrabold leading-tight truncate text-center text-purple-950 group-hover:text-purple-850">Phê Duyệt</span>
-                          </button>
-
-                          {/* Thống Kê */}
-                          <button
-                            onClick={() => setAdminMobileTab('stats')}
-                            className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-violet-600/10 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group shrink-0"
-                            title="Thống Kê"
-                          >
-                            <div className="h-7 w-7 rounded-lg bg-violet-50 border border-violet-100/65 flex items-center justify-center group-hover:bg-violet-100 transition-colors shrink-0 relative">
-                              <BarChart3 className="h-3.5 w-3.5 text-violet-700" />
-                              {attemptsTodayCount > 0 && (
-                                <span className="absolute -top-1.5 -left-2.5 bg-[#12B886] text-white text-[8px] font-extrabold h-4 px-1 rounded-full border border-white flex items-center justify-center shadow-md min-w-[15px] leading-none animate-bounce z-10" title="Tổng số lượt làm trong hôm nay">
-                                  {attemptsTodayCount}
-                                </span>
-                              )}
-                              {participantsTodayCount > 0 && (
-                                <span className="absolute -top-1.5 -right-1.5 bg-[#1C7ED6] text-white text-[8px] font-extrabold h-4 px-1 rounded-full border border-white flex items-center justify-center shadow-md min-w-[15px] leading-none animate-bounce z-10" title="Tổng số người tham gia ôn tập trong hôm nay">
-                                  {participantsTodayCount}
-                                </span>
-                              )}
-                            </div>
-                            <span className="text-[8.5px] font-extrabold leading-tight truncate text-center text-gray-700">Thống Kê</span>
-                          </button>
-
-                          {/* Thông Báo */}
-                          <button
-                            onClick={() => {
-                              setAdminMobileTab('notifications');
-                              const ts = Date.now();
-                              localStorage.setItem('3t_last_read_ann_ts', String(ts));
-                              setUnreadNotificationsCount(0);
-                            }}
-                            className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-orange-600/10 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group shrink-0 relative"
-                            title="Thông Báo"
-                          >
-                            <div className="h-7 w-7 rounded-lg bg-orange-50 border border-orange-100 flex items-center justify-center group-hover:bg-orange-100 transition-colors shrink-0 relative">
-                              <Bell className="h-3.5 w-3.5 text-orange-600" />
-                              {unreadNotificationsCount > 0 && (
-                                <span className="absolute -top-2 -right-1.5 bg-red-600 text-white text-[9px] font-extrabold h-4 px-1 rounded-full border border-white flex items-center justify-center shadow-md min-w-[16px] leading-none animate-bounce">
-                                  {unreadNotificationsCount}
-                                </span>
-                              )}
-                            </div>
-                            <span className="text-[8.5px] font-extrabold leading-tight truncate text-center text-gray-700">Thông Báo</span>
-                          </button>
-
-                          {/* Cá Nhân */}
-                          <button
-                            onClick={() => setAdminMobileTab('personal')}
-                            className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-indigo-600/10 active:scale-95 transition-all text-indigo-950 font-sans cursor-pointer group shrink-0"
-                            title="Cá Nhân"
-                          >
-                            <div className="h-7 w-7 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center group-hover:bg-indigo-100 transition-colors shrink-0">
-                              <UserIcon className="h-3.5 w-3.5 text-indigo-700" />
-                            </div>
-                            <span className="text-[8.5px] font-extrabold leading-tight truncate text-center text-gray-700">Cá Nhân</span>
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* CBNV (Nhân viên thường) rapid action buttons */}
-                    {!(user.role === 'admin' || user.role === 'executive') && !(user.role === 'approver' || user.canViewStats) && (
-                      <div className="w-full max-w-sm mx-auto bg-gradient-to-br from-amber-50/95 via-amber-50/85 to-yellow-50/70 rounded-xl p-2 shadow-xs mb-3 sm:mb-3.5 font-sans relative overflow-hidden backdrop-blur-xs">
-                         {/* Title banner */}
-                        <div className="text-[8.5px] font-black text-amber-900 uppercase tracking-wider mb-2 px-1 text-center flex items-center justify-center gap-1.5 whitespace-nowrap">
-                          <span className="h-1 w-1 rounded-full bg-amber-600 animate-pulse" />
-                          <span>VĂN HÓA 3T - TÔN VINH & TIN TỨC</span>
-                          <span className="h-1 w-1 rounded-full bg-amber-600 animate-pulse" />
-                        </div>
-                        
-                        <div className="flex flex-row items-center justify-around gap-1 px-1 pt-2 pb-1">
-                          {/* Tượng đài huyền thoại */}
-                          <button
-                            onClick={() => setAdminMobileTab('legends')}
-                            className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-amber-100/40 active:scale-95 transition-all text-amber-950 font-sans cursor-pointer group shrink-0"
-                            title="Tượng Đài Huyền Thoại"
-                          >
-                            <div className="h-7 w-7 rounded-lg bg-amber-100/60 border border-amber-200/50 flex items-center justify-center group-hover:bg-amber-200 transition-colors shrink-0">
-                              <Award className="h-3.5 w-3.5 text-amber-700" />
-                            </div>
-                            <span className="text-[8.5px] font-extrabold leading-tight text-center text-amber-950 truncate max-w-[64px]">Tượng Đài</span>
-                          </button>
-
-                          {/* Kỷ lục 3T */}
-                          <button
-                            onClick={() => setAdminMobileTab('records')}
-                            className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-amber-100/40 active:scale-95 transition-all text-amber-950 font-sans cursor-pointer group shrink-0"
-                            title="Kỷ Lục 3T"
-                          >
-                            <div className="h-7 w-7 rounded-lg bg-yellow-55 border border-yellow-200/55 flex items-center justify-center group-hover:bg-yellow-100 transition-colors shrink-0">
-                              <Trophy className="h-3.5 w-3.5 text-yellow-600" />
-                            </div>
-                            <span className="text-[8.5px] font-extrabold leading-tight text-center text-amber-950 truncate max-w-[64px]">Kỷ Lục 3T</span>
-                          </button>
-
-                          {/* Top 5 kiên trì */}
-                          <button
-                            onClick={() => setAdminMobileTab('patience_top')}
-                            className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-amber-100/40 active:scale-95 transition-all text-amber-950 font-sans cursor-pointer group shrink-0"
-                            title="Top 5 Kiên Trì Hôm Nay"
-                          >
-                            <div className="h-7 w-7 rounded-lg bg-orange-50 border border-orange-100/60 flex items-center justify-center group-hover:bg-orange-100 transition-colors shrink-0">
-                              <Zap className="h-3.5 w-3.5 text-orange-500 animate-pulse" />
-                            </div>
-                            <span className="text-[8.5px] font-extrabold leading-tight text-center text-amber-950 truncate max-w-[64px]">Top Kiên Trì</span>
-                          </button>
-
-                          {/* Thông báo */}
-                          <button
-                            onClick={() => {
-                              setAdminMobileTab('notifications');
-                              const ts = Date.now();
-                              localStorage.setItem('3t_last_read_ann_ts', String(ts));
-                              setUnreadNotificationsCount(0);
-                            }}
-                            className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-amber-100/40 active:scale-95 transition-all text-amber-950 font-sans cursor-pointer group shrink-0 relative"
-                            title="Thông Báo"
-                          >
-                            <div className="h-7 w-7 rounded-lg bg-orange-50 border border-orange-100 flex items-center justify-center group-hover:bg-orange-100 transition-colors shrink-0 relative">
-                              <Bell className="h-3.5 w-3.5 text-orange-600" />
-                              {unreadNotificationsCount > 0 && (
-                                <span className="absolute -top-2 -right-1.5 bg-red-600 text-white text-[9px] font-extrabold h-4 px-1 rounded-full border border-white flex items-center justify-center shadow-md min-w-[16px] leading-none animate-bounce">
-                                  {unreadNotificationsCount}
-                                </span>
-                              )}
-                            </div>
-                            <span className="text-[8.5px] font-extrabold leading-tight text-center text-amber-950 truncate max-w-[64px]">Thông Báo</span>
-                          </button>
-                        </div>
-                      </div>
-                    )}
+                      )}
 
 
 
                     {/* 3T Logo replacing Trophy Icon */}
-                    <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#0B3A60] border-2 border-orange-500 shadow-md select-none shrink-0 relative overflow-hidden">
-                      <span translate="no" className="notranslate text-3xl font-black tracking-tighter text-orange-500 font-sans select-none">
-                        3<span className="text-white">T</span>
+                    <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#0B3A60] border-2 border-orange-500/50 shadow-md select-none shrink-0 relative overflow-hidden group">
+                      {/* Glossy light effect */}
+                      <div className="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/10 to-transparent pointer-events-none transform -skew-y-12" />
+                      
+                      <span translate="no" className="notranslate text-3xl font-black tracking-tighter font-sans select-none relative z-10 flex items-center justify-center">
+                        <span className="animate-magic-color-slow">
+                          3
+                        </span>
+                        <span className="text-white drop-shadow-[0_1.5px_1.5px_rgba(0,0,0,0.6)] -ml-0.5">T</span>
                       </span>
                     </div>
 
@@ -7009,7 +7089,7 @@ export default function EmployeeDashboard({
           )}
 
           {/* Floating Action Buttons for Admin Mobile Tabs (Phê Duyệt, Thống Kê, Mã Hóa) */}
-          {activeTab === 'quiz' && adminMobileTab !== 'home' && !quizStarted && !showLevelRules && (
+          {activeTab === 'quiz' && adminMobileTab !== 'home' && adminMobileTab !== 'exchange' && !quizStarted && !showLevelRules && (
             <div className="absolute bottom-18 right-5 z-45 flex flex-col gap-2.5">
               {/* Scroll to Top Button */}
               <AnimatePresence>

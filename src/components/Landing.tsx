@@ -266,7 +266,7 @@ export default function Landing({ onLoginSuccess, slogan }: LandingProps) {
         password: password,
         company: isLNT ? 'TÂN PHÚ VIỆT NAM' : company,
         branch: isLNT ? 'Văn Phòng Công Ty (TPP-CTY)' : branch,
-        department: isLNT ? 'Phòng Quản lí chất lượng (TPP-CTY)' : department,
+        department: isLNT ? 'Phòng Quản Lý Chất Lượng (TPP-CTY)' : department,
         employeeId: employeeId.trim()
       });
 
@@ -303,13 +303,14 @@ export default function Landing({ onLoginSuccess, slogan }: LandingProps) {
       <div className="w-full max-w-md space-y-8 bg-white p-8 rounded-md shadow-sm border border-gray-100">
         <div className="text-center">
           {/* Logo container */}
-          <div className="mx-auto flex h-18 w-18 items-center justify-center rounded-2xl bg-gradient-to-tr from-[#07243c] via-[#0B3A60] to-[#1d5985] border-2 border-blue-400/20 shadow-md ring-4 ring-blue-950/10 select-none shrink-0 relative overflow-hidden">
+          <div className="mx-auto flex h-18 w-18 items-center justify-center rounded-2xl bg-gradient-to-tr from-[#07243c] via-[#0B3A60] to-[#1d5985] border-2 border-[#FFE066]/30 shadow-md ring-4 ring-blue-950/10 select-none shrink-0 relative overflow-hidden">
             {/* Glossy light effect */}
             <div className="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/10 to-transparent pointer-events-none transform -skew-y-12" />
-            <div className="absolute -bottom-4 -right-4 w-12 h-12 bg-[#E8590C]/20 rounded-full blur-md pointer-events-none" />
             <span translate="no" className="notranslate text-4xl font-black tracking-tighter font-sans relative z-10 flex items-center justify-center">
-              <span className="text-[#E8590C] drop-shadow-[0_1px_1px_rgba(0,0,0,0.25)]">3</span>
-              <span className="text-white -ml-0.5 drop-shadow-[0_1.5px_1.5px_rgba(0,0,0,0.35)]">T</span>
+              <span className="animate-magic-color-slow">
+                3
+              </span>
+              <span className="text-white -ml-0.5 drop-shadow-[0_1.5px_1.5px_rgba(0,0,0,0.6)]">T</span>
             </span>
           </div>
           <h2 className="mt-6 text-3xl font-sans font-bold tracking-tight text-gray-900">

@@ -15,7 +15,7 @@ import {
   onSnapshot
 } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
-import { User, Question, QuizResult, BRANCHES, DEPARTMENTS, CompanyMapping, MotivationalSloganBand, LevelRulesConfig, LevelRuleItem } from './types';
+import { User, Question, QuizResult, BRANCHES, DEPARTMENTS, CompanyMapping, MotivationalSloganBand, LevelRulesConfig, LevelRuleItem, ChatTopic, ChatMessage } from './types';
 import { INITIAL_QUESTIONS } from './data/mockQuestions';
 import rawFirebaseConfig from './firebase-applet-config.json';
 
@@ -102,7 +102,7 @@ export const INITIAL_COMPANY_MAPPINGS: CompanyMapping[] = [
           { id: 'vp_pmh', name: 'Phòng Mua hàng' },
           { id: 'vp_pncptsp', name: 'Phòng Nghiên cứu và phát triển sản phẩm' },
           { id: 'vp_ppp', name: 'Phòng phân phối' },
-          { id: 'vp_pqcl', name: 'Phòng Quản lí chất lượng' },
+          { id: 'vp_pqcl', name: 'Phòng Quản Lý Chất Lượng' },
           { id: 'vp_ptckt', name: 'Phòng Tài chính Kế toán' },
           { id: 'vp_ptkkt', name: 'Phòng Thiết kế kỹ thuật' },
           { id: 'vp_btrl', name: 'Ban trợ lý + KSTC' }
@@ -168,7 +168,7 @@ const defaultAdmin: User = {
   password: '111222',
   role: 'admin',
   company: 'TÂN PHÚ VIỆT NAM',
-  department: 'Phòng Quản lí chất lượng (TPP-CTY)',
+  department: 'Phòng Quản Lý Chất Lượng (TPP-CTY)',
   branch: 'Văn Phòng Công Ty (TPP-CTY)',
   status: 'approved',
   createdAt: '2026-06-06T08:30:36Z',
@@ -188,7 +188,7 @@ const forceSeedSupremeAdmin = async () => {
         role: 'admin',
         status: 'approved',
         company: 'TÂN PHÚ VIỆT NAM',
-        department: 'Phòng Quản lí chất lượng (TPP-CTY)',
+        department: 'Phòng Quản Lý Chất Lượng (TPP-CTY)',
         branch: 'Văn Phòng Công Ty (TPP-CTY)',
         employeeId: '2018.00281',
         createdAt: '2026-06-06T08:30:36Z'
@@ -525,8 +525,17 @@ export const sanitizeUserList = (users: User[]): User[] => {
   const seenUniqueKeys = new Set<string>();
   const cleaned: User[] = [];
 
-  // Filter out invalid/empty records first
-  const validUsers = users.filter(u => u && u.name && u.phone);
+  // Filter out invalid/empty records first and normalize department names
+  const validUsers = users.filter(u => u && u.name && u.phone).map(u => {
+    let dept = u.department || '';
+    if (dept.includes('Quản lí chất lượng')) {
+      dept = dept.replace(/Quản lí chất lượng/g, 'Quản Lý Chất Lượng');
+    }
+    return {
+      ...u,
+      department: dept
+    };
+  });
 
   // 1. Gather and merge all possible 'Lê Nhật Trường' profiles (by name, phone, or id)
   let supremeAdminMerged: User | null = null;
@@ -544,7 +553,7 @@ export const sanitizeUserList = (users: User[]): User[] => {
           role: 'admin',
           status: 'approved',
           company: 'TÂN PHÚ VIỆT NAM',
-          department: 'Phòng Quản lí chất lượng (TPP-CTY)',
+          department: 'Phòng Quản Lý Chất Lượng (TPP-CTY)',
           branch: 'Văn Phòng Công Ty (TPP-CTY)',
           employeeId: '2018.00281',
           createdAt: u.createdAt || '2026-06-06T08:30:36Z',
@@ -561,7 +570,7 @@ export const sanitizeUserList = (users: User[]): User[] => {
           role: 'admin',
           status: 'approved',
           company: 'TÂN PHÚ VIỆT NAM',
-          department: 'Phòng Quản lí chất lượng (TPP-CTY)',
+          department: 'Phòng Quản Lý Chất Lượng (TPP-CTY)',
           branch: 'Văn Phòng Công Ty (TPP-CTY)',
           employeeId: '2018.00281',
           password: supremeAdminMerged.password || u.password || '111222',
@@ -638,7 +647,7 @@ export const databaseService = {
       status,
       company: isLNT ? 'TÂN PHÚ VIỆT NAM' : (userData.company || 'TÂN PHÚ VIỆT NAM'),
       branch: isLNT ? 'Văn Phòng Công Ty (TPP-CTY)' : userData.branch,
-      department: isLNT ? 'Phòng Quản lí chất lượng (TPP-CTY)' : userData.department,
+      department: isLNT ? 'Phòng Quản Lý Chất Lượng (TPP-CTY)' : userData.department,
       employeeId: isLNT ? '2018.00281' : userData.employeeId,
       createdAt: new Date().toISOString()
     };
@@ -795,7 +804,7 @@ export const databaseService = {
             role: 'admin',
             status: 'approved',
             company: 'TÂN PHÚ VIỆT NAM',
-            department: 'Phòng Quản lí chất lượng (TPP-CTY)',
+            department: 'Phòng Quản Lý Chất Lượng (TPP-CTY)',
             branch: 'Văn Phòng Công Ty (TPP-CTY)',
             employeeId: '2018.00281'
           };
@@ -825,7 +834,7 @@ export const databaseService = {
       
       if (isLNT) {
         finalData.company = 'TÂN PHÚ VIỆT NAM';
-        finalData.department = 'Phòng Quản lí chất lượng (TPP-CTY)';
+        finalData.department = 'Phòng Quản Lý Chất Lượng (TPP-CTY)';
         finalData.branch = 'Văn Phòng Công Ty (TPP-CTY)';
         finalData.role = 'admin';
         finalData.status = 'approved';
@@ -854,7 +863,7 @@ export const databaseService = {
       
       if (isLNT) {
         finalData.company = 'TÂN PHÚ VIỆT NAM';
-        finalData.department = 'Phòng Quản lí chất lượng (TPP-CTY)';
+        finalData.department = 'Phòng Quản Lý Chất Lượng (TPP-CTY)';
         finalData.branch = 'Văn Phòng Công Ty (TPP-CTY)';
         finalData.role = 'admin';
         finalData.status = 'approved';
@@ -1051,7 +1060,11 @@ export const databaseService = {
       incrementQuota('reads', querySnapshot.size);
       const results: QuizResult[] = [];
       querySnapshot.forEach((doc) => {
-        results.push(doc.data() as QuizResult);
+        const item = doc.data() as QuizResult;
+        if (item && item.department && item.department.includes('Quản lí chất lượng')) {
+          item.department = item.department.replace(/Quản lí chất lượng/g, 'Quản Lý Chất Lượng');
+        }
+        results.push(item);
       });
       // Sort them descending by timestamp so active computations start with latest
       results.sort((a, b) => b.timestamp - a.timestamp);
@@ -1098,7 +1111,11 @@ export const databaseService = {
         incrementQuota('reads', querySnapshot.size);
         const results: QuizResult[] = [];
         querySnapshot.forEach((doc) => {
-          results.push(doc.data() as QuizResult);
+          const item = doc.data() as QuizResult;
+          if (item && item.department && item.department.includes('Quản lí chất lượng')) {
+            item.department = item.department.replace(/Quản lí chất lượng/g, 'Quản Lý Chất Lượng');
+          }
+          results.push(item);
         });
 
         // Merge or replace cached results in localStorage smartly
@@ -1837,6 +1854,111 @@ export const databaseService = {
       }
     }
     localStorage.setItem('3t_level_rules', JSON.stringify(rules));
+  },
+
+  async saveChatTopic(topic: ChatTopic): Promise<void> {
+    await initializeDatabase();
+    if (isFirebaseConfigured && db) {
+      try {
+        await setDoc(doc(db, 'chat_topics', topic.id), topic);
+        incrementQuota('writes', 1);
+      } catch (err) {
+        handleFirestoreError(err, OperationType.WRITE, `chat_topics/${topic.id}`);
+      }
+    }
+    const local = getLocalData<ChatTopic[]>('3t_chat_topics', []);
+    const idx = local.findIndex(t => t.id === topic.id);
+    if (idx >= 0) {
+      local[idx] = topic;
+    } else {
+      local.push(topic);
+    }
+    setLocalData('3t_chat_topics', local);
+  },
+
+  subscribeChatTopics(onUpdate: (topics: ChatTopic[]) => void): () => void {
+    if (!isFirebaseConfigured || !db) {
+      const local = getLocalData<ChatTopic[]>('3t_chat_topics', []);
+      onUpdate(local);
+      return () => {};
+    }
+    const q = collection(db, 'chat_topics');
+    const unsub = onSnapshot(q, (snapshot) => {
+      incrementQuota('reads', snapshot.docs.length || 1);
+      const list: ChatTopic[] = [];
+      snapshot.forEach(docDoc => {
+        list.push(docDoc.data() as ChatTopic);
+      });
+      list.sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime());
+      setLocalData('3t_chat_topics', list);
+      onUpdate(list);
+    }, (err) => {
+      handleFirestoreError(err, OperationType.GET, 'chat_topics');
+    });
+    return unsub;
+  },
+
+  async saveChatMessage(message: ChatMessage): Promise<void> {
+    await initializeDatabase();
+    if (isFirebaseConfigured && db) {
+      try {
+        await setDoc(doc(db, 'chat_topics', message.topicId, 'messages', message.id), message);
+        incrementQuota('writes', 1);
+        
+        await updateDoc(doc(db, 'chat_topics', message.topicId), {
+          lastMessageAt: message.createdAt,
+          lastMessageText: message.text,
+          unreadForUser: message.senderRole === 'admin' || message.senderRole === 'executive',
+          unreadForAdmin: message.senderRole !== 'admin' && message.senderRole !== 'executive'
+        });
+        incrementQuota('writes', 1);
+      } catch (err) {
+        handleFirestoreError(err, OperationType.WRITE, `chat_topics/${message.topicId}/messages/${message.id}`);
+      }
+    }
+    const local = getLocalData<ChatMessage[]>(`3t_chat_msg_${message.topicId}`, []);
+    local.push(message);
+    setLocalData(`3t_chat_msg_${message.topicId}`, local);
+  },
+
+  subscribeChatMessages(topicId: string, onUpdate: (messages: ChatMessage[]) => void): () => void {
+    if (!isFirebaseConfigured || !db) {
+      const local = getLocalData<ChatMessage[]>(`3t_chat_msg_${topicId}`, []);
+      onUpdate(local);
+      return () => {};
+    }
+    const q = collection(db, 'chat_topics', topicId, 'messages');
+    const unsub = onSnapshot(q, (snapshot) => {
+      incrementQuota('reads', snapshot.docs.length || 1);
+      const list: ChatMessage[] = [];
+      snapshot.forEach(docDoc => {
+        list.push(docDoc.data() as ChatMessage);
+      });
+      list.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      setLocalData(`3t_chat_msg_${topicId}`, list);
+      onUpdate(list);
+    }, (err) => {
+      handleFirestoreError(err, OperationType.GET, `chat_topics/${topicId}/messages`);
+    });
+    return unsub;
+  },
+
+  async markTopicAsRead(topicId: string, isAdmin: boolean): Promise<void> {
+    await initializeDatabase();
+    if (isFirebaseConfigured && db) {
+      try {
+        const updateObj: any = {};
+        if (isAdmin) {
+          updateObj.unreadForAdmin = false;
+        } else {
+          updateObj.unreadForUser = false;
+        }
+        await updateDoc(doc(db, 'chat_topics', topicId), updateObj);
+        incrementQuota('writes', 1);
+      } catch (err) {
+        console.warn('Error marking topic as read:', err);
+      }
+    }
   }
 };
 
