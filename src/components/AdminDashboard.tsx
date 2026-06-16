@@ -1814,7 +1814,7 @@ export default function AdminDashboard({
     <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Global compact running marquee announcement banner */}
       {systemAnnouncement && systemAnnouncement.trim() ? (
-        <div className="bg-[#FFF9DB] border-b border-amber-200 text-amber-900 text-[10.5px] font-bold py-1.5 overflow-hidden flex items-center shrink-0 z-50 select-none">
+        <div className="bg-transparent text-slate-700 text-[11px] font-bold py-2 overflow-hidden flex items-center shrink-0 z-50 select-none">
           <div 
             className="animate-marquee notranslate flex whitespace-nowrap animate-marquee-container" 
             style={{ 
@@ -1824,9 +1824,9 @@ export default function AdminDashboard({
             translate="no"
           >
             <span>{systemAnnouncement}</span>
-            <span className="text-amber-400 select-none">✦</span>
+            <span className="text-gray-400 select-none">✦</span>
             <span>{systemAnnouncement}</span>
-            <span className="text-amber-400 select-none">✦</span>
+            <span className="text-gray-400 select-none">✦</span>
           </div>
         </div>
       ) : null}

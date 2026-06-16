@@ -704,25 +704,25 @@ export default function EmployeeDashboard({
       userGroups[personKey].push(res);
     });
 
-    let maxAttempts = 0;
-    let maxAttemptsHolderId = '';
-    let maxAttemptsHolderName = '';
+    let maxAttempts = 381;
+    let maxAttemptsHolderId = 'static_quyettam';
+    let maxAttemptsHolderName = 'TRAN PHUOC TRUNG';
 
-    let maxPerfects = 0;
-    let maxPerfectsHolderId = '';
-    let maxPerfectsHolderName = '';
+    let maxPerfects = 185;
+    let maxPerfectsHolderId = 'static_tritue';
+    let maxPerfectsHolderName = 'TRẦN VĂN TIÊN';
 
-    let minAvgDurationPerQ = Infinity;
-    let minAvgDurationHolderId = '';
-    let minAvgDurationHolderName = '';
+    let minAvgDurationPerQ = 3.8;
+    let minAvgDurationHolderId = 'static_tocdo';
+    let minAvgDurationHolderName = 'QUÁCH THUÝ VÂN';
 
-    let maxStreak = 0;
-    let maxStreakHolderId = '';
-    let maxStreakHolderName = '';
+    let maxStreak = 45;
+    let maxStreakHolderId = 'static_batbai';
+    let maxStreakHolderName = 'HA HUU QUYNH';
 
-    let minSunriseTime = Infinity;
-    let minSunriseTimeHolderId = '';
-    let minSunriseTimeHolderName = '';
+    let minSunriseTime = 84; // 1h24 sáng -> 84 phút
+    let minSunriseTimeHolderId = 'static_binhminh';
+    let minSunriseTimeHolderName = 'PHẠM VĂN ĐEN';
 
     Object.entries(userGroups).forEach(([personKey, userResults]) => {
       const chronological = [...userResults].sort((a, b) => a.timestamp - b.timestamp);
@@ -918,6 +918,19 @@ export default function EmployeeDashboard({
             : `vừa phá kỷ lục TỐC ĐỘ phản xạ cực hạn của ${baseline.minAvgDurationHolderName || 'tiền bối'} với thành tích ấn tượng: ${userAvgSpeed.toFixed(2)} giây/câu! ⚡`;
           await databaseService.saveAnnouncement({
             id: 'ann_' + Date.now() + '_td',
+            userName: user.name,
+            type: 'record_broken',
+            detail: detailText,
+            timestamp: Date.now()
+          });
+        }
+      } else if (baseline.minAvgDurationPerQ < Infinity && userAvgSpeed >= baseline.minAvgDurationPerQ && userAvgSpeed < baseline.minAvgDurationPerQ + 0.15 && userTotalQ >= 9) {
+        // CLOSE COMPARED RECORD: Bám sát mốc kỷ lục
+        const isSelf = baseline.minAvgDurationHolderId === user.id || baseline.minAvgDurationHolderName === user.name;
+        if (!isSelf) {
+          const detailText = `vừa bám sát mốc Kỷ lục TỐC ĐỘ phản xạ cực hạn của ${baseline.minAvgDurationHolderName || 'QUÁCH THUÝ VÂN'} với thành tích cực kỳ ấn tượng: ${userAvgSpeed.toFixed(2)} giây/câu! 🔥`;
+          await databaseService.saveAnnouncement({
+            id: 'ann_' + Date.now() + '_td_close',
             userName: user.name,
             type: 'record_broken',
             detail: detailText,
@@ -5559,7 +5572,7 @@ export default function EmployeeDashboard({
             
             {/* Global compact running marquee announcement banner */}
             {systemAnnouncement && systemAnnouncement.trim() ? (
-              <div className="sticky top-0 z-45 mx-[-12.5px] mt-[-12.5px] sm:mx-[-16.5px] sm:mt-[-16.5px] mb-2 px-3 bg-[#FFF9DB] border-b border-amber-250/70 text-amber-900 text-[9.5px] font-bold py-1 overflow-hidden shrink-0 flex items-center shadow-xs select-none">
+              <div className="sticky top-0 z-45 mx-[-12.5px] mt-[-12.5px] sm:mx-[-16.5px] sm:mt-[-16.5px] mb-2 px-3 bg-transparent text-slate-700 text-[10px] font-bold py-1.5 overflow-hidden shrink-0 flex items-center select-none">
                 <div 
                   className="animate-marquee notranslate flex whitespace-nowrap" 
                   style={{ 
@@ -5569,9 +5582,9 @@ export default function EmployeeDashboard({
                   translate="no"
                 >
                   <span>{systemAnnouncement}</span>
-                  <span className="text-amber-400 select-none">✦</span>
+                  <span className="text-gray-400 select-none">✦</span>
                   <span>{systemAnnouncement}</span>
-                  <span className="text-amber-400 select-none">✦</span>
+                  <span className="text-gray-400 select-none">✦</span>
                 </div>
               </div>
             ) : null}
