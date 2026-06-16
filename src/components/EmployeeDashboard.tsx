@@ -68,7 +68,7 @@ const DEFAULT_LEVEL_RULES: LevelRulesConfig = {
       name: "Cấp 5: Huyền Thoại",
       emoji: "🔮",
       promotion: "Cấp bậc cao nhất hệ thống (Giữ nguyên).",
-      demotion: "Đạt dưới 28 điểm trong 2 lần thi liên tiếp sẽ bị hạ về Tối Cao (có cảnh báo ở lần đầu).",
+      demotion: "Đạt dưới 28 điểm trong 2 lần thi (áp dụng trước 17/06/26). CHÍNH THỨC TỪ 0h00 NGÀY 17/06/26: CHỈ cần duy trì ít nhất 2 lượt mỗi ngày và đạt điểm trung bình >= 20/30đ là đạt yêu cầu. Trường hợp không duy trì thì bị hạ cấp tự động.",
       maxTime: "15s/câu",
       reactionPoints: ["≤ 3s (+10đ)", "4s-5s (+8đ)", "6s-8s (+6đ)", "9s-15s (+5đ)"]
     }
@@ -279,36 +279,46 @@ export default function EmployeeDashboard({
   
   // Real-time system announcement and accomplishments states
   const [systemAnnouncement, setSystemAnnouncement] = useState('Chào mừng toàn thể cán bộ nhân viên đến với Hội Thi Văn Hóa 3T! Tốc độ là sống còn - Tinh gọn là sức mạnh!');
+  const [systemAnnouncementSpeed, setSystemAnnouncementSpeed] = useState(35);
+  const [systemAnnouncementGap, setSystemAnnouncementGap] = useState(32);
   const [allAnnouncements, setAllAnnouncements] = useState<any[]>([]);
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
   const [unreadExchangeCount, setUnreadExchangeCount] = useState(0);
   const [lastReadAnnouncementTimestamp, setLastReadAnnouncementTimestamp] = useState<number>(() => Number(localStorage.getItem('3t_last_read_ann_ts') || '0'));
   const [isEditingAnnouncement, setIsEditingAnnouncement] = useState(false);
   const [announcementEditText, setAnnouncementEditText] = useState('');
+  const [announcementEditSpeed, setAnnouncementEditSpeed] = useState(35);
+  const [announcementEditGap, setAnnouncementEditGap] = useState(32);
   const [newBroadcastText, setNewBroadcastText] = useState('');
+  const [mobileEditingAnnId, setMobileEditingAnnId] = useState<string | null>(null);
+  const [mobileEditingAnnText, setMobileEditingAnnText] = useState<string>('');
+  const [mobileDeletingAnnId, setMobileDeletingAnnId] = useState<string | null>(null);
 
   // Subscribe to real-time system announcement and accomplishments/notifications
   useEffect(() => {
     // 1. Subscribe to system wide broadcast marquee
-    const unsubSystem = databaseService.subscribeSystemAnnouncement((text) => {
+    const unsubSystem = databaseService.subscribeSystemAnnouncement((text, speed, gap) => {
       if (text) {
         setSystemAnnouncement(text);
         setAnnouncementEditText(text);
+        setSystemAnnouncementSpeed(speed || 35);
+        setSystemAnnouncementGap(gap || 32);
+        setAnnouncementEditSpeed(speed || 35);
+        setAnnouncementEditGap(gap || 32);
       }
     });
 
     // 2. Subscribe to general log/toast announcements
     const unsubAnnouncements = databaseService.subscribeAnnouncements((list: any[]) => {
-      if (list && list.length > 0) {
-        // Sort descending by timestamp
-        const sorted = [...list].sort((a, b) => b.timestamp - a.timestamp);
-        setAllAnnouncements(sorted);
+      const actualList = list || [];
+      // Sort descending by timestamp
+      const sorted = [...actualList].sort((a, b) => b.timestamp - a.timestamp);
+      setAllAnnouncements(sorted);
 
-        // Get count of unread based on when user last checked announcements
-        const lastRead = Number(localStorage.getItem('3t_last_read_ann_ts') || '0');
-        const unread = sorted.filter(a => a.timestamp > lastRead).length;
-        setUnreadNotificationsCount(unread);
-      }
+      // Get count of unread based on when user last checked announcements
+      const lastRead = Number(localStorage.getItem('3t_last_read_ann_ts') || '0');
+      const unread = sorted.filter(a => a.timestamp > lastRead).length;
+      setUnreadNotificationsCount(unread);
     });
 
     return () => {
@@ -1084,27 +1094,6 @@ export default function EmployeeDashboard({
         return name.trim().normalize('NFC').toUpperCase().replace(/\s+/g, ' ');
       };
 
-      const nameToUserIdMap: Record<string, string> = {};
-      const userIdToNameMap: Record<string, string> = {};
-      allUsersList.forEach(u => {
-        const norm = normalizeNameLocal(u.name);
-        if (u.id && norm) {
-          nameToUserIdMap[norm] = u.id;
-          userIdToNameMap[u.id] = u.name;
-        }
-      });
-
-      const userResultsMap: Record<string, QuizResult[]> = {};
-      allResults.forEach(r => {
-        const rNorm = r.userName ? normalizeNameLocal(r.userName) : '';
-        const rId = r.userId || nameToUserIdMap[rNorm] || '';
-        const key = rId || rNorm;
-        if (key) {
-          if (!userResultsMap[key]) userResultsMap[key] = [];
-          userResultsMap[key].push(r);
-        }
-      });
-
       const approvedUsers = allUsersList.filter(u => {
         const uStatus = (u.status || '').toUpperCase();
         return uStatus === 'APPROVED' || uStatus === 'APPROVED_MEMBER';
@@ -1125,7 +1114,15 @@ export default function EmployeeDashboard({
       for (const u of approvedUsers) {
         if (writeCount >= 5) break;
 
-        const uResults = userResultsMap[u.id] || userResultsMap[normalizeNameLocal(u.name)] || [];
+        // Robust results filtering for the user aligning perfectly with the profile view logic
+        const uNormName = normalizeNameLocal(u.name);
+        const uResults = allResults.filter(r => {
+          const rNorm = r.userName ? normalizeNameLocal(r.userName) : '';
+          return (r.userId && r.userId === u.id) ||
+                 (u.phone && r.userId === u.phone) ||
+                 (u.employeeId && r.userId === u.employeeId) ||
+                 (rNorm && rNorm === uNormName);
+        });
 
         const calcYesterday = calculateInactivityAugmentedLevel(u.id, uResults, activeRules, {
           inactivityStartDate: policyStartDate,
@@ -2928,14 +2925,19 @@ export default function EmployeeDashboard({
 
     const handlePublishBroadcast = async () => {
       if (!newBroadcastText.trim()) return;
+      const trimmedText = newBroadcastText.trim();
       try {
         await databaseService.saveAnnouncement({
           id: 'ann_broad_' + Date.now() + '_' + Math.random().toString(36).substring(2, 5),
           userName: user.name,
           type: 'admin_broadcast',
-          detail: newBroadcastText.trim(),
+          detail: trimmedText,
           timestamp: Date.now()
         });
+        
+        // Cập nhật lên chữ chạy hệ thống
+        await databaseService.saveSystemAnnouncement(trimmedText);
+
         setNewBroadcastText('');
         // Show success alert
         setAdminMobileNotice({ type: 'success', msg: 'Đăng thông báo ban quản trị thành công!' });
@@ -2979,26 +2981,56 @@ export default function EmployeeDashboard({
         {/* Content Body with overflow scrolling */}
         <div className="flex-1 overflow-y-auto pr-0.5 space-y-3 pb-4">
 
-          {/* Real-time System announcement block */}
           <div className="bg-amber-50/90 border border-amber-200 rounded-xl p-3 shadow-3xs shrink-0 font-sans">
             {isEditingAnnouncement ? (
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-2.5">
                 <div className="text-[10px] font-black uppercase text-[#D9480F] tracking-wide flex items-center gap-1">
                   <Bell className="h-3.5 w-3.5 text-amber-500 animate-swing" />
                   SỬA THÔNG BÁO CHỮ CHẠY HỆ THỐNG
                 </div>
-                <input
-                  type="text"
-                  value={announcementEditText}
-                  onChange={(e) => setAnnouncementEditText(e.target.value)}
-                  className="w-full text-xs p-2.5 border border-amber-300 rounded-lg bg-white font-sans text-slate-800 focus:outline-none focus:border-amber-500"
-                  placeholder="Nhập thông báo hiển thị cho toàn bộ hệ thống..."
-                  autoFocus
-                />
+                <div>
+                  <label className="block text-[9px] text-orange-850 uppercase font-bold tracking-wider mb-1">Nội dung thông báo</label>
+                  <input
+                    type="text"
+                    value={announcementEditText}
+                    onChange={(e) => setAnnouncementEditText(e.target.value)}
+                    className="w-full text-xs p-2 border border-amber-300 rounded-lg bg-white font-sans text-slate-800 focus:outline-none focus:border-amber-500"
+                    placeholder="Nhập thông báo hiển thị cho toàn bộ hệ thống..."
+                    autoFocus
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[9px] text-orange-850 uppercase font-bold tracking-wider mb-0.5">Tốc độ (giây)</label>
+                    <input
+                      type="number"
+                      min={5}
+                      max={120}
+                      value={announcementEditSpeed}
+                      onChange={(e) => setAnnouncementEditSpeed(Math.max(5, parseInt(e.target.value) || 35))}
+                      className="w-full text-xs p-1.5 border border-amber-300 rounded-lg bg-white font-sans text-slate-800 text-center focus:outline-none"
+                    />
+                    <span className="text-[8px] text-gray-400 block mt-0.5">Thời gian/vòng (nhỏ = nhanh)</span>
+                  </div>
+                  <div>
+                    <label className="block text-[9px] text-orange-850 uppercase font-bold tracking-wider mb-0.5">Khoảng cách (px)</label>
+                    <input
+                      type="number"
+                      min={10}
+                      max={200}
+                      value={announcementEditGap}
+                      onChange={(e) => setAnnouncementEditGap(Math.max(10, parseInt(e.target.value) || 32))}
+                      className="w-full text-xs p-1.5 border border-amber-300 rounded-lg bg-white font-sans text-slate-800 text-center focus:outline-none"
+                    />
+                    <span className="text-[8px] text-gray-400 block mt-0.5">Khoảng cách lặp (px)</span>
+                  </div>
+                </div>
                 <div className="flex justify-end gap-1.5 mt-1">
                   <button
                     onClick={() => {
                       setAnnouncementEditText(systemAnnouncement);
+                      setAnnouncementEditSpeed(systemAnnouncementSpeed);
+                      setAnnouncementEditGap(systemAnnouncementGap);
                       setIsEditingAnnouncement(false);
                     }}
                     className="px-3 py-1 bg-slate-200 text-slate-700 text-[10px] font-bold rounded-lg active:scale-95 transition-all text-center shrink-0 cursor-pointer"
@@ -3007,22 +3039,30 @@ export default function EmployeeDashboard({
                   </button>
                   <button
                     onClick={async () => {
-                      if (!announcementEditText.trim()) return;
                       const trimmedText = announcementEditText.trim();
                       try {
-                        await databaseService.saveSystemAnnouncement(trimmedText);
+                        await databaseService.saveSystemAnnouncement(trimmedText, announcementEditSpeed, announcementEditGap);
                         setSystemAnnouncement(trimmedText);
+                        setSystemAnnouncementSpeed(announcementEditSpeed);
+                        setSystemAnnouncementGap(announcementEditGap);
                         // Add log to announcements
                         await databaseService.saveAnnouncement({
                           id: 'ann_sys_' + Date.now(),
                           userName: user.name,
                           type: 'admin_broadcast',
-                          detail: trimmedText,
+                          detail: trimmedText || '(Không có thông báo - Trạng thái: TẮT)',
                           timestamp: Date.now()
                         });
                         setIsEditingAnnouncement(false);
+                        setAdminMobileNotice({ 
+                          type: 'success', 
+                          msg: trimmedText ? 'Đã lưu cấu hình thông báo chữ chạy!' : 'Đã tắt thông báo chữ chạy!' 
+                        });
+                        setTimeout(() => setAdminMobileNotice(null), 3000);
                       } catch (err) {
                         console.error("Lỗi:", err);
+                        setAdminMobileNotice({ type: 'error', msg: 'Không thể lưu cấu hình mới!' });
+                        setTimeout(() => setAdminMobileNotice(null), 3000);
                       }
                     }}
                     className="px-3 py-1 bg-[#2B8A3E] text-white text-[10px] font-bold rounded-lg active:scale-95 transition-all text-center shrink-0 cursor-pointer"
@@ -3043,6 +3083,8 @@ export default function EmployeeDashboard({
                     <button
                       onClick={() => {
                         setAnnouncementEditText(systemAnnouncement);
+                        setAnnouncementEditSpeed(systemAnnouncementSpeed);
+                        setAnnouncementEditGap(systemAnnouncementGap);
                         setIsEditingAnnouncement(true);
                       }}
                       className="p-1 rounded-md bg-amber-100 hover:bg-amber-200/80 active:scale-95 transition-all cursor-pointer shrink-0 flex items-center gap-1 text-[10px] text-amber-700 font-bold"
@@ -3053,10 +3095,14 @@ export default function EmployeeDashboard({
                     </button>
                   )}
                 </div>
-                <div className="bg-white/70 border border-amber-100/60 p-2.5 rounded-lg">
-                  <p translate="no" className="notranslate text-xs font-semibold text-slate-800 leading-relaxed font-sans">
-                    {systemAnnouncement}
+                <div className="bg-white/70 border border-amber-100/60 p-2.5 rounded-lg space-y-1.5">
+                  <p translate="no" className={`notranslate text-xs font-semibold leading-relaxed font-sans ${systemAnnouncement.trim() ? 'text-slate-800' : 'text-gray-400 italic'}`}>
+                    {systemAnnouncement.trim() ? systemAnnouncement : "(Đã tắt thông báo chữ chạy - Để trống)"}
                   </p>
+                  <div className="flex justify-between items-center text-[8.5px] text-gray-500 font-bold font-sans border-t border-amber-100/30 pt-1.5">
+                    <span>⏱️ Chạy: {systemAnnouncementSpeed} giây/vòng</span>
+                    <span>📏 Khoảng cách: {systemAnnouncementGap}px</span>
+                  </div>
                 </div>
               </div>
             )}
@@ -3171,12 +3217,130 @@ export default function EmployeeDashboard({
                           </>
                         )}
                         <span className="text-[10px] text-gray-400 font-mono ml-auto">{dateStr}</span>
+                        {(user.role === 'admin' || user.role === 'executive') && (
+                          <div className="flex items-center gap-1.5 ml-1 select-none shrink-0">
+                            {mobileDeletingAnnId === ann.id ? (
+                              <div className="flex items-center gap-1 bg-red-50 border border-red-200 rounded px-1.5 py-0.5 animate-fade-in font-sans">
+                                <span className="text-[8.5px] font-extrabold text-red-650 uppercase">Xóa?</span>
+                                <button
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    try {
+                                      await databaseService.deleteAnnouncement(ann.id);
+                                      setAllAnnouncements(prev => prev.filter(item => item.id !== ann.id));
+                                      setAdminMobileNotice({ type: 'success', msg: 'Xóa thông báo thành công!' });
+                                      setTimeout(() => setAdminMobileNotice(null), 3000);
+                                    } catch (err) {
+                                      console.error("Lỗi khi xóa:", err);
+                                      setAdminMobileNotice({ type: 'error', msg: 'Có lỗi xảy ra khi xóa thông báo!' });
+                                      setTimeout(() => setAdminMobileNotice(null), 3000);
+                                    } finally {
+                                      setMobileDeletingAnnId(null);
+                                    }
+                                  }}
+                                  className="px-1 text-[8.5px] py-px font-black bg-red-600 hover:bg-red-700 text-white rounded transition-all cursor-pointer"
+                                  title="Đồng ý xóa"
+                                >
+                                  Có
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setMobileDeletingAnnId(null);
+                                  }}
+                                  className="px-1 text-[8.5px] py-px font-black bg-slate-200 hover:bg-slate-300 text-slate-700 rounded transition-all cursor-pointer"
+                                  title="Hủy bỏ"
+                                >
+                                  Không
+                                </button>
+                              </div>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={() => {
+                                    setMobileEditingAnnId(ann.id);
+                                    setMobileEditingAnnText(ann.detail || '');
+                                  }}
+                                  className="p-1 rounded bg-sky-50 text-sky-600 hover:bg-sky-100 active:scale-95 transition-all cursor-pointer"
+                                  title="Sửa thông báo"
+                                >
+                                  <Pencil className="h-3 w-3" />
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setMobileDeletingAnnId(ann.id);
+                                  }}
+                                  className="p-1 rounded bg-rose-50 text-rose-600 hover:bg-rose-100 active:scale-95 transition-all cursor-pointer"
+                                  title="Xóa thông báo"
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        )}
                       </div>
-                      <p className={`text-xs mt-1 leading-normal ${textStyle}`}>
-                        <span translate="no" className="notranslate">
-                          {ann.detail ? (ann.detail.charAt(0).toUpperCase() + ann.detail.slice(1)) : ""}
-                        </span>
-                      </p>
+                      
+                      {mobileEditingAnnId === ann.id ? (
+                        <div className="mt-2 space-y-1.5 w-full font-sans">
+                          <textarea
+                            value={mobileEditingAnnText}
+                            onChange={(e) => setMobileEditingAnnText(e.target.value)}
+                            className="w-full text-xs p-2 border border-blue-300 rounded-lg bg-white font-sans text-slate-800 leading-normal focus:outline-none focus:border-blue-500"
+                            rows={2}
+                            autoFocus
+                          />
+                          <div className="flex justify-end gap-1.5 mt-1">
+                            <button
+                              onClick={() => {
+                                setMobileEditingAnnId(null);
+                                setMobileEditingAnnText('');
+                              }}
+                              className="px-2.5 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 text-[9px] font-bold rounded-md active:scale-95 transition-all text-center cursor-pointer flex items-center gap-1"
+                            >
+                              <X className="h-3 w-3" />
+                              <span>Hủy</span>
+                            </button>
+                            <button
+                              onClick={async () => {
+                                if (!mobileEditingAnnText.trim()) return;
+                                const cleanedText = mobileEditingAnnText.trim();
+                                try {
+                                  const updatedAnn = {
+                                    ...ann,
+                                    detail: cleanedText
+                                  };
+                                  await databaseService.saveAnnouncement(updatedAnn);
+
+                                  // Đồng bộ sang chữ chạy hệ thống nếu đây là dạng thông báo quản trị (loại admin_broadcast hoặc id dạng ann_sys_)
+                                  if (ann.type === 'admin_broadcast' || ann.id?.startsWith('ann_sys_') || ann.id?.startsWith('ann_broad_')) {
+                                    await databaseService.saveSystemAnnouncement(cleanedText);
+                                  }
+
+                                  setMobileEditingAnnId(null);
+                                  setMobileEditingAnnText('');
+                                  setAdminMobileNotice({ type: 'success', msg: 'Cập nhật thông báo thành công!' });
+                                  setTimeout(() => setAdminMobileNotice(null), 3000);
+                                } catch (err) {
+                                  console.error("Lỗi cập nhật:", err);
+                                  setAdminMobileNotice({ type: 'error', msg: 'Có lỗi xảy ra khi cập nhật!' });
+                                  setTimeout(() => setAdminMobileNotice(null), 3000);
+                                }
+                              }}
+                              className="px-2.5 py-1 bg-[#2B8A3E] hover:bg-[#237032] text-white text-[9px] font-bold rounded-md active:scale-95 transition-all text-center cursor-pointer flex items-center gap-1"
+                            >
+                              <CheckCircle2 className="h-3 w-3" />
+                              <span>Lưu</span>
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className={`text-xs mt-1 leading-normal ${textStyle}`}>
+                          <span translate="no" className="notranslate">
+                            {ann.detail ? (ann.detail.charAt(0).toUpperCase() + ann.detail.slice(1)) : ""}
+                          </span>
+                        </p>
+                      )}
                     </div>
                   </div>
                 );
@@ -4107,20 +4271,28 @@ export default function EmployeeDashboard({
               )}
             </div>
 
-            {/* Inactivity alert text */}
-            <div className="text-[9.5px]">
-              {state.inactiveDaysWarning ? (
-                <div className="text-red-700 bg-red-50 border border-red-100 p-2 rounded-lg font-bold flex items-center gap-1.5 animate-pulse">
-                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-red-600" />
-                  Nguy cơ bị hạ cấp thứ hạng vào 0h00 nếu không đủ 02 lượt!
-                </div>
-              ) : (
-                <div className="text-green-700 bg-green-50/60 border border-green-100 p-2 rounded-lg font-bold flex items-center gap-1.5">
-                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-green-600" />
-                  Đã hoàn tất 2 lượt ôn tập tối thiểu hôm nay!
-                </div>
-              )}
-            </div>
+             {/* Inactivity alert text */}
+             <div className="text-[9.5px]">
+               {state.inactiveDaysWarning ? (
+                 <div className="text-red-700 bg-red-50 border border-red-100 p-2 rounded-lg font-bold flex items-center gap-1.5 animate-pulse">
+                   <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-red-600" />
+                   {state.level === 5 && getVietnamDateString() >= '2026-06-17' ? (
+                     <span>Huyền Thoại: Chưa đạt chuẩn giữ hạng (Cần ≥ 2 lượt & điểm TB ≥ 20/30đ)!</span>
+                   ) : (
+                     <span>Nguy cơ bị hạ cấp thứ hạng vào 0h00 nếu không đủ 02 lượt!</span>
+                   )}
+                 </div>
+               ) : (
+                 <div className="text-green-700 bg-green-50/60 border border-green-100 p-2 rounded-lg font-bold flex items-center gap-1.5">
+                   <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-green-600" />
+                   {state.level === 5 && getVietnamDateString() >= '2026-06-17' ? (
+                     <span>Huyền Thoại: Đã hoàn tất bảo trì giữ hạng (≥ 2 lượt & điểm TB ≥ 20) hôm nay!</span>
+                   ) : (
+                     <span>Đã hoàn tất 2 lượt ôn tập tối thiểu hôm nay!</span>
+                   )}
+                 </div>
+               )}
+             </div>
 
             {/* overall metrics display box */}
             <div className="grid grid-cols-2 gap-2 bg-gray-50/50 border border-gray-150 p-2 rounded-lg text-[10px]">
@@ -5384,6 +5556,25 @@ export default function EmployeeDashboard({
           
           {/* Screen Inner Viewport (Auto-co giãn, scrollable elegantly like a native application) */}
           <div ref={innerViewportRef} onScroll={handleScroll} className="bg-white w-full h-full rounded-[24px] overflow-hidden flex flex-col shadow-inner relative border border-gray-150 p-3 sm:p-4 overflow-y-auto style-scrollbar flex-1">
+            
+            {/* Global compact running marquee announcement banner */}
+            {systemAnnouncement && systemAnnouncement.trim() ? (
+              <div className="sticky top-0 z-45 mx-[-12.5px] mt-[-12.5px] sm:mx-[-16.5px] sm:mt-[-16.5px] mb-2 px-3 bg-[#FFF9DB] border-b border-amber-250/70 text-amber-900 text-[9.5px] font-bold py-1 overflow-hidden shrink-0 flex items-center shadow-xs select-none">
+                <div 
+                  className="animate-marquee notranslate flex whitespace-nowrap" 
+                  style={{ 
+                    animationDuration: `${systemAnnouncementSpeed}s`, 
+                    gap: `${systemAnnouncementGap}px` 
+                  }} 
+                  translate="no"
+                >
+                  <span>{systemAnnouncement}</span>
+                  <span className="text-amber-400 select-none">✦</span>
+                  <span>{systemAnnouncement}</span>
+                  <span className="text-amber-400 select-none">✦</span>
+                </div>
+              </div>
+            ) : null}
             
             {/* Dynamic Inner Panel Viewports */}
             <AnimatePresence mode="wait">
@@ -6679,11 +6870,15 @@ export default function EmployeeDashboard({
                         )}
                         {difficulty === 5 && (
                           <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full border shadow-2xs ${
-                            difficultyState.consecutiveLow > 0 
+                            getVietnamDateString() >= '2026-06-17'
+                              ? 'text-purple-600 bg-purple-50 border-purple-200'
+                              : difficultyState.consecutiveLow > 0 
                               ? 'text-rose-755 bg-rose-55 border-rose-250 animate-pulse' 
                               : 'text-rose-600 bg-rose-50 border-rose-200'
                           }`}>
-                            {difficultyState.consecutiveLow > 0
+                            {getVietnamDateString() >= '2026-06-17'
+                              ? '🔮 Cấp 5 Huyền Thoại (Quy chế mới)'
+                              : difficultyState.consecutiveLow > 0
                               ? `⚠️ Điểm < 28: ${difficultyState.consecutiveLow}/2`
                               : '👑 Cấp 5 Huyền Thoại'
                             }

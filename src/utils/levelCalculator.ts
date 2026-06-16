@@ -158,17 +158,22 @@ export function calculateInactivityAugmentedLevel(
 
   // Generate sequence of dates from firstActiveDateStr to todayStr inclusive
   const dateSequence: string[] = [];
-  let runner = new Date(firstActiveDateStr);
-  const endLimit = new Date(todayStr);
+  const parseSafeDate = (dStr: string) => {
+    const [y, m, d] = dStr.split('-').map(Number);
+    return new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+  };
 
-  // Safety break max 100 days
+  let runner = parseSafeDate(firstActiveDateStr);
+  const endLimit = parseSafeDate(todayStr);
+
+  // Safety break max 365 days
   let protection = 0;
   while (runner <= endLimit && protection < 365) {
-    const yyyy = runner.getFullYear();
-    const mm = String(runner.getMonth() + 1).padStart(2, '0');
-    const dd = String(runner.getDate()).padStart(2, '0');
+    const yyyy = runner.getUTCFullYear();
+    const mm = String(runner.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(runner.getUTCDate()).padStart(2, '0');
     dateSequence.push(`${yyyy}-${mm}-${dd}`);
-    runner.setDate(runner.getDate() + 1);
+    runner.setUTCDate(runner.getUTCDate() + 1);
     protection++;
   }
 
@@ -189,8 +194,29 @@ export function calculateInactivityAugmentedLevel(
       // Only apply inactivity penalty if prevDateStr is on or after the policy start date
       if (prevDateStr >= policyStartDateStr) {
         const attemptsPrev = attemptsByDate[prevDateStr] || 0;
-        if (attemptsPrev < 2) {
-          // Demote level by 1 for inactivity
+        const isLvl5AndNewRule = (currentLevel === 5 && prevDateStr >= '2026-06-17');
+
+        let failedMaintenance = false;
+        if (isLvl5AndNewRule) {
+          // For level 5, starting from 2026-06-17:
+          // maintenance requires: at least 2 attempts AND average score >= 20/30
+          const prevRes = resultsByDate[prevDateStr] || [];
+          const avgScorePrev = prevRes.length > 0 
+            ? prevRes.reduce((sum, r) => sum + r.score, 0) / prevRes.length 
+            : 0;
+
+          if (attemptsPrev < 2 || avgScorePrev < 20) {
+            failedMaintenance = true;
+          }
+        } else {
+          // Standard inactivity: less than 2 attempts
+          if (attemptsPrev < 2) {
+            failedMaintenance = true;
+          }
+        }
+
+        if (failedMaintenance) {
+          // Demote level by 1 for inactivity / failure to maintain
           if (currentLevel > 1) {
             currentLevel -= 1;
             demotionsApplied += 1;
@@ -228,6 +254,8 @@ export function calculateInactivityAugmentedLevel(
         const demotionMin = parseDemotionThreshold(1, 20);
         if (score < demotionMin) {
           consecutiveLow++;
+        } else {
+          consecutiveLow = 0;
         }
         const req = parseRequiredConsecutive(1, 10);
         if (consecutiveMax >= req) {
@@ -248,6 +276,8 @@ export function calculateInactivityAugmentedLevel(
         const demotionMin = parseDemotionThreshold(2, 26);
         if (score < demotionMin) {
           consecutiveLow++;
+        } else {
+          consecutiveLow = 0;
         }
         const req = parseRequiredConsecutive(2, 10);
         if (consecutiveMax >= req) {
@@ -268,6 +298,8 @@ export function calculateInactivityAugmentedLevel(
         const demotionMin = parseDemotionThreshold(3, 27);
         if (score < demotionMin) {
           consecutiveLow++;
+        } else {
+          consecutiveLow = 0;
         }
         const req = parseRequiredConsecutive(3, 10);
         if (consecutiveMax >= req) {
@@ -285,13 +317,21 @@ export function calculateInactivityAugmentedLevel(
         } else {
           consecutiveMax = 0;
         }
-        const demotionMin = parseDemotionThreshold(4, 28);
-        if (score < demotionMin) {
-          consecutiveLow++;
-        }
-        if (consecutiveLow >= 2) {
-          currentLevel = 4;
-          consecutiveMax = 0;
+        // From 17/06/2026, Level 5 does not get demoted due to single score drops
+        const isNewRuleActive = (dateStr >= '2026-06-17');
+        if (!isNewRuleActive) {
+          const demotionMin = parseDemotionThreshold(4, 28);
+          if (score < demotionMin) {
+            consecutiveLow++;
+          } else {
+            consecutiveLow = 0;
+          }
+          if (consecutiveLow >= 2) {
+            currentLevel = 4;
+            consecutiveMax = 0;
+            consecutiveLow = 0;
+          }
+        } else {
           consecutiveLow = 0;
         }
       }
@@ -303,7 +343,24 @@ export function calculateInactivityAugmentedLevel(
   // Check if today satisfies the maintenance criteria (at least 2 quizzes)
   const attemptsToday = attemptsByDate[todayStr] || 0;
   const isRuleActiveForToday = todayStr >= policyStartDateStr;
-  const inactiveDaysWarning = isRuleActiveForToday && (attemptsToday < 2) && (currentLevel > 1);
+
+  let inactiveDaysWarning = false;
+  if (isRuleActiveForToday && currentLevel > 1) {
+    if (currentLevel === 5 && todayStr >= '2026-06-17') {
+      const todayRes = resultsByDate[todayStr] || [];
+      const avgScoreToday = todayRes.length > 0 
+        ? todayRes.reduce((sum, r) => sum + r.score, 0) / todayRes.length 
+        : 0;
+
+      if (attemptsToday < 2 || avgScoreToday < 20) {
+        inactiveDaysWarning = true;
+      }
+    } else {
+      if (attemptsToday < 2) {
+        inactiveDaysWarning = true;
+      }
+    }
+  }
 
   return {
     level: currentLevel,

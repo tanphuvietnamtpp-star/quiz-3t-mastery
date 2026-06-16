@@ -80,7 +80,7 @@ const DEFAULT_LEVEL_RULES: LevelRulesConfig = {
       name: "Cấp 5: Huyền Thoại",
       emoji: "🔮",
       promotion: "Cấp bậc cao nhất hệ thống (Giữ nguyên).",
-      demotion: "Đạt dưới 28 điểm trong 2 lần thi liên tiếp sẽ bị hạ về Tối Cao (có cảnh báo ở lần đầu).",
+      demotion: "Đạt dưới 28 điểm trong 2 lần thi (áp dụng trước 17/06/26). CHÍNH THỨC TỪ 0h00 NGÀY 17/06/26: CHỈ cần duy trì ít nhất 2 lượt mỗi ngày và đạt điểm trung bình >= 20/30đ là đạt yêu cầu. Trường hợp không duy trì thì bị hạ cấp tự động.",
       maxTime: "15s/câu",
       reactionPoints: ["≤ 3s (+10đ)", "4s-5s (+8đ)", "6s-8s (+6đ)", "9s-15s (+5đ)"]
     }
@@ -145,8 +145,12 @@ export default function AdminDashboard({
 
   // System Announcement States
   const [systemAnnouncement, setSystemAnnouncement] = useState('Chào mừng toàn thể cán bộ nhân viên đến với Hội Thi Văn Hóa 3T! Tốc độ là sống còn - Tinh gọn là sức mạnh!');
+  const [systemAnnouncementSpeed, setSystemAnnouncementSpeed] = useState(35);
+  const [systemAnnouncementGap, setSystemAnnouncementGap] = useState(32);
   const [isEditingAnnouncement, setIsEditingAnnouncement] = useState(false);
   const [announcementEditText, setAnnouncementEditText] = useState('');
+  const [announcementEditSpeed, setAnnouncementEditSpeed] = useState(35);
+  const [announcementEditGap, setAnnouncementEditGap] = useState(32);
   const [allAnnouncements, setAllAnnouncements] = useState<any[]>([]);
   const [lastReadAnnouncementAdminTimestamp, setLastReadAnnouncementAdminTimestamp] = useState<number>(() => Number(localStorage.getItem('3t_admin_last_read_ann_ts') || '0'));
   const [unreadAnnouncementsCount, setUnreadAnnouncementsCount] = useState(0);
@@ -587,9 +591,11 @@ export default function AdminDashboard({
     });
 
     // Subscribe to system announcement in real-time
-    const unsubscribeSystem = databaseService.subscribeSystemAnnouncement((text) => {
+    const unsubscribeSystem = databaseService.subscribeSystemAnnouncement((text, speed, gap) => {
       if (text) {
         setSystemAnnouncement(text);
+        setSystemAnnouncementSpeed(speed || 35);
+        setSystemAnnouncementGap(gap || 32);
       }
     });
 
@@ -1806,6 +1812,25 @@ export default function AdminDashboard({
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
+      {/* Global compact running marquee announcement banner */}
+      {systemAnnouncement && systemAnnouncement.trim() ? (
+        <div className="bg-[#FFF9DB] border-b border-amber-200 text-amber-900 text-[10.5px] font-bold py-1.5 overflow-hidden flex items-center shrink-0 z-50 select-none">
+          <div 
+            className="animate-marquee notranslate flex whitespace-nowrap animate-marquee-container" 
+            style={{ 
+              animationDuration: `${systemAnnouncementSpeed}s`, 
+              gap: `${systemAnnouncementGap}px` 
+            }} 
+            translate="no"
+          >
+            <span>{systemAnnouncement}</span>
+            <span className="text-amber-400 select-none">✦</span>
+            <span>{systemAnnouncement}</span>
+            <span className="text-amber-400 select-none">✦</span>
+          </div>
+        </div>
+      ) : null}
+
       {/* Navigation Bar */}
       <header className="bg-white border-b border-gray-150 py-4 px-6 shrink-0 shadow-sm">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
@@ -4222,18 +4247,49 @@ export default function AdminDashboard({
                     </div>
                     {isEditingAnnouncement ? (
                       <div className="space-y-3">
-                        <textarea
-                          rows={3}
-                          value={announcementEditText}
-                          onChange={(e) => setAnnouncementEditText(e.target.value)}
-                          className="w-full text-xs p-2.5 border border-amber-300 rounded-lg bg-white text-slate-850 outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 font-sans leading-relaxed"
-                          placeholder="Nhập thông báo hiển thị cho toàn bộ hệ thống..."
-                          autoFocus
-                        />
+                        <div>
+                          <label className="block text-[10px] text-gray-500 uppercase font-black tracking-wider mb-1">Nội dung thông báo</label>
+                          <textarea
+                            rows={3}
+                            value={announcementEditText}
+                            onChange={(e) => setAnnouncementEditText(e.target.value)}
+                            className="w-full text-xs p-2.5 border border-amber-300 rounded-lg bg-white text-slate-850 outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 font-sans leading-relaxed"
+                            placeholder="Nhập thông báo hiển thị cho toàn bộ hệ thống..."
+                            autoFocus
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[10px] text-gray-500 uppercase font-black tracking-wider mb-1">Tốc độ chạy (giây)</label>
+                            <input
+                              type="number"
+                              min={5}
+                              max={120}
+                              value={announcementEditSpeed}
+                              onChange={(e) => setAnnouncementEditSpeed(Math.max(5, parseInt(e.target.value) || 35))}
+                              className="w-full text-xs p-2 border border-amber-300 rounded-lg bg-white text-slate-850 outline-none focus:ring-1 focus:ring-amber-500 font-sans"
+                            />
+                            <span className="text-[9px] text-gray-400">Giây/vòng. Nhỏ = nhanh hơn</span>
+                          </div>
+                          <div>
+                            <label className="block text-[10px] text-gray-500 uppercase font-black tracking-wider mb-1">Khoảng cách lặp (px)</label>
+                            <input
+                              type="number"
+                              min={10}
+                              max={200}
+                              value={announcementEditGap}
+                              onChange={(e) => setAnnouncementEditGap(Math.max(10, parseInt(e.target.value) || 32))}
+                              className="w-full text-xs p-2 border border-amber-300 rounded-lg bg-white text-slate-850 outline-none focus:ring-1 focus:ring-amber-500 font-sans"
+                            />
+                            <span className="text-[9px] text-gray-400">Khoảng cách giữa 2 vòng chạy</span>
+                          </div>
+                        </div>
                         <div className="flex gap-2 justify-end">
                           <button
                             onClick={() => {
                               setAnnouncementEditText(systemAnnouncement);
+                              setAnnouncementEditSpeed(systemAnnouncementSpeed);
+                              setAnnouncementEditGap(systemAnnouncementGap);
                               setIsEditingAnnouncement(false);
                             }}
                             className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-slate-700 text-[11px] font-bold rounded-md transition-all active:scale-95 cursor-pointer"
@@ -4242,39 +4298,46 @@ export default function AdminDashboard({
                           </button>
                           <button
                             onClick={async () => {
-                              if (!announcementEditText.trim()) return;
                               const trimmedText = announcementEditText.trim();
                               try {
-                                await databaseService.saveSystemAnnouncement(trimmedText);
+                                await databaseService.saveSystemAnnouncement(trimmedText, announcementEditSpeed, announcementEditGap);
                                 setSystemAnnouncement(trimmedText);
+                                setSystemAnnouncementSpeed(announcementEditSpeed);
+                                setSystemAnnouncementGap(announcementEditGap);
                                 // Log to database
                                 await databaseService.saveAnnouncement({
                                   id: 'ann_sys_' + Date.now(),
                                   userName: user.name,
                                   type: 'admin_broadcast',
-                                  detail: trimmedText,
+                                  detail: trimmedText || '(Không có thông báo - Trạng thái: TẮT)',
                                   timestamp: Date.now()
                                 });
                                 setIsEditingAnnouncement(false);
-                                alert("Đã lưu thông báo chữ chạy mới!");
+                                alert(trimmedText ? "Đã lưu cấu hình thông báo chữ chạy mới!" : "Đã tắt thông báo chữ chạy hệ thống!");
                               } catch (err) {
                                 console.error("Lỗi cập nhật thông báo chữ chạy:", err);
                               }
                             }}
                             className="px-3 py-1.5 bg-[#2B8A3E] text-white text-[11px] font-bold rounded-md transition-all active:scale-95 cursor-pointer"
                           >
-                            Lưu thông báo
+                            Lưu cấu hình
                           </button>
                         </div>
                       </div>
                     ) : (
                       <div className="space-y-3">
-                        <div className="p-3 bg-amber-50/70 border border-amber-100 rounded-lg leading-relaxed text-slate-805 text-xs font-bold">
-                          {systemAnnouncement}
+                        <div className={`p-3 bg-amber-50/70 border border-amber-100 rounded-lg leading-relaxed text-xs font-bold ${systemAnnouncement.trim() ? "text-slate-805" : "text-gray-400 italic"}`}>
+                          {systemAnnouncement.trim() ? systemAnnouncement : "(Đã tắt thông báo chữ chạy - Để trống)"}
+                        </div>
+                        <div className="flex justify-between items-center bg-gray-50/70 rounded-md border border-gray-150 p-2 text-[10px] text-gray-500 font-medium font-sans">
+                          <span>⏱️ Tốc độ: <strong className="text-gray-700">{systemAnnouncementSpeed} giây/vòng</strong></span>
+                          <span>📏 Khoảng cách: <strong className="text-gray-700">{systemAnnouncementGap}px</strong></span>
                         </div>
                         <button
                           onClick={() => {
                             setAnnouncementEditText(systemAnnouncement);
+                            setAnnouncementEditSpeed(systemAnnouncementSpeed);
+                            setAnnouncementEditGap(systemAnnouncementGap);
                             setIsEditingAnnouncement(true);
                           }}
                           className="w-full py-1.5 bg-amber-50 hover:bg-amber-100/80 active:scale-95 rounded-md border border-amber-200 text-amber-850 font-bold text-[11px] transition-all flex items-center justify-center gap-1.5 cursor-pointer"
@@ -4694,14 +4757,29 @@ export default function AdminDashboard({
                                 Hôm nay: <span className="font-bold font-mono">{state.attemptsToday} / 2 lượt</span>
                               </p>
                               {state.inactiveDaysWarning ? (
-                                <p className="text-[9px] text-red-650 font-bold flex items-center gap-1 animate-pulse">
-                                  <AlertTriangle className="h-3 w-3 shrink-0" />
-                                  Có nguy cơ hạ cấp nếu không đủ 2 lượt!
+                                <p className="text-[9px] text-red-650 font-bold flex flex-col gap-0.5 animate-pulse">
+                                  <span className="flex items-center gap-1">
+                                    <AlertTriangle className="h-3 w-3 shrink-0" />
+                                    {state.level === 5 && getVietnamDateString() >= '2026-06-17' ? (
+                                      <span>Huyền Thoại: Chưa đạt bảo trì giữ hạng!</span>
+                                    ) : (
+                                      <span>Có nguy cơ hạ cấp nếu không đủ 2 lượt!</span>
+                                    )}
+                                  </span>
+                                  {state.level === 5 && getVietnamDateString() >= '2026-06-17' && (
+                                    <span className="text-[8px] pl-4 text-red-500 font-medium font-sans">
+                                      {"Yêu cầu rèn luyện ít nhất 02 lượt/ngày và điểm TB hôm nay >= 20."}
+                                    </span>
+                                  )}
                                 </p>
                               ) : (
                                 <p className="text-[9px] text-green-700 font-bold flex items-center gap-1">
                                   <CheckCircle2 className="h-3 w-3 shrink-0" />
-                                  Đã đạt chuẩn giữ hạng hôm nay!
+                                  {state.level === 5 && getVietnamDateString() >= '2026-06-17' ? (
+                                    <span>Huyền Thoại: Đã đạt giữ hạng hôm nay!</span>
+                                  ) : (
+                                    <span>Đã đạt chuẩn giữ hạng hôm nay!</span>
+                                  )}
                                 </p>
                               )}
                             </div>

@@ -17,7 +17,7 @@ const DEFAULT_LEVEL_RULES: LevelRulesConfig = {
     { level: 2, name: "Cấp 2: Chiến Binh", emoji: "⚡", promotion: "10 lượt liên tục", demotion: "Dưới 15 điểm", maxTime: "90s/câu", reactionPoints: [] },
     { level: 3, name: "Cấp 3: Thống Lĩnh", emoji: "🔥", promotion: "15 lượt liên tục", demotion: "Dưới 20 điểm", maxTime: "90s/câu", reactionPoints: [] },
     { level: 4, name: "Cấp 4: Tối Cao", emoji: "👑", promotion: "20 lượt liên tục", demotion: "Dưới 25 điểm", maxTime: "90s/câu", reactionPoints: [] },
-    { level: 5, name: "Cấp 5: Huyền Thoại", emoji: "🏆", promotion: "Giữ nguyên", demotion: "Dưới 28 điểm", maxTime: "90s/câu", reactionPoints: [] }
+    { level: 5, name: "Cấp 5: Huyền Thoại", emoji: "🏆", promotion: "Giữ nguyên", demotion: "Duy trì >=2 lượt/ngày và điểm TB >= 20/30đ (từ 17/06/2026)", maxTime: "90s/câu", reactionPoints: [] }
   ],
   inactivityRule1: "",
   inactivityRule2: ""

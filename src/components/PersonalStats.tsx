@@ -62,7 +62,7 @@ const DEFAULT_LEVEL_RULES: LevelRulesConfig = {
       name: "Cấp 5: Huyền Thoại",
       emoji: "🔮",
       promotion: "Cấp bậc cao nhất hệ thống (Giữ nguyên).",
-      demotion: "Đạt dưới 28 điểm trong 2 lần thi liên tiếp sẽ bị hạ về Tối Cao (có cảnh báo ở lần đầu).",
+      demotion: "Đạt dưới 28 điểm trong 2 lần thi (áp dụng trước 17/06/26). CHÍNH THỨC TỪ 0h00 NGÀY 17/06/26: CHỈ cần duy trì ít nhất 2 lượt mỗi ngày và đạt điểm trung bình >= 20/30đ là đạt yêu cầu. Trường hợp không duy trì thì bị hạ cấp tự động.",
       maxTime: "15s/câu",
       reactionPoints: ["≤ 3s (+10đ)", "4s-5s (+8đ)", "6s-8s (+6đ)", "9s-15s (+5đ)"]
     }

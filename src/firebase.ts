@@ -326,6 +326,39 @@ const forceSeedCompanyMappings = async () => {
   }
 };
 
+const forceSeedLevel5Announcement = async () => {
+  if (isFirebaseConfigured && db) {
+    try {
+      const annId = 'announcement_lvl5_new_policy';
+      const docRef = doc(db, 'congratulations_announcements', annId);
+      const snap = await getDocFromServer(docRef).catch(() => null);
+      if (!snap || !snap.exists()) {
+        const payload = {
+          id: annId,
+          userName: 'Ban Quản Trị Hệ Thống 3T Mastery',
+          type: 'admin_broadcast',
+          title: '🔥 CẬP NHẬT QUY CHẾ BẢO TRÌ CẤP 5 HUYỀN THOẠI từ ngày 17/06/2026',
+          detail: '🌟 Cập nhật quy chế thăng - hạ hạng dành riêng cho Cấp 5 Huyền Thoại:\n\n🔔 CHÍNH THỨC ÁP DỤNG TỪ 0H00 NGÀY 17/06/2026:\n\n1️⃣ Loại bỏ hoàn toàn cơ chế hạ cấp tích lũy khi thi đạt dưới 28đ trong nhiều kì liên tiếp như quy chế trước.\n2️⃣ Quy chế bảo trì giữ hạng mới: Nhân viên đạt Cấp 5 Huyền Thoại CHỈ cần hoàn thành tối thiểu 02 lượt ôn tập luyện đề mỗi ngày VÀ đạt điểm trung bình chung trong ngày của tất cả các lượt thi đó từ 20/30đ trở lên.\n3️⃣ Nếu không duy trì đủ 2 lượt ôn tập hoặc điểm trung bình rơi dưới 20 điểm vào ngày rèn luyện, hệ thống sẽ tự động hạ cấp xuống Cấp 4 Tối Cao tại thời điểm 0h00 của ngày tiếp theo.\n\nKính báo toàn thể CBNV nắm rõ quy định để tiếp tục giữ vững tinh thần rèn luyện 3T!',
+          timestamp: 1781539200000 // June 14, 2026 UTC, near current simulated date (2026-06-15)
+        };
+        await setDoc(docRef, payload);
+        console.log("[SUCCESS] Đã khởi tạo thông báo quy chế mới Cấp 5 Huyền Thoại lên Bảng Tin.");
+      }
+
+      // Also set/update the System Announcement running banner
+      const sysAnnRef = doc(db, 'config', 'system_announcement');
+      const sysSnap = await getDocFromServer(sysAnnRef).catch(() => null);
+      const systemText = "📢 Từ 17/06, bảo trì Cấp 5 Huyền Thoại: Cần ≥ 2 lượt/ngày & Điểm TB ngày ≥ 20/30đ để giữ hạng.";
+      if (!sysSnap || !sysSnap.exists() || !sysSnap.data()?.text || !sysSnap.data()?.text.includes("Từ 17/06")) {
+        await setDoc(sysAnnRef, { text: systemText, updatedAt: Date.now() });
+        console.log("[SUCCESS] Đã cập nhật dòng chữ chạy Thông Báo Hệ Thống về quy chế Cấp 5 mới.");
+      }
+    } catch (err) {
+      console.error("Automatic seeding of Level 5 announcement failed:", err);
+    }
+  }
+};
+
 export const initializeDatabase = async (): Promise<void> => {
   if (initPromise) return initPromise;
 
@@ -373,7 +406,7 @@ export const initializeDatabase = async (): Promise<void> => {
           try {
             const probePromise = getDocFromServer(doc(dbCandidate, 'user_profiles', 'probe_connection'));
             const timeoutPromise = new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('Timeout connecting to custom named database')), 1500)
+               setTimeout(() => reject(new Error('Timeout connecting to custom named database')), 1500)
             );
             await Promise.race([probePromise, timeoutPromise]);
             db = dbCandidate;
@@ -389,6 +422,7 @@ export const initializeDatabase = async (): Promise<void> => {
         console.log("[SUCCESS] ĐÃ KẾT NỐI ĐÚNG VÀO DỰ ÁN: quiz-3t-mastery");
         await forceSeedSupremeAdmin();
         await forceSeedCompanyMappings();
+        await forceSeedLevel5Announcement();
       } catch (err) {
         console.error("Error setting up Firestore:", err);
       }
@@ -1356,9 +1390,13 @@ export const databaseService = {
     return unsubscribe;
   },
 
-  subscribeSystemAnnouncement(onUpdate: (text: string) => void): () => void {
+  subscribeSystemAnnouncement(onUpdate: (text: string, speed: number, gap: number) => void): () => void {
     if (!isFirebaseConfigured || !db) {
-      onUpdate(localStorage.getItem('3t_system_announcement') || 'Chào mừng toàn thể cán bộ nhân viên đến với Hội Thi Văn Hóa 3T! Tốc độ là sống còn - Tinh gọn là sức mạnh!');
+      onUpdate(
+        localStorage.getItem('3t_system_announcement') || 'Chào mừng toàn thể cán bộ nhân viên đến với Hội Thi Văn Hóa 3T! Tốc độ là sống còn - Tinh gọn là sức mạnh!',
+        Number(localStorage.getItem('3t_system_announcement_speed') || '35'),
+        Number(localStorage.getItem('3t_system_announcement_gap') || '32')
+      );
       return () => {};
     }
     const docRef = doc(db, 'config', 'system_announcement');
@@ -1366,12 +1404,18 @@ export const databaseService = {
       incrementQuota('reads', 1);
       if (docSnap.exists()) {
         const text = docSnap.data().text || '';
-        onUpdate(text);
+        const speed = docSnap.data().speed || 35;
+        const gap = docSnap.data().gap || 32;
+        onUpdate(text, speed, gap);
         localStorage.setItem('3t_system_announcement', text);
+        localStorage.setItem('3t_system_announcement_speed', String(speed));
+        localStorage.setItem('3t_system_announcement_gap', String(gap));
       } else {
         const defaultText = 'Chào mừng toàn thể cán bộ nhân viên đến với Hội Thi Văn Hóa 3T! Tốc độ là sống còn - Tinh gọn là sức mạnh!';
-        onUpdate(defaultText);
+        onUpdate(defaultText, 35, 32);
         localStorage.setItem('3t_system_announcement', defaultText);
+        localStorage.setItem('3t_system_announcement_speed', '35');
+        localStorage.setItem('3t_system_announcement_gap', '32');
       }
     }, (error) => {
       console.warn("Error subscribing to system announcement:", error);
@@ -1379,17 +1423,19 @@ export const databaseService = {
     return unsubscribe;
   },
 
-  async saveSystemAnnouncement(text: string): Promise<void> {
+  async saveSystemAnnouncement(text: string, speed: number = 35, gap: number = 32): Promise<void> {
     await initializeDatabase();
     if (isFirebaseConfigured && db) {
       try {
-        await setDoc(doc(db, 'config', 'system_announcement'), { text });
+        await setDoc(doc(db, 'config', 'system_announcement'), { text, speed, gap });
         incrementQuota('writes', 1);
       } catch (err) {
         console.warn('Error saving system announcement:', err);
       }
     }
     localStorage.setItem('3t_system_announcement', text);
+    localStorage.setItem('3t_system_announcement_speed', String(speed));
+    localStorage.setItem('3t_system_announcement_gap', String(gap));
   },
 
   async getMotivationalSlogans(): Promise<MotivationalSloganBand[]> {
@@ -1809,7 +1855,7 @@ export const databaseService = {
           name: "Cấp 5: Huyền Thoại",
           emoji: "🔮",
           promotion: "Cấp bậc cao nhất hệ thống (Giữ nguyên).",
-          demotion: "Đạt dưới 28 điểm trong 2 lần thi liên tiếp sẽ bị hạ về Tối Cao (có cảnh báo ở lần đầu).",
+          demotion: "Đạt dưới 28 điểm trong 2 lần thi (áp dụng trước 17/06/26). CHÍNH THỨC TỪ 0h00 NGÀY 17/06/26: CHỈ cần duy trì ít nhất 2 lượt mỗi ngày và đạt điểm trung bình >= 20/30đ là đạt yêu cầu. Trường hợp không duy trì thì bị hạ cấp tự động.",
           maxTime: "15s/câu",
           reactionPoints: ["≤ 3s (+10đ)", "4s-5s (+8đ)", "6s-8s (+6đ)", "9s-15s (+5đ)"]
         }
@@ -1822,7 +1868,22 @@ export const databaseService = {
         const snap = await getDoc(docRef);
         incrementQuota('reads', 1);
         if (snap.exists()) {
-          const cloudConfig = snap.data() as LevelRulesConfig;
+          const cloudConfig = snap.data() as any;
+          if (cloudConfig.levels && cloudConfig.levels[4]) {
+            const lvl5 = cloudConfig.levels[4];
+            const demotion = lvl5.demotionCriteria || lvl5.demotion || '';
+            if (demotion && demotion.includes("28 điểm trong 2 lần thi") && !demotion.includes("CHÍNH THỨC TỪ 0h00 NGÀY 17/06/26")) {
+              lvl5.demotion = "Đạt dưới 28 điểm trong 2 lần thi (áp dụng trước 17/06/26). CHÍNH THỨC TỪ 0h00 NGÀY 17/06/26: CHỈ cần duy trì ít nhất 2 lượt mỗi ngày và đạt điểm trung bình >= 20/30đ là đạt yêu cầu. Trường hợp không duy trì thì bị hạ cấp tự động.";
+              lvl5.demotionCriteria = lvl5.demotion;
+              try {
+                await setDoc(docRef, cloudConfig);
+                incrementQuota('writes', 1);
+                console.log("[MIGRATION SUCCESS] Auto-migrated level_rules Level 5 demotion text in Firestore.");
+              } catch (saveErr) {
+                console.warn('Failed to save auto-migrated level rules back to Firestore:', saveErr);
+              }
+            }
+          }
           localStorage.setItem('3t_level_rules', JSON.stringify(cloudConfig));
           return cloudConfig;
         }
@@ -1834,7 +1895,16 @@ export const databaseService = {
     const localData = localStorage.getItem('3t_level_rules');
     if (localData) {
       try {
-        return JSON.parse(localData) as LevelRulesConfig;
+        const parsed = JSON.parse(localData) as any;
+        if (parsed.levels && parsed.levels[4]) {
+          const lvl5 = parsed.levels[4];
+          const demotion = lvl5.demotionCriteria || lvl5.demotion || '';
+          if (demotion && demotion.includes("28 điểm trong 2 lần thi") && !demotion.includes("CHÍNH THỨC TỪ 0h00 NGÀY 17/06/26")) {
+            lvl5.demotion = "Đạt dưới 28 điểm trong 2 lần thi (áp dụng trước 17/06/26). CHÍNH THỨC TỪ 0h00 NGÀY 17/06/26: CHỈ cần duy trì ít nhất 2 lượt mỗi ngày và đạt điểm trung bình >= 20/30đ là đạt yêu cầu. Trường hợp không duy trì thì bị hạ cấp tự động.";
+            lvl5.demotionCriteria = lvl5.demotion;
+          }
+        }
+        return parsed;
       } catch {
         return fallbackRules;
       }
