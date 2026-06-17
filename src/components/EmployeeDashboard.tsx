@@ -8,7 +8,7 @@ import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'rec
 import StatsDashboard from './StatsDashboard';
 import PersonalStats from './PersonalStats';
 import ConversationExchange from './ConversationExchange';
-import { calculateInactivityAugmentedLevel, getVietnamDateString } from '../utils/levelCalculator';
+import { calculateInactivityAugmentedLevel, getVietnamDateString, normalizeDateString } from '../utils/levelCalculator';
 
 interface EmployeeDashboardProps {
   user: User;
@@ -836,11 +836,20 @@ export default function EmployeeDashboard({
           timestamp: Date.now()
         });
       } else if (newLevel < oldLevel) {
+        const attemptNumber = results.length + 1;
+        let minRequiredScore = 20;
+        if (oldLevel === 2) minRequiredScore = 20;
+        else if (oldLevel === 3) minRequiredScore = 26;
+        else if (oldLevel === 4) minRequiredScore = 27;
+        else if (oldLevel === 5) minRequiredScore = 28;
+
+        const detailMessage = `bị hạ cấp từ ${getRankNameLocal(oldLevel)} xuống ${getRankNameLocal(newLevel)} ở lượt rèn luyện thứ ${attemptNumber} do kết quả bài thi đạt ${newResult.score}/30đ - không đạt điểm tối thiểu ${minRequiredScore}/30đ theo quy chế (bị điểm dưới sàn 2 lần liên tiếp)! ⚠️`;
+
         await databaseService.saveAnnouncement({
           id: 'ann_' + Date.now() + '_' + Math.random().toString(36).substring(2, 5),
           userName: user.name,
           type: 'demotion',
-          detail: `bị hạ cấp xuống ${getRankNameLocal(newLevel)} do kết quả rèn luyện gần đây hoặc không duy trì ôn tập! ⚠️`,
+          detail: detailMessage,
           timestamp: Date.now()
         });
       }
@@ -1161,14 +1170,46 @@ export default function EmployeeDashboard({
           if (!alreadyExists) {
             try {
               writeCount++;
+              // Calculate precisely 00:00:01 AM of todayStr in Vietnam timezone (UTC+7)
+              const [y, m, d] = todayStr.split('-').map(Number);
+              const midnightVnTimestamp = Date.UTC(y, m - 1, d, 0, 0, 1) - (7 * 3600000);
+
+              // Analyze exactly what they did yesterday
+              const yesterdayResults = uResults.filter(r => {
+                const normD = normalizeDateString(r.date);
+                return normD === yesterdayStr;
+              });
+              const attemptsCountYest = yesterdayResults.length;
+              const avgScoreYest = attemptsCountYest > 0
+                ? yesterdayResults.reduce((sum, r) => sum + r.score, 0) / attemptsCountYest
+                : 0;
+
+              let reasonText = '';
+              const [yY, mY, dY] = yesterdayStr.split('-').map(Number);
+              const yesterdayHumanDate = `${dY}/${mY}/${yY}`;
+
+              if (calcYesterday.level === 5 && yesterdayStr >= '2026-06-17') {
+                if (attemptsCountYest < 2 && avgScoreYest < 20) {
+                  reasonText = `chỉ hoàn thành ${attemptsCountYest}/2 lượt ôn tập với điểm trung bình ${avgScoreYest.toFixed(1)}/30đ (Quy chế Cấp 5 yêu cầu ôn luyện ≥ 2 lượt/ngày và Điểm TB ngày ≥ 20/30đ)`;
+                } else if (attemptsCountYest < 2) {
+                  reasonText = `chỉ hoàn thành ${attemptsCountYest}/2 lượt ôn tập (Quy chế Cấp 5 yêu cầu ôn luyện ≥ 2 lượt/ngày)`;
+                } else {
+                  reasonText = `hoàn thành ${attemptsCountYest} lượt ôn tập nhưng điểm trung bình ngày chỉ đạt ${avgScoreYest.toFixed(1)}/30đ (Quy chế Cấp 5 yêu cầu Điểm TB ngày ≥ 20/30đ)`;
+                }
+              } else {
+                reasonText = `chỉ hoàn thành ${attemptsCountYest}/2 lượt ôn tập (Quy chế yêu cầu duy trì tối thiểu 02 lượt ôn tập mỗi ngày để giữ hạng)`;
+              }
+
+              const detailMessage = `bị hạ cấp từ ${getRankNameLocal(calcYesterday.level)} xuống ${getRankNameLocal(calcToday.level)} do không duy trì ôn tập hàng ngày vào ngày ${yesterdayHumanDate}: ${reasonText}! ⚠️`;
+
               await databaseService.saveAnnouncement({
                 id: announcementId,
                 userName: u.name,
                 type: 'demotion',
-                detail: `bị hạ cấp từ ${getRankNameLocal(calcYesterday.level)} xuống ${getRankNameLocal(calcToday.level)} do không duy trì ôn tập hàng ngày! ⚠️`,
-                timestamp: Date.now()
+                detail: detailMessage,
+                timestamp: midnightVnTimestamp
               });
-              console.log(`[INACTIVITY DECODE] Auto-saved inactivity demotion announcement for ${u.name}: ${calcYesterday.level} -> ${calcToday.level}`);
+              console.log(`[INACTIVITY DECODE] Auto-saved inactivity demotion announcement for ${u.name}: ${calcYesterday.level} -> ${calcToday.level} with midnight timestamp ${midnightVnTimestamp}`);
             } catch (err) {
               console.error(`[INACTIVITY DECODE] Error saving announcement:`, err);
             }

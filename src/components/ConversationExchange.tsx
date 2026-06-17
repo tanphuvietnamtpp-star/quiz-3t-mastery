@@ -61,30 +61,40 @@ export default function ConversationExchange({
 
   const isAdmin = user.role === 'admin' || user.role === 'executive';
 
+  // Helper to retrieve cached topics to completely bypass component mount/network latency
+  const getLocalChatTopics = (): ChatTopic[] => {
+    try {
+      const stored = localStorage.getItem('3t_chat_topics');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const rawTopicsRef = useRef<ChatTopic[]>(getLocalChatTopics());
+
+  // Synchronize selectedTopic changes to localStorage for persistent state when switching tabs
+  useEffect(() => {
+    if (selectedTopic) {
+      localStorage.setItem('3t_last_selected_topic_id', selectedTopic.id);
+    } else {
+      localStorage.removeItem('3t_last_selected_topic_id');
+    }
+  }, [selectedTopic?.id]);
+
   // 1. Subscribe to Chat Topics
   useEffect(() => {
     setIsLoadingTopics(true);
     const unsubscribe = databaseService.subscribeChatTopics((allTopics) => {
-      // Automatically detect and delete empty chat rooms (excluding the active one)
-      const emptyTopics = allTopics.filter(t => {
-        const isEmptyText = t.lastMessageText === 'Chưa có cuộc hội thoại nào.' || t.lastMessageText === 'Chưa gửi tin nhắn' || !t.lastMessageText;
-        // Only auto-delete if it's not the active one
-        return isEmptyText && selectedTopic?.id !== t.id;
-      });
-
-      if (emptyTopics.length > 0) {
-        emptyTopics.forEach(t => {
-          databaseService.deleteChatTopic(t.id).catch(err => {
-            console.error("Error auto-deleting empty topic:", t.id, err);
-          });
-        });
-      }
+      // Keep track of the absolute raw unfiltered topics list
+      rawTopicsRef.current = allTopics;
 
       // Filter topics based on identity: Admin sees all, employee only sees their own
       // Also filter out empty ones so the UI looks instantly clean
       const filtered = (isAdmin ? allTopics : allTopics.filter(t => t.createdBy === user.id))
         .filter(t => {
-          if (selectedTopic?.id === t.id) return true;
+          const savedId = localStorage.getItem('3t_last_selected_topic_id');
+          if (selectedTopic?.id === t.id || savedId === t.id) return true;
           const isEmptyText = t.lastMessageText === 'Chưa có cuộc hội thoại nào.' || t.lastMessageText === 'Chưa gửi tin nhắn' || !t.lastMessageText;
           return !isEmptyText;
         });
@@ -92,9 +102,11 @@ export default function ConversationExchange({
       setTopics(filtered);
       setIsLoadingTopics(false);
 
-      // Keep selected topic details synchronized in real-time
-      if (selectedTopic) {
-        const updated = filtered.find(t => t.id === selectedTopic.id);
+      // Restore or synchronize selected topic
+      const savedId = localStorage.getItem('3t_last_selected_topic_id');
+      const activeId = selectedTopic?.id || savedId;
+      if (activeId) {
+        const updated = allTopics.find(t => t.id === activeId);
         if (updated) {
           setSelectedTopic(updated);
         }
@@ -157,14 +169,20 @@ export default function ConversationExchange({
 
   // Route to or create a discussion topic with selected user profile
   const handleSelectUser = async (targetUser: User) => {
-    // Find existing topics created by or related to this user
-    const existingTopics = topics.filter(t => t.createdBy === targetUser.id);
+    // Find existing topics created by or related to this user in RAW list
+    const existingTopics = rawTopicsRef.current.filter(t => 
+      t.createdBy === targetUser.id ||
+      (t.createdByName && t.createdByName.trim().toLowerCase() === targetUser.name.trim().toLowerCase()) ||
+      (t.title && t.title.toLowerCase().includes(targetUser.name.toLowerCase()))
+    );
 
     if (existingTopics.length > 0) {
       // Sort and pick most recent
-      const sorted = [...existingTopics].sort((a, b) => 
-        new Date(b.lastMessageAt || b.createdAt).getTime() - new Date(a.lastMessageAt || a.createdAt).getTime()
-      );
+      const sorted = [...existingTopics].sort((a, b) => {
+        const timeA = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : new Date(a.createdAt).getTime();
+        const timeB = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : new Date(b.createdAt).getTime();
+        return timeB - timeA;
+      });
       setSelectedTopic(sorted[0]);
       setActiveTab('topics'); // Redirect back to topics pane to view the thread
     } else {
@@ -304,25 +322,70 @@ export default function ConversationExchange({
     }
   };
 
-  // Filter topics based on search term
-  const filteredTopics = topics.filter(t => 
-    t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    t.createdByName.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
   // Filter registered users based on search term (excluding current admin themselves)
-  const filteredUsers = users.filter(u => {
-    if (u.id === user.id) return false;
+  // And associate with any existing chat topics to sort them intelligently
+  const joinedUsers = users
+    .filter(u => u.id !== user.id)
+    .map(u => {
+      // Find topics created by this user
+      const uTopics = topics.filter(t => 
+        t.createdBy === u.id || 
+        (t.createdByName && t.createdByName.trim().toLowerCase() === u.name.trim().toLowerCase())
+      );
+      
+      let latestTopic: ChatTopic | undefined;
+      if (uTopics.length > 0) {
+        latestTopic = [...uTopics].sort((a, b) => {
+          const timeA = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : new Date(a.createdAt).getTime();
+          const timeB = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : new Date(b.createdAt).getTime();
+          return timeB - timeA;
+        })[0];
+      }
+      return {
+        user: u,
+        latestTopic
+      };
+    });
+
+  const sortedJoinedUsers = [...joinedUsers].sort((a, b) => {
+    // 1. Unread messages always go to top
+    const unreadA = a.latestTopic?.unreadForAdmin ? 1 : 0;
+    const unreadB = b.latestTopic?.unreadForAdmin ? 1 : 0;
+    if (unreadA !== unreadB) {
+      return unreadB - unreadA;
+    }
+
+    // 2. Active chats sort by last interaction timestamp
+    const timeA = a.latestTopic?.lastMessageAt ? new Date(a.latestTopic.lastMessageAt).getTime() : 0;
+    const timeB = b.latestTopic?.lastMessageAt ? new Date(b.latestTopic.lastMessageAt).getTime() : 0;
+    if (timeA !== timeB) {
+      return timeB - timeA;
+    }
+
+    // 3. Fallback to alphabetically by name
+    return a.user.name.localeCompare(b.user.name);
+  });
+
+  // Filter joined users for Admin based on search query
+  const filteredJoinedUsers = sortedJoinedUsers.filter(item => {
     const q = searchQuery.toLowerCase().trim();
     if (!q) return true;
+    const u = item.user;
     return (
       u.name.toLowerCase().includes(q) ||
       (u.phone && u.phone.includes(q)) ||
       (u.employeeId && u.employeeId.toLowerCase().includes(q)) ||
       (u.department && u.department.toLowerCase().includes(q)) ||
-      (u.branch && u.branch.toLowerCase().includes(q))
+      (u.branch && u.branch.toLowerCase().includes(q)) ||
+      (item.latestTopic && item.latestTopic.title.toLowerCase().includes(q))
     );
   });
+
+  // Filter topics based on search term
+  const filteredTopics = topics.filter(t => 
+    t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    t.createdByName.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   // Render Mobile Layout: either shows Topic List OR Active Chat Pane
   const renderMobileExchange = () => {
@@ -479,64 +542,12 @@ export default function ConversationExchange({
           </button>
           <span className="text-[13px] font-extrabold text-[#1971C2] uppercase tracking-wide flex items-center gap-1">
             <MessageSquare className="h-4 w-4 text-[#1971C2] animate-pulse" />
-            TRAO ĐỔI HỖ TRỢ
+            {isAdmin ? "DANH SÁCH NHÂN SỰ" : "TRAO ĐỔI HỖ TRỢ"}
           </span>
           <div className="text-[10px] text-[#0B3A60] font-black uppercase text-right shrink-0">
-            {activeTab === 'users' ? `${filteredUsers.length} nhân sự` : `${filteredTopics.length} chủ đề`}
+            {isAdmin ? `${filteredJoinedUsers.length} nhân sự` : `${filteredTopics.length} chủ đề`}
           </div>
         </div>
-
-        {/* Toggle Switch for Mobile (Only for Admin to select Personnel vs Topics) */}
-        {isAdmin && (
-          <div className="px-3 py-2 bg-white border-b border-gray-100 shrink-0 flex justify-center">
-            <div className="bg-slate-100 p-0.5 rounded-full flex w-full relative border border-slate-180">
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveTab('users');
-                  setSearchQuery('');
-                }}
-                className={`flex-1 text-center py-1.5 text-xs font-bold rounded-full transition-all relative z-10 ${
-                  activeTab === 'users' ? 'text-[#1971C2]' : 'text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                {activeTab === 'users' && (
-                  <motion.div
-                    layoutId="activePillMobile"
-                    className="absolute inset-0 bg-white rounded-full shadow-xs border border-gray-200"
-                    transition={{ type: 'spring', duration: 0.3 }}
-                  />
-                )}
-                <span className="relative z-10 flex items-center justify-center gap-1">
-                  <UserIcon className="h-3.5 w-3.5" />
-                  Nhân sự
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveTab('topics');
-                  setSearchQuery('');
-                }}
-                className={`flex-1 text-center py-1.5 text-xs font-bold rounded-full transition-all relative z-10 ${
-                  activeTab === 'topics' ? 'text-[#1971C2]' : 'text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                {activeTab === 'topics' && (
-                  <motion.div
-                    layoutId="activePillMobile"
-                    className="absolute inset-0 bg-white rounded-full shadow-xs border border-gray-200"
-                    transition={{ type: 'spring', duration: 0.3 }}
-                  />
-                )}
-                <span className="relative z-10 flex items-center justify-center gap-1">
-                  <MessageSquare className="h-3.5 w-3.5" />
-                  Chủ đề
-                </span>
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* Searching and New Topic button bar */}
         <div className="p-2 bg-white border-b border-gray-150 flex gap-2 shrink-0 items-center">
@@ -547,10 +558,10 @@ export default function ConversationExchange({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-8 pr-2.5 py-1.5 border border-gray-250 rounded-lg text-xs bg-slate-50 text-slate-800 font-sans leading-normal focus:ring-1 focus:ring-[#1971C2]"
-              placeholder={activeTab === 'users' ? "Tìm theo tên, SĐT, mã NV..." : "Tìm kiếm chủ đề..."}
+              placeholder={isAdmin ? "Tìm nhân sự (tên, SĐT, bộ phận)..." : "Tìm kiếm chủ đề..."}
             />
           </div>
-          {activeTab === 'topics' && !isAdmin && (
+          {!isAdmin && (
             <button
               onClick={() => setShowCreateModal(true)}
               className="bg-[#1971C2] hover:bg-opacity-95 text-white text-[10px] font-black px-2.5 py-2.5 sm:py-2 rounded-lg flex items-center gap-1 cursor-pointer shrink-0 uppercase border-b-2 border-[#125899] active:scale-95 transition-all"
@@ -567,58 +578,82 @@ export default function ConversationExchange({
           onScroll={handleScroll}
           className="flex-1 overflow-y-auto p-2.5 space-y-2"
         >
-          {activeTab === 'users' ? (
+          {isAdmin ? (
             isLoadingUsers ? (
               <div className="text-center py-12 text-slate-400 font-bold text-xs">
                 <div className="animate-spin h-5 w-5 border-2 border-[#1971C2] border-t-transparent rounded-full mx-auto mb-3" />
                 Đang tải danh sách nhân sự...
               </div>
-            ) : filteredUsers.length === 0 ? (
+            ) : filteredJoinedUsers.length === 0 ? (
               <div className="text-center py-12 text-gray-400 text-xs bg-white rounded-xl p-4 border border-gray-150">
                 Không tìm thấy nhân sự phù hợp.
               </div>
             ) : (
-              filteredUsers.map((u) => {
+              filteredJoinedUsers.map(({ user: u, latestTopic }) => {
                 const empResults = quizResults.filter(r => 
                   (r.userId && r.userId === u.id) || 
                   (u.phone && r.userId === u.phone) || 
                   (r.userName && r.userName.toLowerCase().trim() === u.name.toLowerCase().trim())
                 );
                 const state = calculateInactivityAugmentedLevel(u.id, empResults, levelRules || DEFAULT_LEVEL_RULES);
+                const isUnread = latestTopic?.unreadForAdmin;
+                const isSelected = selectedTopic?.id === latestTopic?.id;
                 
                 return (
                   <div 
                     key={u.id}
                     onClick={() => handleSelectUser(u)}
-                    className="p-3 border border-gray-150 rounded-xl bg-white hover:bg-gray-50 flex items-center justify-between gap-3 shadow-4xs cursor-pointer text-left transition-all hover:scale-[1.01]"
+                    className={`p-3 border rounded-xl flex flex-col gap-2 shadow-4xs cursor-pointer text-left transition-all hover:scale-[1.01] ${
+                      isSelected 
+                        ? 'border-[#1971C2] bg-blue-50/15 ring-1 ring-[#1971C2]/15'
+                        : isUnread 
+                          ? 'border-[#FFE066] bg-amber-50/10 shadow-3xs'
+                          : 'border-gray-150 bg-white hover:bg-gray-50'
+                    }`}
                   >
-                    <div className="min-w-0 flex-1">
-                      <h4 className="text-[11.5px] font-black text-slate-900 leading-snug flex items-center gap-1.5 truncate">
-                        <span>{u.name}</span>
-                        {u.employeeId && (
-                          <span className="text-[9px] bg-slate-100 text-slate-500 font-mono px-1 rounded font-bold shrink-0">
-                            {u.employeeId}
+                    <div className="flex items-start justify-between gap-1.5">
+                      <div className="min-w-0 flex-1">
+                        <h4 className="text-[11.5px] font-black text-slate-900 leading-snug flex items-center gap-1.5 truncate">
+                          <span>{u.name}</span>
+                          {u.employeeId && (
+                            <span className="text-[9px] bg-slate-100 text-slate-500 font-mono px-1 rounded font-bold shrink-0">
+                              {u.employeeId}
+                            </span>
+                          )}
+                        </h4>
+                        <p className="text-[9px] text-gray-400 mt-0.5 truncate uppercase font-semibold">
+                          {u.department} • {u.branch}
+                        </p>
+                      </div>
+                      
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {isUnread && (
+                          <span className="bg-red-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full shrink-0 animate-pulse uppercase">
+                            MỚI
                           </span>
                         )}
-                      </h4>
-                      <p className="text-[10px] text-gray-400 mt-0.5 truncate uppercase font-semibold">
-                        {u.department} • {u.branch}
-                      </p>
-                      <div className="flex items-center gap-1.5 mt-1 text-[10px] font-mono text-slate-500 font-bold">
-                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                        <span>{empResults.length} lượt thi</span>
+                        <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full flex items-center gap-0.5 border shrink-0 ${
+                          state.level === 5 ? 'bg-amber-50 border-amber-300 text-amber-800' :
+                          state.level === 4 ? 'bg-indigo-50 border-indigo-200 text-indigo-700' :
+                          state.level === 3 ? 'bg-emerald-50 border-emerald-250 text-emerald-800' :
+                          state.level === 2 ? 'bg-blue-50 border-blue-250 text-blue-700' :
+                          'bg-zinc-50 border-zinc-200 text-zinc-650'
+                        }`}>
+                          Cấp {state.level}
+                        </span>
                       </div>
                     </div>
                     
-                    <span className={`text-[10px] font-black px-2 mt-0.5 py-0.5 rounded-full flex items-center gap-0.5 border shrink-0 ${
-                      state.level === 5 ? 'bg-amber-50 border-amber-300 text-amber-800' :
-                      state.level === 4 ? 'bg-indigo-50 border-indigo-200 text-indigo-700' :
-                      state.level === 3 ? 'bg-emerald-50 border-emerald-250 text-emerald-800' :
-                      state.level === 2 ? 'bg-blue-50 border-blue-250 text-blue-700' :
-                      'bg-zinc-50 border-zinc-200 text-zinc-650'
-                    }`}>
-                      Cấp {state.level}
-                    </span>
+                    {latestTopic && (
+                      <div className="border-t border-gray-100/75 pt-1.5 mt-0.5 flex items-center justify-between text-[9.5px]">
+                        <p className="text-gray-500 line-clamp-1 italic font-semibold flex-1 mr-2 truncate">
+                          {latestTopic.lastMessageText || 'Chưa có tin nhắn'}
+                        </p>
+                        <span className="text-gray-400 font-mono text-[8px] shrink-0">
+                          {formatMsgDate(latestTopic.lastMessageAt)}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 );
               })
@@ -792,58 +827,6 @@ export default function ConversationExchange({
             )}
           </div>
 
-          {/* Toggle Switch for Desktop (Only for Admin to select Personnel vs Topics) */}
-          {isAdmin && (
-            <div className="p-3 bg-white border-b border-gray-100 shrink-0">
-              <div className="bg-slate-100 p-0.5 rounded-md flex relative border border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveTab('users');
-                    setSearchQuery('');
-                  }}
-                  className={`flex-1 text-center py-1.5 text-xs font-black rounded-md transition-all relative z-10 ${
-                    activeTab === 'users' ? 'text-[#1971C2]' : 'text-slate-500 hover:text-slate-700'
-                  }`}
-                >
-                  {activeTab === 'users' && (
-                    <motion.div
-                      layoutId="activePillDesktop"
-                      className="absolute inset-0 bg-white rounded-md shadow-xs border border-gray-250"
-                      transition={{ type: 'spring', duration: 0.3 }}
-                    />
-                  )}
-                  <span className="relative z-10 flex items-center justify-center gap-1">
-                    <UserIcon className="h-3.5 w-3.5" />
-                    Nhân Sự
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveTab('topics');
-                    setSearchQuery('');
-                  }}
-                  className={`flex-1 text-center py-1.5 text-xs font-black rounded-md transition-all relative z-10 ${
-                    activeTab === 'topics' ? 'text-[#1971C2]' : 'text-slate-500 hover:text-slate-700'
-                  }`}
-                >
-                  {activeTab === 'topics' && (
-                    <motion.div
-                      layoutId="activePillDesktop"
-                      className="absolute inset-0 bg-white rounded-md shadow-xs border border-gray-250"
-                      transition={{ type: 'spring', duration: 0.3 }}
-                    />
-                  )}
-                  <span className="relative z-10 flex items-center justify-center gap-1">
-                    <MessageSquare className="h-3.5 w-3.5" />
-                    Chủ Đề
-                  </span>
-                </button>
-              </div>
-            </div>
-          )}
-
           {/* Search box block */}
           <div className="p-3 bg-white border-b border-gray-150 shrink-0">
             <div className="relative">
@@ -853,65 +836,89 @@ export default function ConversationExchange({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-8 pr-2.5 py-1.5 border border-gray-200 rounded-md text-xs bg-slate-50 text-slate-800 font-sans leading-normal focus:ring-1 focus:ring-[#1971C2]"
-                placeholder={activeTab === 'users' ? "Tìm theo tên, SĐT, mã NV..." : "Tìm kiếm chủ đề hoặc tên..."}
+                placeholder={isAdmin ? "Tìm nhân sự (tên, SĐT, bộ phận)..." : "Tìm kiếm chủ đề..."}
               />
             </div>
           </div>
 
           {/* Topics/Users Scroll lists */}
           <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
-            {activeTab === 'users' ? (
+            {isAdmin ? (
               isLoadingUsers ? (
                 <div className="text-center py-16 text-slate-400 text-xs font-semibold">
                   <div className="animate-spin h-5 w-5 border-2 border-[#1971C2] border-t-transparent rounded-full mx-auto mb-3" />
                   Đang tải danh sách nhân sự...
                 </div>
-              ) : filteredUsers.length === 0 ? (
+              ) : filteredJoinedUsers.length === 0 ? (
                 <div className="text-center py-16 text-gray-450 text-xs">
                   Không tìm thấy nhân sự phù hợp.
                 </div>
               ) : (
-                filteredUsers.map((u) => {
+                filteredJoinedUsers.map(({ user: u, latestTopic }) => {
                   const empResults = quizResults.filter(r => 
                     (r.userId && r.userId === u.id) || 
                     (u.phone && r.userId === u.phone) || 
                     (r.userName && r.userName.toLowerCase().trim() === u.name.toLowerCase().trim())
                   );
                   const state = calculateInactivityAugmentedLevel(u.id, empResults, levelRules || DEFAULT_LEVEL_RULES);
+                  const isUnread = latestTopic?.unreadForAdmin;
+                  const isSelected = selectedTopic?.id === latestTopic?.id;
                   
                   return (
                     <div 
                       key={u.id}
                       onClick={() => handleSelectUser(u)}
-                      className="p-3.5 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 flex items-center justify-between gap-3 shadow-4xs cursor-pointer text-left transition-all hover:scale-[1.01]"
+                      className={`p-3.5 border rounded-lg flex flex-col gap-2.5 shadow-4xs cursor-pointer text-left transition-all hover:scale-[1.01] ${
+                        isSelected 
+                          ? 'border-[#1971C2] bg-blue-50/15 ring-1 ring-[#1971C2]/15' 
+                          : isUnread 
+                            ? 'border-[#FFE066] bg-amber-50/10 shadow-3xs'
+                            : 'border-gray-200 bg-white hover:bg-gray-50'
+                      }`}
                     >
-                      <div className="min-w-0 flex-1">
-                        <h4 className="text-[12px] font-black text-slate-900 leading-snug flex items-center gap-1.5 truncate">
-                          <span>{u.name}</span>
-                          {u.employeeId && (
-                            <span className="text-[9px] bg-slate-100 text-slate-500 font-mono px-1 rounded font-bold shrink-0">
-                              {u.employeeId}
+                      <div className="flex items-start justify-between gap-1.5">
+                        <div className="min-w-0 flex-1">
+                          <h4 className="text-[12px] font-black text-slate-900 leading-snug flex items-center gap-1.5 truncate">
+                            <span>{u.name}</span>
+                            {u.employeeId && (
+                              <span className="text-[9px] bg-slate-100 text-slate-500 font-mono px-1 rounded font-bold shrink-0">
+                                {u.employeeId}
+                              </span>
+                            )}
+                          </h4>
+                          <p className="text-[10px] text-gray-450 mt-0.5 truncate uppercase font-semibold">
+                            {u.department} • {u.branch}
+                          </p>
+                        </div>
+                        
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {isUnread && (
+                            <span className="bg-red-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded-md uppercase shrink-0 animate-pulse">
+                              MỚI
                             </span>
                           )}
-                        </h4>
-                        <p className="text-[10px] text-gray-400 mt-0.5 truncate uppercase font-semibold">
-                          {u.department} • {u.branch}
-                        </p>
-                        <div className="flex items-center gap-1.5 mt-1 text-[10px] font-mono text-slate-500 font-bold">
-                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                          <span>{empResults.length} lượt thi</span>
+                          <span className={`text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-0.5 border shrink-0 ${
+                            state.level === 5 ? 'bg-amber-50 border-amber-300 text-amber-800' :
+                            state.level === 4 ? 'bg-indigo-50 border-indigo-200 text-indigo-700' :
+                            state.level === 3 ? 'bg-emerald-50 border-emerald-250 text-emerald-800' :
+                            state.level === 2 ? 'bg-blue-50 border-blue-250 text-blue-700' :
+                            'bg-zinc-50 border-zinc-200 text-zinc-650'
+                          }`}>
+                            Cấp {state.level}
+                          </span>
                         </div>
                       </div>
                       
-                      <span className={`text-[10px] font-black px-2 mt-0.5 py-0.5 rounded-full flex items-center gap-0.5 border shrink-0 ${
-                        state.level === 5 ? 'bg-amber-50 border-amber-300 text-amber-800' :
-                        state.level === 4 ? 'bg-indigo-50 border-indigo-200 text-indigo-700' :
-                        state.level === 3 ? 'bg-emerald-50 border-emerald-250 text-emerald-800' :
-                        state.level === 2 ? 'bg-blue-50 border-blue-250 text-blue-700' :
-                        'bg-zinc-50 border-zinc-200 text-zinc-650'
-                      }`}>
-                        Cấp {state.level}
-                      </span>
+                      {latestTopic && (
+                        <div className="border-t border-gray-100/75 pt-2 flex items-center justify-between text-[10.5px]">
+                          <p className="text-gray-500 line-clamp-1 italic font-semibold flex-1 mr-2 truncate">
+                            {latestTopic.lastMessageText || 'Chưa có tin nhắn'}
+                          </p>
+                          <span className="text-gray-400 font-mono text-[9px] shrink-0">
+                            {formatMsgDate(latestTopic.lastMessageAt)}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   );
                 })

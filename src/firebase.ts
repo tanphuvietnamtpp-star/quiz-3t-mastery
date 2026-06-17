@@ -1977,7 +1977,11 @@ export const databaseService = {
       snapshot.forEach(docDoc => {
         list.push(docDoc.data() as ChatTopic);
       });
-      list.sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime());
+      list.sort((a, b) => {
+        const timeA = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+        const timeB = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
+        return timeB - timeA;
+      });
       setLocalData('3t_chat_topics', list);
       onUpdate(list);
     }, (err) => {
