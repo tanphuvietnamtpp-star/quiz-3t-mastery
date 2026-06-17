@@ -332,7 +332,7 @@ const forceSeedLevel5Announcement = async () => {
       const annId = 'announcement_lvl5_new_policy';
       const docRef = doc(db, 'congratulations_announcements', annId);
       const snap = await getDocFromServer(docRef).catch(() => null);
-      if (!snap || !snap.exists()) {
+      if (snap && !snap.exists()) {
         const payload = {
           id: annId,
           userName: 'Ban Quản Trị Hệ Thống 3T Mastery',
@@ -349,7 +349,7 @@ const forceSeedLevel5Announcement = async () => {
       const sysAnnRef = doc(db, 'config', 'system_announcement');
       const sysSnap = await getDocFromServer(sysAnnRef).catch(() => null);
       const systemText = "📢 Từ 17/06, bảo trì Cấp 5 Huyền Thoại: Cần ≥ 2 lượt/ngày & Điểm TB ngày ≥ 20/30đ để giữ hạng.";
-      if (!sysSnap || !sysSnap.exists()) {
+      if (sysSnap && !sysSnap.exists()) {
         await setDoc(sysAnnRef, { text: systemText, updatedAt: Date.now() });
         console.log("[SUCCESS] Đã cập nhật dòng chữ chạy Thông Báo Hệ Thống về quy chế Cấp 5 mới.");
       }

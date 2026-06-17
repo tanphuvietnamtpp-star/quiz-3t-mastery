@@ -278,9 +278,9 @@ export default function EmployeeDashboard({
   const [adminExpandedResultId, setAdminExpandedResultId] = useState<string | null>(null);
   
   // Real-time system announcement and accomplishments states
-  const [systemAnnouncement, setSystemAnnouncement] = useState('Chào mừng toàn thể cán bộ nhân viên đến với Hội Thi Văn Hóa 3T! Tốc độ là sống còn - Tinh gọn là sức mạnh!');
-  const [systemAnnouncementSpeed, setSystemAnnouncementSpeed] = useState(35);
-  const [systemAnnouncementGap, setSystemAnnouncementGap] = useState(32);
+  const [systemAnnouncement, setSystemAnnouncement] = useState(() => localStorage.getItem('3t_system_announcement') ?? 'Chào mừng toàn thể cán bộ nhân viên đến với Hội Thi Văn Hóa 3T! Tốc độ là sống còn - Tinh gọn là sức mạnh!');
+  const [systemAnnouncementSpeed, setSystemAnnouncementSpeed] = useState(() => Number(localStorage.getItem('3t_system_announcement_speed') || '35'));
+  const [systemAnnouncementGap, setSystemAnnouncementGap] = useState(() => Number(localStorage.getItem('3t_system_announcement_gap') || '32'));
   const [allAnnouncements, setAllAnnouncements] = useState<any[]>([]);
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
   const [unreadExchangeCount, setUnreadExchangeCount] = useState(0);
