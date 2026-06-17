@@ -592,11 +592,9 @@ export default function AdminDashboard({
 
     // Subscribe to system announcement in real-time
     const unsubscribeSystem = databaseService.subscribeSystemAnnouncement((text, speed, gap) => {
-      if (text) {
-        setSystemAnnouncement(text);
-        setSystemAnnouncementSpeed(speed || 35);
-        setSystemAnnouncementGap(gap || 32);
-      }
+      setSystemAnnouncement(text ?? '');
+      setSystemAnnouncementSpeed(speed || 35);
+      setSystemAnnouncementGap(gap || 32);
     });
 
     // Subscribe to chat topics in real-time to compute the unread exchange badge
@@ -4304,14 +4302,16 @@ export default function AdminDashboard({
                                 setSystemAnnouncement(trimmedText);
                                 setSystemAnnouncementSpeed(announcementEditSpeed);
                                 setSystemAnnouncementGap(announcementEditGap);
-                                // Log to database
-                                await databaseService.saveAnnouncement({
-                                  id: 'ann_sys_' + Date.now(),
-                                  userName: user.name,
-                                  type: 'admin_broadcast',
-                                  detail: trimmedText || '(Không có thông báo - Trạng thái: TẮT)',
-                                  timestamp: Date.now()
-                                });
+                                // Log to database only if not empty
+                                if (trimmedText) {
+                                  await databaseService.saveAnnouncement({
+                                    id: 'ann_sys_' + Date.now(),
+                                    userName: user.name,
+                                    type: 'admin_broadcast',
+                                    detail: trimmedText,
+                                    timestamp: Date.now()
+                                  });
+                                }
                                 setIsEditingAnnouncement(false);
                                 alert(trimmedText ? "Đã lưu cấu hình thông báo chữ chạy mới!" : "Đã tắt thông báo chữ chạy hệ thống!");
                               } catch (err) {

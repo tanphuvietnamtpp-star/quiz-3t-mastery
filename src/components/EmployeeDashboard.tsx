@@ -294,18 +294,25 @@ export default function EmployeeDashboard({
   const [mobileEditingAnnText, setMobileEditingAnnText] = useState<string>('');
   const [mobileDeletingAnnId, setMobileDeletingAnnId] = useState<string | null>(null);
 
+  // Central rotating ticker for mobile button badges
+  const [badgeTicker, setBadgeTicker] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setBadgeTicker(prev => prev + 1);
+    }, 4500); // cycle every 4.5 seconds for a smooth transition
+    return () => clearInterval(timer);
+  }, []);
+
   // Subscribe to real-time system announcement and accomplishments/notifications
   useEffect(() => {
     // 1. Subscribe to system wide broadcast marquee
     const unsubSystem = databaseService.subscribeSystemAnnouncement((text, speed, gap) => {
-      if (text) {
-        setSystemAnnouncement(text);
-        setAnnouncementEditText(text);
-        setSystemAnnouncementSpeed(speed || 35);
-        setSystemAnnouncementGap(gap || 32);
-        setAnnouncementEditSpeed(speed || 35);
-        setAnnouncementEditGap(gap || 32);
-      }
+      setSystemAnnouncement(text ?? '');
+      setAnnouncementEditText(text ?? '');
+      setSystemAnnouncementSpeed(speed || 35);
+      setSystemAnnouncementGap(gap || 32);
+      setAnnouncementEditSpeed(speed || 35);
+      setAnnouncementEditGap(gap || 32);
     });
 
     // 2. Subscribe to general log/toast announcements
@@ -2370,6 +2377,34 @@ export default function EmployeeDashboard({
       .slice(0, 5);
   }, [resultsForRankings]);
 
+  // Dynamically cycle record values for the Kỷ Lục 3T button bubble
+  const rotatedRecordBadge = useMemo(() => {
+    if (!records3T || records3T.length === 0) return '';
+    const activeRecord = records3T[badgeTicker % records3T.length];
+    if (!activeRecord) return '';
+    if (activeRecord.id === 'quyettam') {
+      return `${activeRecord.attemptsCount || activeRecord.attempts || 381}`;
+    } else if (activeRecord.id === 'tritue') {
+      return `${activeRecord.perfectsCount || activeRecord.attempts || 185}L`;
+    } else if (activeRecord.id === 'tocdo') {
+      return `${activeRecord.durationPerQ || 3.8}s`;
+    } else if (activeRecord.id === 'binhminh') {
+      return `${activeRecord.timeString || '01:24'}`;
+    } else if (activeRecord.id === 'thantoc') {
+      return `${activeRecord.attemptsCountToMaxLevel || 48}L`;
+    } else if (activeRecord.id === 'batbai') {
+      return `${activeRecord.streak || 45}L`;
+    }
+    return '';
+  }, [records3T, badgeTicker]);
+
+  // Dynamically cycle top patience attempts for the Top Kiên Trì button bubble
+  const rotatedPatienceBadge = useMemo(() => {
+    if (!topFivePatience || topFivePatience.length === 0) return '';
+    const activePatience = topFivePatience[badgeTicker % topFivePatience.length];
+    return activePatience ? `${activePatience.attempts}` : '';
+  }, [topFivePatience, badgeTicker]);
+
   // Combined real-time Universal Honor list uniting Monument-Legends, Records-3T and Monthly Top 5 Patience
   const allHonors = useMemo(() => {
     // 1. Tượng đài Huyền thoại (🔮) - All Level 5 learners
@@ -3058,14 +3093,16 @@ export default function EmployeeDashboard({
                         setSystemAnnouncement(trimmedText);
                         setSystemAnnouncementSpeed(announcementEditSpeed);
                         setSystemAnnouncementGap(announcementEditGap);
-                        // Add log to announcements
-                        await databaseService.saveAnnouncement({
-                          id: 'ann_sys_' + Date.now(),
-                          userName: user.name,
-                          type: 'admin_broadcast',
-                          detail: trimmedText || '(Không có thông báo - Trạng thái: TẮT)',
-                          timestamp: Date.now()
-                        });
+                        // Add log to announcements only if not empty
+                        if (trimmedText) {
+                          await databaseService.saveAnnouncement({
+                            id: 'ann_sys_' + Date.now(),
+                            userName: user.name,
+                            type: 'admin_broadcast',
+                            detail: trimmedText,
+                            timestamp: Date.now()
+                          });
+                        }
                         setIsEditingAnnouncement(false);
                         setAdminMobileNotice({ 
                           type: 'success', 
@@ -6675,46 +6712,54 @@ export default function EmployeeDashboard({
                       {/* CBNV (Nhân viên thường) rapid action buttons */}
                       {!(user.role === 'admin' || user.role === 'executive') && !(user.role === 'approver' || user.canViewStats) && (
                         <div className="w-full max-w-sm mx-auto bg-gradient-to-br from-amber-50/95 via-amber-50/85 to-yellow-50/70 rounded-xl p-2 shadow-xs mb-3 sm:mb-3.5 font-sans relative overflow-hidden backdrop-blur-xs">
-                            {/* Title banner */}
-                          <div className="text-[8.5px] font-black text-amber-900 uppercase tracking-wider mb-2 px-1 text-center flex items-center justify-center gap-1.5 whitespace-nowrap">
-                            <span className="h-1 w-1 rounded-full bg-amber-600 animate-pulse" />
-                            <span>THANH CÔNG CỤ</span>
-                            <span className="h-1 w-1 rounded-full bg-amber-600 animate-pulse" />
-                          </div>
-                          
-                          <div className="flex flex-row items-center justify-around gap-1 px-1 pt-2 pb-1">
+                          <div className="flex flex-row items-center justify-around gap-1 px-1 pt-1 pb-1">
                             {/* Tượng đài huyền thoại */}
                             <button
                               onClick={() => setAdminMobileTab('legends')}
                               className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-violet-50/20 active:scale-95 transition-all text-amber-950 font-sans cursor-pointer group shrink-0"
                               title="Tượng Đài Huyền Thoại"
                             >
-                              <div className="h-7 w-7 rounded-lg bg-violet-50 border border-violet-100 flex items-center justify-center group-hover:bg-violet-100 transition-colors shrink-0">
+                              <div className="h-7 w-7 rounded-lg bg-violet-50 border border-violet-100 flex items-center justify-center group-hover:bg-violet-100 transition-colors shrink-0 relative">
                                 <Trophy className="h-3.5 w-3.5 text-violet-600" />
+                                {monumentLegends.length > 0 && (
+                                  <span className="absolute -top-2 -right-1.5 bg-violet-600 text-white text-[9px] font-black h-4 px-1 rounded-full border border-white flex items-center justify-center shadow-md min-w-[16px] leading-none animate-bounce">
+                                    {monumentLegends.length}
+                                  </span>
+                                )}
                               </div>
                               <span className="text-[8.5px] font-extrabold leading-tight text-center text-amber-950 truncate max-w-[64px]">Tượng Đài</span>
                             </button>
-
-                            {/* Kỷ lục 3T */}
+ 
+                             {/* Kỷ lục 3T */}
                             <button
                               onClick={() => setAdminMobileTab('records')}
                               className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-amber-50/25 active:scale-95 transition-all text-amber-950 font-sans cursor-pointer group shrink-0"
                               title="Kỷ Lục 3T"
                             >
-                              <div className="h-7 w-7 rounded-lg bg-amber-50 border border-amber-100 flex items-center justify-center group-hover:bg-amber-100 transition-colors shrink-0">
+                              <div className="h-7 w-7 rounded-lg bg-amber-50 border border-amber-100 flex items-center justify-center group-hover:bg-amber-100 transition-colors shrink-0 relative animate-fadeIn">
                                 <Award className="h-3.5 w-3.5 text-amber-600" />
+                                {rotatedRecordBadge && (
+                                  <span className="absolute -top-2 -right-1.5 bg-amber-600 text-white text-[8px] font-black h-4 px-1 rounded-full border border-white flex items-center justify-center shadow-md min-w-[16px] leading-none transition-all duration-300 transform scale-95" title="Kỷ lục 3T">
+                                    {rotatedRecordBadge}
+                                  </span>
+                                )}
                               </div>
                               <span className="text-[8.5px] font-extrabold leading-tight text-center text-amber-950 truncate max-w-[64px]">Kỷ Lục 3T</span>
                             </button>
-
-                            {/* Top 5 kiên trì */}
+ 
+                             {/* Top 5 kiên trì */}
                             <button
                               onClick={() => setAdminMobileTab('patience_top')}
                               className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-emerald-50/20 active:scale-95 transition-all text-amber-950 font-sans cursor-pointer group shrink-0"
                               title="Top 5 Kiên Trì Hôm Nay"
                             >
-                              <div className="h-7 w-7 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-center group-hover:bg-emerald-100 transition-colors shrink-0">
+                              <div className="h-7 w-7 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-center group-hover:bg-emerald-100 transition-colors shrink-0 relative animate-fadeIn">
                                 <Zap className="h-3.5 w-3.5 text-emerald-600 animate-pulse" />
+                                {rotatedPatienceBadge && (
+                                  <span className="absolute -top-2 -right-1.5 bg-emerald-600 text-white text-[9px] font-black h-4 px-1 rounded-full border border-white flex items-center justify-center shadow-md min-w-[16px] leading-none transition-all duration-300 transform scale-95" title="Top Kiên Trì">
+                                    {rotatedPatienceBadge}
+                                  </span>
+                                )}
                               </div>
                               <span className="text-[8.5px] font-extrabold leading-tight text-center text-amber-950 truncate max-w-[64px]">Top Kiên Trì</span>
                             </button>

@@ -349,7 +349,7 @@ const forceSeedLevel5Announcement = async () => {
       const sysAnnRef = doc(db, 'config', 'system_announcement');
       const sysSnap = await getDocFromServer(sysAnnRef).catch(() => null);
       const systemText = "📢 Từ 17/06, bảo trì Cấp 5 Huyền Thoại: Cần ≥ 2 lượt/ngày & Điểm TB ngày ≥ 20/30đ để giữ hạng.";
-      if (!sysSnap || !sysSnap.exists() || !sysSnap.data()?.text || !sysSnap.data()?.text.includes("Từ 17/06")) {
+      if (!sysSnap || !sysSnap.exists()) {
         await setDoc(sysAnnRef, { text: systemText, updatedAt: Date.now() });
         console.log("[SUCCESS] Đã cập nhật dòng chữ chạy Thông Báo Hệ Thống về quy chế Cấp 5 mới.");
       }
@@ -1349,14 +1349,15 @@ export const databaseService = {
   async getSystemAnnouncement(): Promise<string> {
     await initializeDatabase();
     if (!isFirebaseConfigured || !db) {
-      return localStorage.getItem('3t_system_announcement') || 'Chào mừng toàn thể cán bộ nhân viên đến với Hội Thi Văn Hóa 3T! Tốc độ là sống còn - Tinh gọn là sức mạnh!';
+      const saved = localStorage.getItem('3t_system_announcement');
+      return saved !== null ? saved : 'Chào mừng toàn thể cán bộ nhân viên đến với Hội Thi Văn Hóa 3T! Tốc độ là sống còn - Tinh gọn là sức mạnh!';
     }
     try {
       const docRef = doc(db, 'config', 'system_announcement');
       const docSnap = await getDoc(docRef);
       incrementQuota('reads', 1);
       if (docSnap.exists()) {
-        const text = docSnap.data().text || '';
+        const text = docSnap.data().text !== undefined ? docSnap.data().text : '';
         localStorage.setItem('3t_system_announcement', text);
         return text;
       } else {
@@ -1366,7 +1367,8 @@ export const databaseService = {
       }
     } catch (error) {
       console.warn("Error getting system announcement:", error);
-      return localStorage.getItem('3t_system_announcement') || 'Chào mừng toàn thể cán bộ nhân viên đến với Hội Thi Văn Hóa 3T! Tốc độ là sống còn - Tinh gọn là sức mạnh!';
+      const saved = localStorage.getItem('3t_system_announcement');
+      return saved !== null ? saved : 'Chào mừng toàn thể cán bộ nhân viên đến với Hội Thi Văn Hóa 3T! Tốc độ là sống còn - Tinh gọn là sức mạnh!';
     }
   },
 
@@ -1392,8 +1394,9 @@ export const databaseService = {
 
   subscribeSystemAnnouncement(onUpdate: (text: string, speed: number, gap: number) => void): () => void {
     if (!isFirebaseConfigured || !db) {
+      const saved = localStorage.getItem('3t_system_announcement');
       onUpdate(
-        localStorage.getItem('3t_system_announcement') || 'Chào mừng toàn thể cán bộ nhân viên đến với Hội Thi Văn Hóa 3T! Tốc độ là sống còn - Tinh gọn là sức mạnh!',
+        saved !== null ? saved : 'Chào mừng toàn thể cán bộ nhân viên đến với Hội Thi Văn Hóa 3T! Tốc độ là sống còn - Tinh gọn là sức mạnh!',
         Number(localStorage.getItem('3t_system_announcement_speed') || '35'),
         Number(localStorage.getItem('3t_system_announcement_gap') || '32')
       );
@@ -1403,7 +1406,7 @@ export const databaseService = {
     const unsubscribe = onSnapshot(docRef, (docSnap) => {
       incrementQuota('reads', 1);
       if (docSnap.exists()) {
-        const text = docSnap.data().text || '';
+        const text = docSnap.data().text !== undefined ? docSnap.data().text : '';
         const speed = docSnap.data().speed || 35;
         const gap = docSnap.data().gap || 32;
         onUpdate(text, speed, gap);
