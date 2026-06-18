@@ -885,112 +885,184 @@ export default function EmployeeDashboard({
       }
 
       // 1. KIÊN TRÌ Record Check
-      if (baseline.maxAttempts > 0 && userAttempts > baseline.maxAttempts) {
+      if (baseline.maxAttempts > 0 && userAttempts >= baseline.maxAttempts) {
         const isSelf = baseline.maxAttemptsHolderId === user.id || baseline.maxAttemptsHolderName === user.name;
-        // Only notify if it's a new champion OR self-breaking at a round milestone of 100
-        const shouldNotify = !isSelf || (userAttempts % 100 === 0);
-        if (shouldNotify) {
-          const detailText = isSelf
-            ? `vừa tự phá vỡ cột mốc KIÊN TRÌ mới của chính mình với tổng cộng ${userAttempts} lượt rèn luyện bền bỉ! 🎯`
-            : `vừa soán ngôi vị ${baseline.maxAttemptsHolderName || 'đối thủ'} để lập kỷ lục KIÊN TRÌ mới với tổng cộng ${userAttempts} lượt rèn luyện bền bỉ! 🎯`;
-          await databaseService.saveAnnouncement({
-            id: 'ann_' + Date.now() + '_qt',
-            userName: user.name,
-            type: 'record_broken',
-            detail: detailText,
-            timestamp: Date.now()
-          });
+        if (userAttempts > baseline.maxAttempts) {
+          // Only notify if it's a new champion OR self-breaking at a round milestone of 100
+          const shouldNotify = !isSelf || (userAttempts % 100 === 0);
+          if (shouldNotify) {
+            const detailText = isSelf
+              ? `vừa tự phá vỡ cột mốc KIÊN TRÌ mới của chính mình với tổng cộng ${userAttempts} lượt rèn luyện bền bỉ! 🎯`
+              : `vừa soán ngôi vị ${baseline.maxAttemptsHolderName || 'đối thủ'} để lập kỷ lục KIÊN TRÌ mới với tổng cộng ${userAttempts} lượt rèn luyện bền bỉ! 🎯`;
+            await databaseService.saveAnnouncement({
+              id: 'ann_' + Date.now() + '_qt',
+              userName: user.name,
+              type: 'record_broken',
+              detail: detailText,
+              timestamp: Date.now()
+            });
+          }
+        } else if (userAttempts === baseline.maxAttempts) {
+          // Cân bằng kỷ lục
+          if (!isSelf) {
+            const detailText = `vừa CÂN BẰNG KỶ LỤC KIÊN TRÌ của ${baseline.maxAttemptsHolderName || 'tiền bối'} với tổng cộng ${userAttempts} lượt rèn luyện bền bỉ! 🎯`;
+            await databaseService.saveAnnouncement({
+              id: 'ann_' + Date.now() + '_qt_equals',
+              userName: user.name,
+              type: 'record_broken',
+              detail: detailText,
+              timestamp: Date.now()
+            });
+          }
         }
       }
 
       // 2. TRÍ TUỆ Record Check
-      if (baseline.maxPerfects > 0 && userPerfects > baseline.maxPerfects) {
+      if (baseline.maxPerfects > 0 && userPerfects >= baseline.maxPerfects) {
         const isSelf = baseline.maxPerfectsHolderId === user.id || baseline.maxPerfectsHolderName === user.name;
-        // Only notify if it's a new champion OR self-breaking at a round milestone of 50
-        const shouldNotify = !isSelf || (userPerfects % 50 === 0);
-        if (shouldNotify) {
-          const detailText = isSelf
-            ? `vừa củng cố kỷ lục TRÍ TUỆ của chính mình với cột mốc: ${userPerfects} lượt đại cát đạt 30/30 tối đa! 🧠`
-            : `vừa vượt mặt ${baseline.maxPerfectsHolderName || 'người giữ kỷ lục cũ'} để thiết lập kỷ lục TRÍ TUỆ mới với ${userPerfects} lượt đại cát đạt 30/30 tối đa! 🧠`;
-          await databaseService.saveAnnouncement({
-            id: 'ann_' + Date.now() + '_tt',
-            userName: user.name,
-            type: 'record_broken',
-            detail: detailText,
-            timestamp: Date.now()
-          });
+        if (userPerfects > baseline.maxPerfects) {
+          // Only notify if it's a new champion OR self-breaking at a round milestone of 50
+          const shouldNotify = !isSelf || (userPerfects % 50 === 0);
+          if (shouldNotify) {
+            const detailText = isSelf
+              ? `vừa củng cố kỷ lục TRÍ TUỆ của chính mình với cột mốc: ${userPerfects} lượt đại cát đạt 30/30 tối đa! 🧠`
+              : `vừa vượt mặt ${baseline.maxPerfectsHolderName || 'người giữ kỷ lục cũ'} để thiết lập kỷ lục TRÍ TUỆ mới với ${userPerfects} lượt đại cát đạt 30/30 tối đa! 🧠`;
+            await databaseService.saveAnnouncement({
+              id: 'ann_' + Date.now() + '_tt',
+              userName: user.name,
+              type: 'record_broken',
+              detail: detailText,
+              timestamp: Date.now()
+            });
+          }
+        } else if (userPerfects === baseline.maxPerfects) {
+          // Cân bằng kỷ lục
+          if (!isSelf) {
+            const detailText = `vừa CÂN BẰNG KỶ LỤC TRÍ TUỆ của ${baseline.maxPerfectsHolderName || 'tiền bối'} với cột mốc ${userPerfects} lượt đại cát đạt 30/30 tối đa! 🧠`;
+            await databaseService.saveAnnouncement({
+              id: 'ann_' + Date.now() + '_tt_equals',
+              userName: user.name,
+              type: 'record_broken',
+              detail: detailText,
+              timestamp: Date.now()
+            });
+          }
         }
       }
 
       // 3. TỐC ĐỘ Record Check
-      if (baseline.minAvgDurationPerQ < Infinity && userAvgSpeed < baseline.minAvgDurationPerQ && userTotalQ >= 9) {
+      if (baseline.minAvgDurationPerQ < Infinity && userTotalQ >= 9) {
         const isSelf = baseline.minAvgDurationHolderId === user.id || baseline.minAvgDurationHolderName === user.name;
-        // Only notify if it's a new champion OR if self-breaking is significant (at least 0.25s faster)
-        const improvement = baseline.minAvgDurationPerQ - userAvgSpeed;
-        const shouldNotify = !isSelf || (improvement >= 0.25);
-        if (shouldNotify) {
-          const detailText = isSelf
-            ? `vừa tự bứt phá kỷ lục TỐC ĐỘ phản xạ cực hạn của chính mình lên tầm cao mới: ${userAvgSpeed.toFixed(2)} giây/câu! ⚡`
-            : `vừa phá kỷ lục TỐC ĐỘ phản xạ cực hạn của ${baseline.minAvgDurationHolderName || 'tiền bối'} với thành tích ấn tượng: ${userAvgSpeed.toFixed(2)} giây/câu! ⚡`;
-          await databaseService.saveAnnouncement({
-            id: 'ann_' + Date.now() + '_td',
-            userName: user.name,
-            type: 'record_broken',
-            detail: detailText,
-            timestamp: Date.now()
-          });
-        }
-      } else if (baseline.minAvgDurationPerQ < Infinity && userAvgSpeed >= baseline.minAvgDurationPerQ && userAvgSpeed < baseline.minAvgDurationPerQ + 0.15 && userTotalQ >= 9) {
-        // CLOSE COMPARED RECORD: Bám sát mốc kỷ lục
-        const isSelf = baseline.minAvgDurationHolderId === user.id || baseline.minAvgDurationHolderName === user.name;
-        if (!isSelf) {
-          const detailText = `vừa bám sát mốc Kỷ lục TỐC ĐỘ phản xạ cực hạn của ${baseline.minAvgDurationHolderName || 'QUÁCH THUÝ VÂN'} với thành tích cực kỳ ấn tượng: ${userAvgSpeed.toFixed(2)} giây/câu! 🔥`;
-          await databaseService.saveAnnouncement({
-            id: 'ann_' + Date.now() + '_td_close',
-            userName: user.name,
-            type: 'record_broken',
-            detail: detailText,
-            timestamp: Date.now()
-          });
+        const userSpeedStr = userAvgSpeed.toFixed(2);
+        const baselineSpeedStr = baseline.minAvgDurationPerQ.toFixed(2);
+
+        if (parseFloat(userSpeedStr) < parseFloat(baselineSpeedStr)) {
+          // Only notify if it's a new champion OR if self-breaking is significant (at least 0.25s faster)
+          const improvement = baseline.minAvgDurationPerQ - userAvgSpeed;
+          const shouldNotify = !isSelf || (improvement >= 0.25);
+          if (shouldNotify) {
+            const detailText = isSelf
+              ? `vừa tự bứt phá kỷ lục TỐC ĐỘ phản xạ cực hạn của chính mình lên tầm cao mới: ${userAvgSpeed.toFixed(2)} giây/câu! ⚡`
+              : `vừa phá kỷ lục TỐC ĐỘ phản xạ cực hạn của ${baseline.minAvgDurationHolderName || 'tiền bối'} với thành tích ấn tượng: ${userAvgSpeed.toFixed(2)} giây/câu! ⚡`;
+            await databaseService.saveAnnouncement({
+              id: 'ann_' + Date.now() + '_td',
+              userName: user.name,
+              type: 'record_broken',
+              detail: detailText,
+              timestamp: Date.now()
+            });
+          }
+        } else if (userSpeedStr === baselineSpeedStr) {
+          // Cân bằng kỷ lục
+          if (!isSelf) {
+            const detailText = `vừa CÂN BẰNG KỶ LỤC TỐC ĐỘ phản xạ cực hạn của ${baseline.minAvgDurationHolderName || 'QUÁCH THUÝ VÂN'} với thành tích cực kỳ ấn tượng: ${userAvgSpeed.toFixed(2)} giây/câu! ⚡`;
+            await databaseService.saveAnnouncement({
+              id: 'ann_' + Date.now() + '_td_equals',
+              userName: user.name,
+              type: 'record_broken',
+              detail: detailText,
+              timestamp: Date.now()
+            });
+          }
+        } else if (userAvgSpeed < baseline.minAvgDurationPerQ + 0.15) {
+          // CLOSE COMPARED RECORD: Bám sát mốc kỷ lục
+          if (!isSelf) {
+            const detailText = `vừa bám sát mốc Kỷ lục TỐC ĐỘ phản xạ cực hạn của ${baseline.minAvgDurationHolderName || 'QUÁCH THUÝ VÂN'} với thành tích cực kỳ ấn tượng: ${userAvgSpeed.toFixed(2)} giây/câu! 🔥`;
+            await databaseService.saveAnnouncement({
+              id: 'ann_' + Date.now() + '_td_close',
+              userName: user.name,
+              type: 'record_broken',
+              detail: detailText,
+              timestamp: Date.now()
+            });
+          }
         }
       }
 
       // 4. BẤT BẠI Record Check
-      if (baseline.maxStreak > 0 && userMaxStreak > baseline.maxStreak) {
+      if (baseline.maxStreak > 0 && userMaxStreak >= baseline.maxStreak) {
         const isSelf = baseline.maxStreakHolderId === user.id || baseline.maxStreakHolderName === user.name;
-        // Only notify if it's a new champion OR self-breaking at a round milestone of 5
-        const shouldNotify = !isSelf || (userMaxStreak % 5 === 0);
-        if (shouldNotify) {
-          const detailText = isSelf
-            ? `vừa nối dài chuỗi kỷ lục BẤT BẠI tự đặt ra lên mốc huy hoàng mới: ${userMaxStreak} lượt đạt 30/30 liên hoàn! 🛡️`
-            : `vừa hạ gục chuỗi kỷ lục BẤT BẠI của ${baseline.maxStreakHolderName || 'nhân tài cũ'} với chuỗi ${userMaxStreak} lượt liên hoàn đạt 30/30 tối đa! 🛡️`;
-          await databaseService.saveAnnouncement({
-            id: 'ann_' + Date.now() + '_bb',
-            userName: user.name,
-            type: 'record_broken',
-            detail: detailText,
-            timestamp: Date.now()
-          });
+        if (userMaxStreak > baseline.maxStreak) {
+          // Only notify if it's a new champion OR self-breaking at a round milestone of 5
+          const shouldNotify = !isSelf || (userMaxStreak % 5 === 0);
+          if (shouldNotify) {
+            const detailText = isSelf
+              ? `vừa nối dài chuỗi kỷ lục BẤT BẠI tự đặt ra lên mốc huy hoàng mới: ${userMaxStreak} lượt đạt 30/30 liên hoàn! 🛡️`
+              : `vừa hạ gục chuỗi kỷ lục BẤT BẠI của ${baseline.maxStreakHolderName || 'nhân tài cũ'} với chuỗi ${userMaxStreak} lượt liên hoàn đạt 30/30 tối đa! 🛡️`;
+            await databaseService.saveAnnouncement({
+              id: 'ann_' + Date.now() + '_bb',
+              userName: user.name,
+              type: 'record_broken',
+              detail: detailText,
+              timestamp: Date.now()
+            });
+          }
+        } else if (userMaxStreak === baseline.maxStreak) {
+          // Cân bằng kỷ lục
+          if (!isSelf) {
+            const detailText = `vừa CÂN BẰNG KỶ LỤC BẤT BẠI của ${baseline.maxStreakHolderName || 'tiền bối'} với chuỗi ${userMaxStreak} lượt liên hoàn đạt 30/30 tối đa! 🛡️`;
+            await databaseService.saveAnnouncement({
+              id: 'ann_' + Date.now() + '_bb_equals',
+              userName: user.name,
+              type: 'record_broken',
+              detail: detailText,
+              timestamp: Date.now()
+            });
+          }
         }
       }
 
       // 5. TRƯỚC BÌNH MINH Record Check
-      if (newResult.score === 30 && baseline.minSunriseTime < Infinity && userSunriseInMins < baseline.minSunriseTime) {
+      if (newResult.score === 30 && baseline.minSunriseTime < Infinity && userSunriseInMins <= baseline.minSunriseTime) {
         const isSelf = baseline.minSunriseTimeHolderId === user.id || baseline.minSunriseTimeHolderName === user.name;
-        // Only notify if it's a new champion OR self-breaking by at least 10 minutes earlier
-        const diffInMins = baseline.minSunriseTime - userSunriseInMins;
-        const shouldNotify = !isSelf || (diffInMins >= 10);
-        if (shouldNotify) {
-          const detailText = isSelf
-            ? `vừa thức dậy sớm hơn nữa, tự phá kỷ lục TRƯỚC BÌNH MINH của chính mình lúc ${userSunriseStr}! 🌅`
-            : `vừa thi đạt điểm tối đa lúc ${userSunriseStr}, phá vỡ kỷ lục TRƯỚC BÌNH MINH của ${baseline.minSunriseTimeHolderName || 'người cũ'}! 🌅`;
-          await databaseService.saveAnnouncement({
-            id: 'ann_' + Date.now() + '_bm',
-            userName: user.name,
-            type: 'record_broken',
-            detail: detailText,
-            timestamp: Date.now()
-          });
+        if (userSunriseInMins < baseline.minSunriseTime) {
+          // Only notify if it's a new champion OR self-breaking by at least 10 minutes earlier
+          const diffInMins = baseline.minSunriseTime - userSunriseInMins;
+          const shouldNotify = !isSelf || (diffInMins >= 10);
+          if (shouldNotify) {
+            const detailText = isSelf
+              ? `vừa thức dậy sớm hơn nữa, tự phá kỷ lục TRƯỚC BÌNH MINH của chính mình lúc ${userSunriseStr}! 🌅`
+              : `vừa thi đạt điểm tối đa lúc ${userSunriseStr}, phá vỡ kỷ lục TRƯỚC BÌNH MINH của ${baseline.minSunriseTimeHolderName || 'người cũ'}! 🌅`;
+            await databaseService.saveAnnouncement({
+              id: 'ann_' + Date.now() + '_bm',
+              userName: user.name,
+              type: 'record_broken',
+              detail: detailText,
+              timestamp: Date.now()
+            });
+          }
+        } else if (userSunriseInMins === baseline.minSunriseTime) {
+          // Cân bằng kỷ lục
+          if (!isSelf) {
+            const detailText = `vừa thi đạt điểm tối đa lúc ${userSunriseStr}, CÂN BẰNG KỶ LỤC TRƯỚC BÌNH MINH của ${baseline.minSunriseTimeHolderName || 'tiền bối'}! 🌅`;
+            await databaseService.saveAnnouncement({
+              id: 'ann_' + Date.now() + '_bm_equals',
+              userName: user.name,
+              type: 'record_broken',
+              detail: detailText,
+              timestamp: Date.now()
+            });
+          }
         }
       }
     } catch (err) {
@@ -2023,12 +2095,12 @@ export default function EmployeeDashboard({
       }
     };
 
-    let bestQuyetTam = { ...BASELINE_RECORDS.quyettam };
-    let bestTriTue = { ...BASELINE_RECORDS.tritue };
-    let bestTocDo = { ...BASELINE_RECORDS.tocdo };
-    let bestThanToc = { ...BASELINE_RECORDS.thantoc };
-    let bestBatBai = { ...BASELINE_RECORDS.batbai };
-    let bestBinhMinh = { ...BASELINE_RECORDS.binhminh };
+    const bestQuyetTam: any = { ...BASELINE_RECORDS.quyettam, holders: [BASELINE_RECORDS.quyettam] };
+    const bestTriTue: any = { ...BASELINE_RECORDS.tritue, holders: [BASELINE_RECORDS.tritue] };
+    const bestTocDo: any = { ...BASELINE_RECORDS.tocdo, holders: [BASELINE_RECORDS.tocdo] };
+    const bestThanToc: any = { ...BASELINE_RECORDS.thantoc, holders: [BASELINE_RECORDS.thantoc] };
+    const bestBatBai: any = { ...BASELINE_RECORDS.batbai, holders: [BASELINE_RECORDS.batbai] };
+    const bestBinhMinh: any = { ...BASELINE_RECORDS.binhminh, holders: [BASELINE_RECORDS.binhminh] };
 
     const lNormalizeName = (name: string | undefined | null): string => {
       if (!name) return '';
@@ -2098,54 +2170,108 @@ export default function EmployeeDashboard({
       const totalQues = chronological.reduce((sum, r) => sum + (r.totalQuestions || 3), 0);
       const userAvgTimeSpent = Math.max(1, Math.round(totalDur / totalQues));
 
+      const lastRes = chronological[chronological.length - 1] || userResultsList[0];
+      const dept = lastRes.department || userIdToDeptMap[personKey] || 'Bộ phận khác';
+      const branch = lastRes.branch || userIdToBranchMap[personKey] || 'Chi nhánh khác';
+      const userName = lastRes.userName || userIdToNameMap[personKey] || personKey;
+      const dateStr = formatToDDMMYY(lastRes.timestamp);
+      const normName = lNormalizeName(userName);
+
       if (attemptsCount > bestQuyetTam.attemptsCount) {
-        const lastRes = chronological[chronological.length - 1];
-        bestQuyetTam = {
-          name: lastRes.userName || 'THÀNH VIÊN ẨN DANH',
-          dept: lastRes.department || userIdToDeptMap[personKey] || 'Bộ phận khác',
-          branch: lastRes.branch || userIdToBranchMap[personKey] || 'Chi nhánh khác',
-          date: formatToDDMMYY(lastRes.timestamp),
+        const newHolder = {
+          name: userName,
+          dept,
+          branch,
+          date: dateStr,
           attemptsCount: attemptsCount,
           avgScore: userAvgScore,
           attempts: attemptsCount,
           avgTimeSpent: userAvgTimeSpent,
           proofText: `Chinh phục số lượt ôn luyện bền bỉ cao nhất hệ thống: ${attemptsCount} lượt.`
         };
+        Object.assign(bestQuyetTam, newHolder, { holders: [newHolder] });
+      } else if (attemptsCount === bestQuyetTam.attemptsCount) {
+        const exists = bestQuyetTam.holders?.some((h: any) => lNormalizeName(h.name) === normName);
+        if (!exists) {
+          bestQuyetTam.holders.push({
+            name: userName,
+            dept,
+            branch,
+            date: dateStr,
+            attemptsCount: attemptsCount,
+            avgScore: userAvgScore,
+            attempts: attemptsCount,
+            avgTimeSpent: userAvgTimeSpent,
+            proofText: `Chinh phục số lượt ôn luyện bền bỉ cao nhất hệ thống: ${attemptsCount} lượt.`
+          });
+        }
       }
 
       const perfectsCount = chronological.filter(r => r.score === 30).length;
       if (perfectsCount > bestTriTue.perfectsCount) {
-        const lastRes = chronological[chronological.length - 1];
-        bestTriTue = {
-          name: lastRes.userName || 'THÀNH VIÊN ẨN DANH',
-          dept: lastRes.department || userIdToDeptMap[personKey] || 'Bộ phận khác',
-          branch: lastRes.branch || userIdToBranchMap[personKey] || 'Chi nhánh khác',
-          date: formatToDDMMYY(lastRes.timestamp),
+        const newHolder = {
+          name: userName,
+          dept,
+          branch,
+          date: dateStr,
           perfectsCount: perfectsCount,
           avgScore: userAvgScore,
           attempts: attemptsCount,
           avgTimeSpent: userAvgTimeSpent,
           proofText: `Chinh phục điểm số tuyệt đối 30/30 cao nhất hệ thống: ${perfectsCount} lượt.`
         };
+        Object.assign(bestTriTue, newHolder, { holders: [newHolder] });
+      } else if (perfectsCount === bestTriTue.perfectsCount && perfectsCount > 0) {
+        const exists = bestTriTue.holders?.some((h: any) => lNormalizeName(h.name) === normName);
+        if (!exists) {
+          bestTriTue.holders.push({
+            name: userName,
+            dept,
+            branch,
+            date: dateStr,
+            perfectsCount: perfectsCount,
+            avgScore: userAvgScore,
+            attempts: attemptsCount,
+            avgTimeSpent: userAvgTimeSpent,
+            proofText: `Chinh phục điểm số tuyệt đối 30/30 cao nhất hệ thống: ${perfectsCount} lượt.`
+          });
+        }
       }
 
       if (attemptsCount >= 5) {
         const totalDuration = chronological.reduce((sum, r) => sum + (r.duration || 0), 0);
         const totalQuestions = chronological.reduce((sum, r) => sum + (r.totalQuestions || 3), 0);
-        const avgSpeed = parseFloat((totalDuration / totalQuestions).toFixed(1));
-        if (avgSpeed > 0 && avgSpeed < bestTocDo.durationPerQ) {
-          const lastRes = chronological[chronological.length - 1];
-          bestTocDo = {
-            name: lastRes.userName || 'THÀNH VIÊN ẨN DANH',
-            dept: lastRes.department || userIdToDeptMap[personKey] || 'Bộ phận khác',
-            branch: lastRes.branch || userIdToBranchMap[personKey] || 'Chi nhánh khác',
-            date: formatToDDMMYY(lastRes.timestamp),
+        const avgSpeed = parseFloat((totalDuration / totalQuestions).toFixed(2));
+        const diff = avgSpeed - bestTocDo.durationPerQ;
+
+        if (avgSpeed > 0 && avgSpeed < bestTocDo.durationPerQ && Math.abs(diff) >= 0.05) {
+          const newHolder = {
+            name: userName,
+            dept,
+            branch,
+            date: dateStr,
             durationPerQ: avgSpeed,
             avgScore: userAvgScore,
-            attempts: chronological.length,
+            attempts: attemptsCount,
             avgTimeSpent: userAvgTimeSpent,
-            proofText: `Phản xạ phán đoán siêu hạng với thời gian trả lời trung bình chỉ ${avgSpeed} giây/câu.`
+            proofText: `Phản xạ phán đoán siêu hạng với thời gian trả lời trung bình chỉ ${avgSpeed.toFixed(2)} giây/câu.`
           };
+          Object.assign(bestTocDo, newHolder, { holders: [newHolder] });
+        } else if (Math.abs(diff) < 0.05 || avgSpeed.toFixed(1) === bestTocDo.durationPerQ.toFixed(1)) {
+          const exists = bestTocDo.holders?.some((h: any) => lNormalizeName(h.name) === normName);
+          if (!exists) {
+            bestTocDo.holders.push({
+              name: userName,
+              dept,
+              branch,
+              date: dateStr,
+              durationPerQ: avgSpeed,
+              avgScore: userAvgScore,
+              attempts: attemptsCount,
+              avgTimeSpent: userAvgTimeSpent,
+              proofText: `Phản xạ phán đoán siêu hạng với thời gian trả lời trung bình chỉ ${avgSpeed.toFixed(2)} giây/câu.`
+            });
+          }
         }
       }
 
@@ -2161,18 +2287,33 @@ export default function EmployeeDashboard({
         }
       });
       if (maxStreak > bestBatBai.streak) {
-        const lastRes = chronological[chronological.length - 1];
-        bestBatBai = {
-          name: lastRes.userName || 'THÀNH VIÊN ẨN DANH',
-          dept: lastRes.department || userIdToDeptMap[personKey] || 'Bộ phận khác',
-          branch: lastRes.branch || userIdToBranchMap[personKey] || 'Chi nhánh khác',
-          date: formatToDDMMYY(lastRes.timestamp),
+        const newHolder = {
+          name: userName,
+          dept,
+          branch,
+          date: dateStr,
           streak: maxStreak,
           avgScore: userAvgScore,
           attempts: attemptsCount,
           avgTimeSpent: userAvgTimeSpent,
           proofText: `Thiết lập chuỗi ${maxStreak} lượt liên tục đạt điểm số tối đa 30/30 và không hề nếm mùi thất bại.`
         };
+        Object.assign(bestBatBai, newHolder, { holders: [newHolder] });
+      } else if (maxStreak === bestBatBai.streak) {
+        const exists = bestBatBai.holders?.some((h: any) => lNormalizeName(h.name) === normName);
+        if (!exists) {
+          bestBatBai.holders.push({
+            name: userName,
+            dept,
+            branch,
+            date: dateStr,
+            streak: maxStreak,
+            avgScore: userAvgScore,
+            attempts: attemptsCount,
+            avgTimeSpent: userAvgTimeSpent,
+            proofText: `Thiết lập chuỗi ${maxStreak} lượt liên tục đạt điểm số tối đa 30/30 và không hề nếm mùi thất bại.`
+          });
+        }
       }
 
       // 5: Bình Minh earliest checking
@@ -2194,10 +2335,10 @@ export default function EmployeeDashboard({
               const monthPart = formattedDate.split('/')[1] || '06';
               const fullDateStr = `${dayPart}/${monthPart}/${fullYearForProof}`;
 
-              bestBinhMinh = {
-                name: r.userName || 'THÀNH VIÊN ẨN DANH',
-                dept: r.department || userIdToDeptMap[personKey] || 'Bộ phận khác',
-                branch: r.branch || userIdToBranchMap[personKey] || 'Chi nhánh khác',
+              const newHolder = {
+                name: r.userName || userName,
+                dept: r.department || dept,
+                branch: r.branch || branch,
                 date: formattedDate,
                 timeString: formattedTime,
                 avgScore: userAvgScore,
@@ -2205,6 +2346,31 @@ export default function EmployeeDashboard({
                 avgTimeSpent: userAvgTimeSpent,
                 proofText: `Chủ động ôn luyện từ sáng tinh sương lúc ${formattedTime} ngày ${fullDateStr}.`
               };
+              Object.assign(bestBinhMinh, newHolder, { holders: [newHolder] });
+            } else if (timeVal === currentBinhMinhMins) {
+              const formattedTime = `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
+              const formattedDate = formatToDDMMYY(r.timestamp);
+              const fullYearForProof = formattedDate.includes('/') 
+                ? (formattedDate.split('/')[2].length === 2 ? '20' + formattedDate.split('/')[2] : formattedDate.split('/')[2]) 
+                : '2026';
+              const dayPart = formattedDate.split('/')[0] || '14';
+              const monthPart = formattedDate.split('/')[1] || '06';
+              const fullDateStr = `${dayPart}/${monthPart}/${fullYearForProof}`;
+
+              const exists = bestBinhMinh.holders?.some((h: any) => lNormalizeName(h.name) === normName);
+              if (!exists) {
+                bestBinhMinh.holders.push({
+                  name: r.userName || userName,
+                  dept: r.department || dept,
+                  branch: r.branch || branch,
+                  date: formattedDate,
+                  timeString: formattedTime,
+                  avgScore: userAvgScore,
+                  attempts: attemptsCount,
+                  avgTimeSpent: userAvgTimeSpent,
+                  proofText: `Chủ động ôn luyện từ sáng tinh sương lúc ${formattedTime} ngày ${fullDateStr}.`
+                });
+              }
             }
           }
         }
@@ -2299,40 +2465,46 @@ export default function EmployeeDashboard({
 
     if (thanTocEligibleCandidates.length > 0) {
       thanTocEligibleCandidates.sort((a,b) => a.durationMs - b.durationMs);
-      const best = thanTocEligibleCandidates[0];
-      const hours = parseFloat((best.durationMs / (3600 * 1000)).toFixed(1));
-      let displayProof = '';
-      if (hours < 24) {
-        displayProof = `Thăng cấp Huyền thoại thâu đêm suốt sáng cực nhanh chỉ trong ${hours} giờ kể từ khi được duyệt vào app!`;
-      } else {
-        const days = parseFloat((hours / 24).toFixed(1));
-        displayProof = `Thăng cấp Huyền thoại thâu đêm suốt sáng cực nhanh chỉ trong ${days} ngày kể từ khi được duyệt vào app!`;
-      }
+      const minDuration = thanTocEligibleCandidates[0].durationMs;
+      const bestCandidates = thanTocEligibleCandidates.filter(c => Math.abs(c.durationMs - minDuration) < 60000); // within 1 minute
+      
+      const newHolders = bestCandidates.map(best => {
+        const hours = parseFloat((best.durationMs / (3600 * 1000)).toFixed(1));
+        let displayProof = '';
+        if (hours < 24) {
+          displayProof = `Thăng cấp Huyền thoại thâu đêm suốt sáng cực nhanh chỉ trong ${hours} giờ kể từ khi được duyệt vào app!`;
+        } else {
+          const days = parseFloat((hours / 24).toFixed(1));
+          displayProof = `Thăng cấp Huyền thoại thâu đêm suốt sáng cực nhanh chỉ trong ${days} ngày kể từ khi được duyệt vào app!`;
+        }
 
-      const personResultsList = resultsForRankings.filter(r => {
-        const rNorm = lNormalizeName(r.userName);
-        const rId = r.userId || '';
-        return rId === best.name || rNorm === lNormalizeName(best.name);
+        const personResultsList = resultsForRankings.filter(r => {
+          const rNorm = lNormalizeName(r.userName);
+          const rId = r.userId || '';
+          return rId === best.name || rNorm === lNormalizeName(best.name);
+        });
+        const tScore = personResultsList.reduce((sum, r) => sum + r.score, 0);
+        const bAvgScore = personResultsList.length > 0 ? parseFloat((tScore / personResultsList.length).toFixed(1)) : 29.1;
+        const bAttempts = personResultsList.length > 0 ? personResultsList.length : 52;
+        const tDur = personResultsList.reduce((sum, r) => sum + (r.duration || 0), 0);
+        const tQues = personResultsList.reduce((sum, r) => sum + (r.totalQuestions || 3), 0);
+        const bAvgTimeSpent = personResultsList.length > 0 ? Math.max(1, Math.round(tDur / tQues)) : 6;
+
+        return {
+          name: best.name,
+          dept: best.dept,
+          branch: best.branch,
+          date: best.date,
+          maxLevelReached: 5,
+          attemptsCountToMaxLevel: 48,
+          avgScore: bAvgScore,
+          attempts: bAttempts,
+          avgTimeSpent: bAvgTimeSpent,
+          proofText: displayProof
+        };
       });
-      const tScore = personResultsList.reduce((sum, r) => sum + r.score, 0);
-      const bAvgScore = personResultsList.length > 0 ? parseFloat((tScore / personResultsList.length).toFixed(1)) : 29.1;
-      const bAttempts = personResultsList.length > 0 ? personResultsList.length : 52;
-      const tDur = personResultsList.reduce((sum, r) => sum + (r.duration || 0), 0);
-      const tQues = personResultsList.reduce((sum, r) => sum + (r.totalQuestions || 3), 0);
-      const bAvgTimeSpent = personResultsList.length > 0 ? Math.max(1, Math.round(tDur / tQues)) : 6;
 
-      bestThanToc = {
-        name: best.name,
-        dept: best.dept,
-        branch: best.branch,
-        date: best.date,
-        maxLevelReached: 5,
-        attemptsCountToMaxLevel: 48,
-        avgScore: bAvgScore,
-        attempts: bAttempts,
-        avgTimeSpent: bAvgTimeSpent,
-        proofText: displayProof
-      };
+      Object.assign(bestThanToc, newHolders[0], { holders: newHolders });
     }
 
     return [
@@ -2465,22 +2637,28 @@ export default function EmployeeDashboard({
       categoryLabel: 'Tôn Vinh'
     }));
 
-    // 2. Kỷ lục 3T (🔥, 🧠, ⚡, 🌅, 🚀, 🛡️) - 6 record holders
-    const list2 = records3T.map((r, idx) => ({
-      uniqueId: `record-${r.id}-${idx}`,
-      type: 'record' as const,
-      name: r.name,
-      dept: r.dept,
-      branch: r.branch,
-      leftEmoji: r.emoji,
-      avgScore: r.avgScore ?? 29.3,
-      attempts: r.attempts ?? r.attemptsCount ?? 161,
-      avgTimeSpent: r.avgTimeSpent ?? 5,
-      honorTitle: r.title,
-      proofText: r.proofText,
-      categoryTitle: '✨ KỶ LỤC 3T HỆ THỐNG',
-      categoryLabel: 'Kỷ Lục'
-    }));
+    // 2. Kỷ lục 3T (🔥, 🧠, ⚡, 🌅, 🚀, 🛡️) - record holders (flat mapped to support multi-holders)
+    const list2: any[] = [];
+    records3T.forEach((r, idx) => {
+      const holdersList = r.holders && r.holders.length > 0 ? r.holders : [r];
+      holdersList.forEach((h: any, hIdx: number) => {
+        list2.push({
+          uniqueId: `record-${r.id}-${idx}-${hIdx}`,
+          type: 'record' as const,
+          name: h.name,
+          dept: h.dept,
+          branch: h.branch,
+          leftEmoji: r.emoji,
+          avgScore: h.avgScore ?? r.avgScore ?? 29.3,
+          attempts: h.attempts ?? h.attemptsCount ?? r.attempts ?? r.attemptsCount ?? 161,
+          avgTimeSpent: h.avgTimeSpent ?? r.avgTimeSpent ?? 5,
+          honorTitle: r.title,
+          proofText: h.proofText ?? r.proofText,
+          categoryTitle: '✨ KỶ LỤC 3T HỆ THỐNG',
+          categoryLabel: 'Kỷ Lục'
+        });
+      });
+    });
 
     // 3. Top 5 Kiên trì (Tháng)
     const list3 = topFivePatience.map((cand, idx) => ({
@@ -3600,22 +3778,43 @@ export default function EmployeeDashboard({
           <div className="bg-yellow-50/50 border border-yellow-250/25 rounded-lg p-2.5 text-[11px] text-yellow-950 leading-normal mb-1">
             🔥 Ghi nhận các thành tích <strong>kỷ lục vô tiền khoáng hậu</strong> của các học viên xuất sắc nhất trên toàn hệ thống thời gian thực.
           </div>
-          {records3T.map((rec, idx) => (
-            <div key={idx} className="bg-gradient-to-br from-amber-50/20 via-white to-yellow-50/5 border-2 border-amber-100 p-2.5 rounded-xl shadow-3xs relative overflow-hidden flex flex-col gap-1.5">
-              <div className="absolute top-0 right-0 h-full w-24 bg-gradient-to-l from-amber-400/5 pointer-events-none" />
-              <div className="flex items-center justify-between gap-1.5 w-full">
-                <span className="text-[10px] font-black uppercase text-amber-805 bg-amber-100 px-2 py-0.5 rounded border border-amber-250">
-                  {rec.emoji} {rec.title}
-                </span>
-                <span className="text-[8.5px] font-mono text-gray-400">{rec.date}</span>
+          {records3T.map((rec, idx) => {
+            const holders = rec.holders && rec.holders.length > 0 ? rec.holders : [rec];
+            return (
+              <div key={idx} className="bg-gradient-to-br from-amber-50/20 via-white to-yellow-50/5 border-2 border-amber-100 p-2.5 rounded-xl shadow-3xs relative overflow-hidden flex flex-col gap-1.5">
+                <div className="absolute top-0 right-0 h-full w-24 bg-gradient-to-l from-amber-400/5 pointer-events-none" />
+                <div className="flex items-center justify-between gap-1.5 w-full">
+                  <span className="text-[10px] font-black uppercase text-amber-805 bg-amber-100 px-2 py-0.5 rounded border border-amber-250">
+                    {rec.emoji} {rec.title}
+                  </span>
+                  <span className="text-[8.5px] font-mono text-gray-400">{rec.date}</span>
+                </div>
+                
+                {/* List of Holders */}
+                <div className="space-y-1.5 mt-1 border-l-2 border-amber-300 pl-2">
+                  {holders.map((holder: any, hIdx: number) => (
+                    <div key={hIdx} className="flex flex-col">
+                      <div className="text-xs font-black text-gray-800 uppercase tracking-tight flex items-center gap-1.5">
+                        <span>{holder.name}</span>
+                        {holders.length > 1 && (
+                          <span className="text-[7.5px] font-black text-amber-700 bg-amber-100/70 px-1 py-0.5 rounded border border-amber-200">
+                            ĐỒNG KỶ LỤC
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[9.5px] text-gray-500 font-semibold leading-none mt-0.5">
+                        {holder.dept} &bull; <span className="text-gray-450 font-normal">{holder.branch}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="bg-amber-50/40 border border-amber-200/30 rounded p-2 text-[10.5px] font-sans text-amber-900 leading-normal italic mt-1 font-medium">
+                  &ldquo;{rec.proofText}&rdquo;
+                </div>
               </div>
-              <div className="text-xs font-black text-gray-800 uppercase tracking-tight mt-0.5">{rec.name}</div>
-              <div className="text-[10px] text-gray-500 font-semibold">{rec.dept} &bull; <span className="text-gray-450 font-normal">{rec.branch}</span></div>
-              <div className="bg-amber-50/40 border border-amber-200/30 rounded p-2 text-[10.5px] font-sans text-amber-900 leading-normal italic mt-1 font-medium">
-                &ldquo;{rec.proofText}&rdquo;
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     );

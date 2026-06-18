@@ -1931,22 +1931,22 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
       } : null
     };
 
-    let bestQuyetTamUser: any = BASELINE_RECORDS.quyettam;
+    let bestQuyetTamUser: any = BASELINE_RECORDS.quyettam ? { ...BASELINE_RECORDS.quyettam, holders: [BASELINE_RECORDS.quyettam] } : null;
     let maxAttempts = BASELINE_RECORDS.quyettam ? BASELINE_RECORDS.quyettam.attemptsCount : 0;
 
-    let bestTriTueUser: any = BASELINE_RECORDS.tritue;
+    let bestTriTueUser: any = BASELINE_RECORDS.tritue ? { ...BASELINE_RECORDS.tritue, holders: [BASELINE_RECORDS.tritue] } : null;
     let maxPerfects = BASELINE_RECORDS.tritue ? BASELINE_RECORDS.tritue.perfectsCount : 0;
 
-    let bestTocDoUser: any = BASELINE_RECORDS.tocdo;
+    let bestTocDoUser: any = BASELINE_RECORDS.tocdo ? { ...BASELINE_RECORDS.tocdo, holders: [BASELINE_RECORDS.tocdo] } : null;
     let minSpeedPerQ = BASELINE_RECORDS.tocdo ? BASELINE_RECORDS.tocdo.durationPerQ : 999.0;
 
-    let bestThanTocUser: any = BASELINE_RECORDS.thantoc;
+    let bestThanTocUser: any = BASELINE_RECORDS.thantoc ? { ...BASELINE_RECORDS.thantoc, holders: [BASELINE_RECORDS.thantoc] } : null;
     let minThanTocDuration = BASELINE_RECORDS.thantoc ? BASELINE_RECORDS.thantoc.attemptsCountToMaxLevel : 999;
 
-    let bestBatBaiUser: any = BASELINE_RECORDS.batbai;
+    let bestBatBaiUser: any = BASELINE_RECORDS.batbai ? { ...BASELINE_RECORDS.batbai, holders: [BASELINE_RECORDS.batbai] } : null;
     let maxBatBaiStreak = BASELINE_RECORDS.batbai ? BASELINE_RECORDS.batbai.streak : 0;
 
-    let bestBinhMinhUser: any = BASELINE_RECORDS.binhminh;
+    let bestBinhMinhUser: any = BASELINE_RECORDS.binhminh ? { ...BASELINE_RECORDS.binhminh, holders: [BASELINE_RECORDS.binhminh] } : null;
     let minSunriseMins = BASELINE_RECORDS.binhminh ? (parseInt(BASELINE_RECORDS.binhminh.timeString.split(':')[0]) * 60 + parseInt(BASELINE_RECORDS.binhminh.timeString.split(':')[1])) : 600; // 10:00 -> 10 * 60 = 600 minutes
 
     // 4. Kỷ lục Thăng Cấp Thần Tốc (Calculated on historic groups)
@@ -2042,22 +2042,31 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
     if (thanTocEligible.length > 0) {
       thanTocEligible.sort((a, b) => a.attemptsCountToMaxLevel - b.attemptsCountToMaxLevel);
 
-      const best = thanTocEligible[0];
-      if (best.attemptsCountToMaxLevel < minThanTocDuration) {
-        minThanTocDuration = best.attemptsCountToMaxLevel;
-        bestThanTocUser = {
+      const minVal = thanTocEligible[0].attemptsCountToMaxLevel;
+      if (minVal < minThanTocDuration) {
+        minThanTocDuration = minVal;
+        const bestCandidates = thanTocEligible.filter(c => c.attemptsCountToMaxLevel === minVal);
+        const newHolders = bestCandidates.map(best => ({
           ...best.userProfile,
           maxLevelReached: 5,
           attemptsCountToMaxLevel: best.attemptsCountToMaxLevel,
           proofText: `Đạt Cấp 5 - Huyền Thoại chỉ sau ${best.attemptsCountToMaxLevel} lượt ôn luyện!`
-        };
-      } else if (best.attemptsCountToMaxLevel === minThanTocDuration && lNormalizeName(best.userProfile.name) !== lNormalizeName(bestThanTocUser.name)) {
-        bestThanTocUser = {
-          ...best.userProfile,
-          maxLevelReached: 5,
-          attemptsCountToMaxLevel: best.attemptsCountToMaxLevel,
-          proofText: `Đạt Cấp 5 - Huyền Thoại chỉ sau ${best.attemptsCountToMaxLevel} lượt ôn luyện!`
-        };
+        }));
+        bestThanTocUser = { ...newHolders[0], holders: newHolders };
+      } else if (minVal === minThanTocDuration) {
+        const bestCandidates = thanTocEligible.filter(c => c.attemptsCountToMaxLevel === minVal);
+        bestCandidates.forEach(best => {
+          const normName = lNormalizeName(best.userProfile.name);
+          const exists = bestThanTocUser.holders?.some((h: any) => lNormalizeName(h.name) === normName);
+          if (!exists) {
+            bestThanTocUser.holders.push({
+              ...best.userProfile,
+              maxLevelReached: 5,
+              attemptsCountToMaxLevel: best.attemptsCountToMaxLevel,
+              proofText: `Đạt Cấp 5 - Huyền Thoại chỉ sau ${best.attemptsCountToMaxLevel} lượt ôn luyện!`
+            });
+          }
+        });
       }
     }
 
@@ -2077,17 +2086,22 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
       const attemptsCount = chronological.length;
       if (attemptsCount > maxAttempts) {
         maxAttempts = attemptsCount;
-         bestQuyetTamUser = {
-           ...userProfile,
-           attemptsCount,
-           proofText: `Chinh phục số lượt ôn luyện bền bỉ cao nhất hệ thống: ${attemptsCount} lượt.`
-         };
-      } else if (attemptsCount === maxAttempts && lNormalizeName(userProfile.name) !== lNormalizeName(bestQuyetTamUser.name)) {
-         bestQuyetTamUser = {
-           ...userProfile,
-           attemptsCount,
-           proofText: `Chinh phục số lượt ôn luyện bền bỉ cao nhất hệ thống: ${attemptsCount} lượt.`
-         };
+        const newH = {
+          ...userProfile,
+          attemptsCount,
+          proofText: `Chinh phục số lượt ôn luyện bền bỉ cao nhất hệ thống: ${attemptsCount} lượt.`
+        };
+        bestQuyetTamUser = { ...newH, holders: [newH] };
+      } else if (attemptsCount === maxAttempts) {
+        const normName = lNormalizeName(userProfile.name);
+        const exists = bestQuyetTamUser.holders?.some((h: any) => lNormalizeName(h.name) === normName);
+        if (!exists) {
+          bestQuyetTamUser.holders.push({
+            ...userProfile,
+            attemptsCount,
+            proofText: `Chinh phục số lượt ôn luyện bền bỉ cao nhất hệ thống: ${attemptsCount} lượt.`
+          });
+        }
       }
 
       // 2. Trí Tuệ
@@ -2096,21 +2110,26 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
         maxPerfects = perfectsCount;
         const perfects = chronological.filter(r => r.score === 30);
         const latestPerfect = perfects[perfects.length - 1] || latestRes;
-        bestTriTueUser = {
+        const newH = {
           ...userProfile,
           date: latestPerfect.date || userProfile.date,
           perfectsCount,
           proofText: `Chinh phục điểm số tuyệt đối 30/30 cao nhất hệ thống: ${perfectsCount} lượt.`
         };
-      } else if (perfectsCount === maxPerfects && perfectsCount > 0 && lNormalizeName(userProfile.name) !== lNormalizeName(bestTriTueUser.name)) {
+        bestTriTueUser = { ...newH, holders: [newH] };
+      } else if (perfectsCount === maxPerfects && perfectsCount > 0) {
         const perfects = chronological.filter(r => r.score === 30);
         const latestPerfect = perfects[perfects.length - 1] || latestRes;
-        bestTriTueUser = {
-          ...userProfile,
-          date: latestPerfect.date || userProfile.date,
-          perfectsCount,
-          proofText: `Chinh phục điểm số tuyệt đối 30/30 cao nhất hệ thống: ${perfectsCount} lượt.`
-        };
+        const normName = lNormalizeName(userProfile.name);
+        const exists = bestTriTueUser.holders?.some((h: any) => lNormalizeName(h.name) === normName);
+        if (!exists) {
+          bestTriTueUser.holders.push({
+            ...userProfile,
+            date: latestPerfect.date || userProfile.date,
+            perfectsCount,
+            proofText: `Chinh phục điểm số tuyệt đối 30/30 cao nhất hệ thống: ${perfectsCount} lượt.`
+          });
+        }
       }
 
       // 3. Kỷ lục Tốc Độ
@@ -2119,20 +2138,24 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
       if (totalQ > 0) {
         const avgSpeed = totalD / totalQ;
         const finalSpeed = parseFloat(avgSpeed.toFixed(1));
-        // Require at least 6 questions answered in total to prevent accidental lucky quick clicks
         if (avgSpeed < minSpeedPerQ && totalQ >= 6) {
           minSpeedPerQ = avgSpeed;
-          bestTocDoUser = {
+          const newH = {
             ...userProfile,
             durationPerQ: finalSpeed,
             proofText: `Phản xạ phán đoán siêu hạng với thời gian trả lời trung bình chỉ ${finalSpeed} giây/câu.`
           };
-        } else if (finalSpeed === parseFloat(minSpeedPerQ.toFixed(1)) && totalQ >= 6 && lNormalizeName(userProfile.name) !== lNormalizeName(bestTocDoUser.name)) {
-          bestTocDoUser = {
-            ...userProfile,
-            durationPerQ: finalSpeed,
-            proofText: `Phản xạ phán đoán siêu hạng với thời gian trả lời trung bình chỉ ${finalSpeed} giây/câu.`
-          };
+          bestTocDoUser = { ...newH, holders: [newH] };
+        } else if (finalSpeed === parseFloat(minSpeedPerQ.toFixed(1)) && totalQ >= 6) {
+          const normName = lNormalizeName(userProfile.name);
+          const exists = bestTocDoUser.holders?.some((h: any) => lNormalizeName(h.name) === normName);
+          if (!exists) {
+            bestTocDoUser.holders.push({
+              ...userProfile,
+              durationPerQ: finalSpeed,
+              proofText: `Phản xạ phán đoán siêu hạng với thời gian trả lời trung bình chỉ ${finalSpeed} giây/câu.`
+            });
+          }
         }
       }
 
@@ -2154,19 +2177,24 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
 
       if (userMaxStreak > maxBatBaiStreak) {
         maxBatBaiStreak = userMaxStreak;
-        bestBatBaiUser = {
+        const newH = {
           ...userProfile,
           date: streakDate || userProfile.date,
           streak: userMaxStreak,
           proofText: `Thiết lập chuỗi ${userMaxStreak} lượt liên tục đạt điểm số tối đa 30/30 và không hề nếm mùi thất bại.`
         };
-      } else if (userMaxStreak === maxBatBaiStreak && userMaxStreak > 0 && lNormalizeName(userProfile.name) !== lNormalizeName(bestBatBaiUser.name)) {
-        bestBatBaiUser = {
-          ...userProfile,
-          date: streakDate || userProfile.date,
-          streak: userMaxStreak,
-          proofText: `Thiết lập chuỗi ${userMaxStreak} lượt liên tục đạt điểm số tối đa 30/30 và không hề nếm mùi thất bại.`
-        };
+        bestBatBaiUser = { ...newH, holders: [newH] };
+      } else if (userMaxStreak === maxBatBaiStreak && userMaxStreak > 0) {
+        const normName = lNormalizeName(userProfile.name);
+        const exists = bestBatBaiUser.holders?.some((h: any) => lNormalizeName(h.name) === normName);
+        if (!exists) {
+          bestBatBaiUser.holders.push({
+            ...userProfile,
+            date: streakDate || userProfile.date,
+            streak: userMaxStreak,
+            proofText: `Thiết lập chuỗi ${userMaxStreak} lượt liên tục đạt điểm số tối đa 30/30 và không hề nếm mùi thất bại.`
+          });
+        }
       }
 
       // 6. Kỷ lục Bình Minh (Early Morning Quiz 00:00 - 10:00)
@@ -2203,19 +2231,24 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
 
             if (totalMins < minSunriseMins) {
               minSunriseMins = totalMins;
-              bestBinhMinhUser = {
+              const newH = {
                 ...userProfile,
                 date: customDate,
                 timeString,
                 proofText: `Chủ động ôn luyện từ sáng tinh sương lúc ${timeString} ngày ${proofDateStr}.`
               };
-            } else if (totalMins === minSunriseMins && lNormalizeName(userProfile.name) !== lNormalizeName(bestBinhMinhUser.name)) {
-              bestBinhMinhUser = {
-                ...userProfile,
-                date: customDate,
-                timeString,
-                proofText: `Chủ động ôn luyện từ sáng tinh sương lúc ${timeString} ngày ${proofDateStr}.`
-              };
+              bestBinhMinhUser = { ...newH, holders: [newH] };
+            } else if (totalMins === minSunriseMins) {
+              const normName = lNormalizeName(userProfile.name);
+              const exists = bestBinhMinhUser.holders?.some((h: any) => lNormalizeName(h.name) === normName);
+              if (!exists) {
+                bestBinhMinhUser.holders.push({
+                  ...userProfile,
+                  date: customDate,
+                  timeString,
+                  proofText: `Chủ động ôn luyện từ sáng tinh sương lúc ${timeString} ngày ${proofDateStr}.`
+                });
+              }
             }
           }
         }
@@ -2308,8 +2341,11 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
     const query = recordSearch.trim().toLowerCase();
     return list.filter(item => {
       const matchTitle = item.title.toLowerCase().includes(query);
-      const matchName = item.data ? item.data.name.toLowerCase().includes(query) : false;
-      const matchDept = item.data ? item.data.dept.toLowerCase().includes(query) : false;
+      if (!item.data) return matchTitle;
+      
+      const holders = item.data.holders && item.data.holders.length > 0 ? item.data.holders : [item.data];
+      const matchName = holders.some((h: any) => h.name.toLowerCase().includes(query));
+      const matchDept = holders.some((h: any) => h.dept.toLowerCase().includes(query));
       return matchTitle || matchName || matchDept;
     });
   }, [records3T, recordSearch]);
@@ -2705,7 +2741,11 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
 
                   {recordCategories.map((item, idx) => {
                     const isExpanded = expandedRecord === item.key;
-                    const holderName = item.data ? item.data.name : 'Chưa ghi nhận';
+                    const holderName = item.data 
+                      ? (item.data.holders && item.data.holders.length > 1 
+                        ? item.data.holders.map((h: any) => h.name).join(' & ') 
+                        : item.data.name)
+                      : 'Chưa ghi nhận';
                     const metricStr = item.getMetric(item.data);
                     return (
                       <div key={item.key + idx} className="border-b border-gray-100 last:border-none py-1">
@@ -2859,24 +2899,36 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
                             </div>
                             
                             <div className="flex flex-col gap-y-1.5 font-sans pt-1.5 border-t border-gray-100/55">
-                              <div className="flex items-center gap-1.5 text-left flex-wrap">
-                                <span className="text-gray-400 font-bold shrink-0">👤 Người giữ kỷ lục:</span>
-                                <span translate="no" className="font-extrabold text-gray-800 notranslate">{item.data.name}</span>
-                              </div>
-                              <div className="flex items-center gap-1.5 text-left flex-wrap">
-                                <span className="text-gray-400 font-bold shrink-0">🏢 Bộ phận:</span>
-                                <span translate="no" className="font-extrabold text-gray-800 leading-snug notranslate">{item.data.dept}</span>
-                              </div>
-                              <div className="flex items-center gap-1.5 text-left flex-wrap">
-                                <span className="text-gray-400 font-bold shrink-0">📍 Chi nhánh:</span>
-                                <span translate="no" className="font-extrabold text-[#2F3E46] leading-snug notranslate">{item.data.branch}</span>
-                              </div>
-                              {item.data.date && (
-                                <div className="flex items-center gap-1.5 text-left flex-wrap">
-                                  <span className="text-gray-400 font-bold shrink-0">📅 Ngày xác lập:</span>
-                                  <span translate="no" className="font-extrabold text-gray-800 font-mono notranslate">{standardizeDateToDDMMYYYY(item.data.date, item.data.timestamp)}</span>
-                                </div>
-                              )}
+                              {(() => {
+                                const holders = item.data.holders && item.data.holders.length > 0 ? item.data.holders : [item.data];
+                                return holders.map((holder: any, hIdx: number) => (
+                                  <div key={hIdx} className={`pb-2 ${holders.length > 1 && hIdx < holders.length - 1 ? 'border-b border-gray-150/40 mb-1' : ''}`}>
+                                    {holders.length > 1 && (
+                                      <div className="text-[9px] font-black text-amber-700 bg-amber-50 rounded border border-amber-200 inline-block px-1.5 py-0.5 mb-1.5 uppercase tracking-wider">
+                                        ĐỒNG GIỮ KỶ LỤC #{hIdx + 1}
+                                      </div>
+                                    )}
+                                    <div className="flex items-center gap-1.5 text-left flex-wrap">
+                                      <span className="text-gray-400 font-bold shrink-0">👤 Người giữ kỷ lục:</span>
+                                      <span translate="no" className="font-extrabold text-gray-800 notranslate">{holder.name}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 text-left flex-wrap">
+                                      <span className="text-gray-400 font-bold shrink-0">🏢 Bộ phận:</span>
+                                      <span translate="no" className="font-extrabold text-gray-800 leading-snug notranslate">{holder.dept}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 text-left flex-wrap">
+                                      <span className="text-gray-400 font-bold shrink-0">📍 Chi nhánh:</span>
+                                      <span translate="no" className="font-extrabold text-[#2F3E46] leading-snug notranslate">{holder.branch}</span>
+                                    </div>
+                                    {holder.date && (
+                                      <div className="flex items-center gap-1.5 text-left flex-wrap">
+                                        <span className="text-gray-400 font-bold shrink-0">📅 Ngày xác lập:</span>
+                                        <span translate="no" className="font-extrabold text-gray-800 font-mono notranslate">{standardizeDateToDDMMYYYY(holder.date, holder.timestamp)}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                ));
+                              })()}
                             </div>
 
                             <div className="bg-amber-50/50 border border-amber-100 rounded-lg p-2.5 text-amber-900 mt-2 text-xs font-sans">
