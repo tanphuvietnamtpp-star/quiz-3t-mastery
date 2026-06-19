@@ -1,6 +1,6 @@
 {
-  "name": "quiz-3t-mastery",
-  "description": "Hệ thống trắc nghiệm thi đua kiến thức 3T - Công ty Tài chính Tân Phú.",
+  "name": "Quản lý Thay đổi 4M1E1I",
+  "description": "Hệ thống quản lý sự thay đổi các yếu tố ảnh hưởng chất lượng sản phẩm (Thiết bị, Nguyên vật liệu, Con người, Phương pháp, Môi trường, Thông tin) thời gian thực dành cho các nhà máy.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

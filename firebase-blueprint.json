@@ -2,104 +2,53 @@
   "entities": {
     "User": {
       "title": "User",
-      "description": "Information about employees, department heads or senior admin registrar credentials.",
+      "description": "Represents employees and observers in the system.",
       "type": "object",
       "properties": {
-        "id": { "type": "string" },
-        "name": { "type": "string" },
-        "phone": { "type": "string" },
+        "id": { "type": "string", "description": "Personnel ID (format YYYY.XXXXX)." },
+        "fullName": { "type": "string", "description": "Full name of the user." },
+        "phone": { "type": "string", "description": "Phone number." },
+        "department": { "type": "string", "description": "Department name." },
+        "branch": { "type": "string", "description": "Branch name." },
+        "role": { "type": "string", "enum": ["STAFF", "REVIEWER", "ADMIN"] },
+        "status": { "type": "string", "enum": ["PENDING", "ACTIVE", "LOCKED"] },
         "password": { "type": "string" },
-        "role": { "type": "string", "enum": ["employee", "approver", "admin"] },
+        "isOnline": { "type": "boolean" }
+      },
+      "required": ["id", "fullName", "phone", "role", "status", "password"]
+    },
+    "QualityReport": {
+      "title": "QualityReport",
+      "description": "Represents 4M1E1I quality incident reports.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "factory": { "type": "string" },
         "department": { "type": "string" },
-        "branch": { "type": "string" },
-        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
-        "createdAt": { "type": "string", "format": "date-time" }
-      },
-      "required": ["id", "name", "phone", "role", "department", "branch", "status"]
-    },
-    "Question": {
-      "title": "Question",
-      "description": "3T safety and regulation interactive questionnaire model metadata.",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "text": { "type": "string" },
-        "options": { "type": "array" },
-        "correctAnswerIndex": { "type": "integer" },
-        "explanation": { "type": "string" }
-      },
-      "required": ["id", "text", "options", "correctAnswerIndex", "explanation"]
-    },
-    "QuizResult": {
-      "title": "QuizResult",
-      "description": "Daily 3T mock result score card logged for team analytics metrics.",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "userId": { "type": "string" },
-        "userName": { "type": "string" },
-        "department": { "type": "string" },
-        "branch": { "type": "string" },
-        "score": { "type": "integer" },
-        "totalQuestions": { "type": "integer" },
-        "date": { "type": "string" },
-        "timestamp": { "type": "integer" },
-        "answers": { "type": "array" },
-        "duration": { "type": "integer" }
-      },
-      "required": ["id", "userId", "userName", "department", "branch", "score", "totalQuestions", "date", "timestamp", "answers", "duration"]
-    },
-    "ChatTopic": {
-      "title": "ChatTopic",
-      "description": "A secure discussion topic thread between a staff and admin board.",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "title": { "type": "string" },
-        "createdBy": { "type": "string" },
-        "createdByName": { "type": "string" },
-        "createdAt": { "type": "string" },
-        "lastMessageAt": { "type": "string" },
-        "lastMessageText": { "type": "string" }
-      },
-      "required": ["id", "title", "createdBy", "createdByName", "createdAt", "lastMessageAt"]
-    },
-    "ChatMessage": {
-      "title": "ChatMessage",
-      "description": "A single chat bubble exchanged inside a secure discussion topic thread.",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "topicId": { "type": "string" },
-        "senderId": { "type": "string" },
-        "senderName": { "type": "string" },
-        "senderRole": { "type": "string" },
-        "text": { "type": "string" },
-        "createdAt": { "type": "string" }
-      },
-      "required": ["id", "topicId", "senderId", "senderName", "senderRole", "text", "createdAt"]
+        "line": { "type": "string" },
+        "shift": { "type": "string" },
+        "factor": { "type": "string", "enum": ["MAN", "MATERIAL", "MACHINE", "METHOD", "ENV", "INFO"] },
+        "subFactor": { "type": "string" },
+        "description": { "type": "string" },
+        "action": { "type": "string" },
+        "isAbnormal": { "type": "boolean" },
+        "timestamp": { "type": "string" },
+        "uploaderId": { "type": "string" },
+        "uploaderName": { "type": "string" },
+        "uploaderDepartment": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "googleDrivePath": { "type": "string" }
+      }
     }
   },
   "firestore": {
-    "users/{userId}": {
-      "schema": { "$ref": "#/entities/User" },
-      "description": "Directory storing company staffs sorted by ID."
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "All system users."
     },
-    "questions/{questionId}": {
-      "schema": { "$ref": "#/entities/Question" },
-      "description": "Collection pool indexing all standard 3T question list."
-    },
-    "quiz_results/{resultId}": {
-      "schema": { "$ref": "#/entities/QuizResult" },
-      "description": "Historic quiz result logs recorded for metrics reporting and analysis."
-    },
-    "chat_topics/{topicId}": {
-      "schema": { "$ref": "#/entities/ChatTopic" },
-      "description": "Company security threads created per staff request or discussion topic."
-    },
-    "chat_topics/{topicId}/messages/{messageId}": {
-      "schema": { "$ref": "#/entities/ChatMessage" },
-      "description": "Thread text dialogue messages logged sequentially."
+    "/reports/{reportId}": {
+      "schema": "QualityReport",
+      "description": "4M1E1I quality reports list."
     }
   }
 }
