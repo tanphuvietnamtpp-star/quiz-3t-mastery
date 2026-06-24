@@ -243,36 +243,113 @@ export default function App() {
     loadStartupData();
   }, []);
 
-  // Tự động kiểm tra và kích hoạt chế độ toàn màn hình để ẩn thanh địa chỉ trình duyệt khi có tương tác đầu tiên bất kỳ đâu trên ứng dụng
+  // Tự động kiểm tra và kích hoạt chế độ toàn màn hình để ẩn thanh địa chỉ trình duyệt khi có tương tác đầu tiên, đồng thời hỗ trợ click đúp (Desktop) hoặc gõ đúp (Mobile) để bật/tắt toàn màn hình
   useEffect(() => {
-    const autoFullscreenOnAnyInteraction = () => {
-      const isMobileOrTablet = window.innerWidth < 1024 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-      if (isMobileOrTablet && !document.fullscreenElement) {
-        const docEl = document.documentElement as any;
-        try {
-          if (docEl.requestFullscreen) {
-            docEl.requestFullscreen().catch(() => {});
-          } else if (docEl.webkitRequestFullscreen) {
-            docEl.webkitRequestFullscreen();
-          } else if (docEl.mozRequestFullScreen) {
-            docEl.mozRequestFullScreen();
-          } else if (docEl.msRequestFullscreen) {
-            docEl.msRequestFullscreen();
-          }
-        } catch (err) {
-          console.warn("Auto-fullscreen failed:", err);
+    const isMobileDevice = window.innerWidth < 1024 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    let lastTap = 0;
+
+    const toggleFullscreenOnInteraction = () => {
+      const doc = document as any;
+      const docEl = document.documentElement as any;
+      const isCurrentlyFs = !!(doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement || doc.msFullscreenElement);
+      
+      if (!isCurrentlyFs) {
+        if (docEl.requestFullscreen) {
+          docEl.requestFullscreen({ navigationUI: "hide" }).catch(() => {});
+        } else if (docEl.webkitRequestFullscreen) {
+          docEl.webkitRequestFullscreen({ navigationUI: "hide" });
+        } else if (docEl.mozRequestFullScreen) {
+          docEl.mozRequestFullScreen();
+        } else if (docEl.msRequestFullscreen) {
+          docEl.msRequestFullscreen();
+        }
+      } else {
+        if (doc.exitFullscreen) {
+          doc.exitFullscreen().catch(() => {});
+        } else if (doc.webkitExitFullscreen) {
+          doc.webkitExitFullscreen();
+        } else if (doc.mozCancelFullScreen) {
+          doc.mozCancelFullScreen();
+        } else if (doc.msExitFullscreen) {
+          doc.msExitFullscreen();
         }
       }
-      // Dọn dẹp listener sau lần tương tác đầu tiên
-      window.removeEventListener('click', autoFullscreenOnAnyInteraction);
-      window.removeEventListener('touchstart', autoFullscreenOnAnyInteraction);
     };
 
-    window.addEventListener('click', autoFullscreenOnAnyInteraction);
-    window.addEventListener('touchstart', autoFullscreenOnAnyInteraction);
+    const handleDblClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (target) {
+        if (
+          target.tagName === "INPUT" || 
+          target.tagName === "TEXTAREA" || 
+          target.tagName === "BUTTON" || 
+          target.tagName === "A" ||
+          target.closest(".cursor-zoom-in") || 
+          target.closest(".cursor-move") ||
+          target.closest("button")
+        ) {
+          return;
+        }
+      }
+      toggleFullscreenOnInteraction();
+    };
+
+    const handleTouchStart = (e: TouchEvent) => {
+      const target = e.target as HTMLElement;
+      if (target) {
+        if (
+          target.tagName === "INPUT" || 
+          target.tagName === "TEXTAREA" || 
+          target.tagName === "BUTTON" || 
+          target.tagName === "A" ||
+          target.closest(".cursor-zoom-in") || 
+          target.closest(".cursor-move") ||
+          target.closest("button")
+        ) {
+          return;
+        }
+      }
+
+      const now = Date.now();
+      const DOUBLE_TAP_DELAY = 300;
+      if (now - lastTap < DOUBLE_TAP_DELAY) {
+        if (e.cancelable) {
+          e.preventDefault();
+        }
+        toggleFullscreenOnInteraction();
+      }
+      lastTap = now;
+    };
+
+    // Tự động kích hoạt khi có chạm/click đầu tiên trên di động
+    const handleFirstInteraction = () => {
+      const doc = document as any;
+      const docEl = document.documentElement as any;
+      if (!doc.fullscreenElement && !doc.webkitFullscreenElement && !doc.mozFullScreenElement && !doc.msFullscreenElement) {
+        if (docEl.requestFullscreen) {
+          docEl.requestFullscreen({ navigationUI: "hide" }).catch(() => {});
+        } else if (docEl.webkitRequestFullscreen) {
+          docEl.webkitRequestFullscreen({ navigationUI: "hide" });
+        }
+      }
+      window.removeEventListener("touchstart", handleFirstInteraction);
+      window.removeEventListener("click", handleFirstInteraction);
+    };
+
+    if (isMobileDevice) {
+      window.addEventListener("touchstart", handleFirstInteraction, { passive: true });
+      window.addEventListener("click", handleFirstInteraction);
+    }
+
+    // Luôn hỗ trợ click đúp (Desktop) và gõ đúp (Mobile) để bật/tắt toàn màn hình
+    window.addEventListener("dblclick", handleDblClick);
+    window.addEventListener("touchstart", handleTouchStart, { passive: false });
+
     return () => {
-      window.removeEventListener('click', autoFullscreenOnAnyInteraction);
-      window.removeEventListener('touchstart', autoFullscreenOnAnyInteraction);
+      window.removeEventListener("touchstart", handleFirstInteraction);
+      window.removeEventListener("click", handleFirstInteraction);
+      window.removeEventListener("dblclick", handleDblClick);
+      window.removeEventListener("touchstart", handleTouchStart);
     };
   }, []);
 

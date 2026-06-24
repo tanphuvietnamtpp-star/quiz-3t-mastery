@@ -1,9 +1,11 @@
 async function run() {
   try {
-    const res = await fetch("https://ais-dev-76227e7g7ih7antywq3d52-461297414570.asia-east1.run.app/api/firebase-config");
+    const devUrl = "https://ais-dev-xhhor5f2b4bdaxpaorjhzi-493674122813.asia-southeast1.run.app/api/firebase-config";
+    console.log("Fetching config from live dev URL:", devUrl);
+    const res = await fetch(devUrl);
     if (res.ok) {
       const config = await res.json();
-      console.log("DEV_SERVER_REAL_CONFIG:", JSON.stringify(config, null, 2));
+      console.log("LIVE DEV CONFIG:", JSON.stringify(config, null, 2));
     } else {
       console.log("Failed to fetch from live dev server:", res.status, res.statusText);
     }
