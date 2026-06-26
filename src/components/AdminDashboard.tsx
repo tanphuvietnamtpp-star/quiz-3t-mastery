@@ -3348,6 +3348,8 @@ export default function AdminDashboard({
                 onRefresh={() => loadData(true)} 
                 onBackToHome={onSimulateEmployee}
                 companyMappings={companyMappings}
+                allUsers={users}
+                allResults={results}
               />
             </motion.div>
           )}

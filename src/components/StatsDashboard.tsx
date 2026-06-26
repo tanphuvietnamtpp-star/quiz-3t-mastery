@@ -162,9 +162,20 @@ interface StatsDashboardProps {
   onBackToHome?: () => void;
   companyMappings?: CompanyMapping[];
   isAdmin?: boolean;
+  allUsers?: User[];
+  allResults?: QuizResult[];
 }
 
-export default function StatsDashboard({ users: rawUsers, results: rawResults, onRefresh, onBackToHome, companyMappings, isAdmin = false }: StatsDashboardProps) {
+export default function StatsDashboard({ 
+  users: rawUsers, 
+  results: rawResults, 
+  onRefresh, 
+  onBackToHome, 
+  companyMappings, 
+  isAdmin = false,
+  allUsers,
+  allResults
+}: StatsDashboardProps) {
   const [quota, setQuota] = useState(getQuotaStats());
   const [rankingPeriod, setRankingPeriod] = useState<'day' | 'week' | 'month'>('day');
   const [monumentPeriod, setMonumentPeriod] = useState<'day' | 'week' | 'month'>('month');
@@ -232,6 +243,9 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
       const uStatus = (foundUser.status || '').toUpperCase();
       if (uStatus !== 'APPROVED' && uStatus !== 'APPROVED_MEMBER') return false;
 
+      // Exclude admin and executive roles to sync with EmployeeDashboard
+      if (foundUser.role === 'admin' || foundUser.role === 'executive') return false;
+
       const dNameNorm = (r.department || '').trim().normalize('NFC').toLowerCase();
       if (dNameNorm === 'ban tổng giám đốc') return false;
 
@@ -251,6 +265,51 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
       return true;
     });
   }, [rawResults, rawUsers, mappings]);
+
+  // System-wide results for Monument Legends to sync across devices/roles
+  const globalResultsForMonument = useMemo(() => {
+    const srcResults = allResults || rawResults;
+    const srcUsers = allUsers || rawUsers;
+    return srcResults.filter(r => {
+      let foundUser: User | undefined;
+      if (r.userId) {
+        foundUser = srcUsers.find(u => u.id === r.userId);
+      } else if (r.userName) {
+        const normName = r.userName.trim().normalize('NFC').toUpperCase().replace(/\s+/g, ' ');
+        foundUser = srcUsers.find(u => {
+          const uNorm = u.name ? u.name.trim().normalize('NFC').toUpperCase().replace(/\s+/g, ' ') : '';
+          return uNorm === normName;
+        });
+      }
+
+      if (!foundUser) return false;
+
+      const uStatus = (foundUser.status || '').toUpperCase();
+      if (uStatus !== 'APPROVED' && uStatus !== 'APPROVED_MEMBER') return false;
+
+      // Exclude admin and executive roles to sync with EmployeeDashboard
+      if (foundUser.role === 'admin' || foundUser.role === 'executive') return false;
+
+      const dNameNorm = (r.department || '').trim().normalize('NFC').toLowerCase();
+      if (dNameNorm === 'ban tổng giám đốc') return false;
+
+      const bNameNorm = (r.branch || '').trim().normalize('NFC').toLowerCase();
+      for (const co of mappings) {
+        for (const br of co.branches) {
+          if (br.name.trim().normalize('NFC').toLowerCase() === bNameNorm) {
+            if (br.excludeFromStats) return false;
+            for (const d of br.departments) {
+              if (d.name.trim().normalize('NFC').toLowerCase() === dNameNorm) {
+                if (d.excludeFromStats) return false;
+              }
+            }
+          }
+        }
+      }
+      return true;
+    });
+  }, [allResults, rawResults, allUsers, rawUsers, mappings]);
+
   const [scorecardBranchFilter, setScorecardBranchFilter] = useState('');
   const [scorecardDeptFilter, setScorecardDeptFilter] = useState('');
   const [scorecardSearchQuery, setScorecardSearchQuery] = useState('');
@@ -892,7 +951,7 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
     const nameToUserIdMap: Record<string, string> = {};
     const userIdToNameMap: Record<string, string> = {};
 
-    results.forEach(res => {
+    globalResultsForMonument.forEach(res => {
       const normName = normalizeName(res.userName);
       if (res.userId && normName) {
         nameToUserIdMap[normName] = res.userId;
@@ -901,7 +960,7 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
     });
 
     const grouped: Record<string, QuizResult[]> = {};
-    results.forEach(res => {
+    globalResultsForMonument.forEach(res => {
       const normName = normalizeName(res.userName);
       const resolvedUserId = res.userId || nameToUserIdMap[normName] || '';
       const resolvedNormalizedName = normName || (res.userId ? userIdToNameMap[res.userId] : '') || '';
@@ -1061,7 +1120,7 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
         } else if (currentLevel === 2) {
           if (score === 30) consecutiveMaxAtLevel++; else consecutiveMaxAtLevel = 0;
           const demotionMin = parseDemotionThreshold(1, 20);
-          if (score < demotionMin) consecutiveLowAtLevel++;
+          if (score < demotionMin) consecutiveLowAtLevel++; else consecutiveLowAtLevel = 0;
           const reqConsecutive = parseRequiredConsecutive(1, 10);
           if (consecutiveMaxAtLevel >= reqConsecutive) {
             currentLevel = 3; consecutiveMaxAtLevel = 0; consecutiveLowAtLevel = 0;
@@ -1071,7 +1130,7 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
         } else if (currentLevel === 3) {
           if (score === 30) consecutiveMaxAtLevel++; else consecutiveMaxAtLevel = 0;
           const demotionMin = parseDemotionThreshold(2, 26);
-          if (score < demotionMin) consecutiveLowAtLevel++;
+          if (score < demotionMin) consecutiveLowAtLevel++; else consecutiveLowAtLevel = 0;
           const reqConsecutive = parseRequiredConsecutive(2, 10);
           if (consecutiveMaxAtLevel >= reqConsecutive) {
             currentLevel = 4; consecutiveMaxAtLevel = 0; consecutiveLowAtLevel = 0;
@@ -1081,7 +1140,7 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
         } else if (currentLevel === 4) {
           if (score === 30) consecutiveMaxAtLevel++; else consecutiveMaxAtLevel = 0;
           const demotionMin = parseDemotionThreshold(3, 27);
-          if (score < demotionMin) consecutiveLowAtLevel++;
+          if (score < demotionMin) consecutiveLowAtLevel++; else consecutiveLowAtLevel = 0;
           const reqConsecutive = parseRequiredConsecutive(3, 10);
           if (consecutiveMaxAtLevel >= reqConsecutive) {
             currentLevel = 5; consecutiveMaxAtLevel = 0; consecutiveLowAtLevel = 0;
@@ -1091,7 +1150,7 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
         } else if (currentLevel === 5) {
           if (score === 30) consecutiveMaxAtLevel++; else consecutiveMaxAtLevel = 0;
           const demotionMin = parseDemotionThreshold(4, 28);
-          if (score < demotionMin) consecutiveLowAtLevel++;
+          if (score < demotionMin) consecutiveLowAtLevel++; else consecutiveLowAtLevel = 0;
           if (consecutiveLowAtLevel >= 2) {
             currentLevel = 4; consecutiveMaxAtLevel = 0; consecutiveLowAtLevel = 0;
           }
@@ -1287,6 +1346,72 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
       }
     });
 
+    // Ensure manually promoted level 5 users from rawUsers are included
+    const targetPromoUsers = allUsers || rawUsers;
+    if (Array.isArray(targetPromoUsers)) {
+      targetPromoUsers.forEach(u => {
+        const uStatus = (u.status || '').toUpperCase();
+        if (uStatus !== 'APPROVED' && uStatus !== 'APPROVED_MEMBER') return;
+        if (u.role === 'admin' || u.role === 'executive') return;
+
+        const uLvl = (u as any).level || (u as any).currentLevel || 1;
+        if (uLvl === 5) {
+          const normName = normalizeName(u.name || (u as any).userName);
+          const exists = legendsList.some(l => normalizeName(l.userName) === normName || l.userId === u.id);
+          if (!exists) {
+            const userResultsList = grouped[u.id] || grouped[normName] || [];
+            const totalAttempts = userResultsList.length;
+            const totalScore = userResultsList.reduce((sum, r) => sum + r.score, 0);
+            const totalDuration = userResultsList.reduce((sum, r) => sum + (r.duration || 0), 0);
+            const totalQuestions = userResultsList.reduce((sum, r) => sum + (r.totalQuestions || 3), 0);
+            
+            const avgScore = totalAttempts > 0 ? parseFloat((totalScore / totalAttempts).toFixed(1)) : 30;
+            const durationPerAttempt = totalAttempts > 0 ? parseFloat((totalDuration / totalAttempts).toFixed(1)) : 10;
+            const durationPerQuestion = totalQuestions > 0 ? parseFloat((totalDuration / totalQuestions).toFixed(1)) : 3;
+
+            const promoTs = u.createdAt ? new Date(u.createdAt).getTime() : Date.now();
+            const d = new Date(promoTs);
+            const dateStr = d.toISOString().split('T')[0];
+
+            legendsList.push({
+              userId: u.id || normName,
+              userName: u.name || (u as any).userName || normName,
+              dept: u.department || 'Hội sở',
+              branch: u.branch || 'Hội sở',
+              avgScoreAtFirstLegend: avgScore,
+              overallAvgDurationPerAttempt: durationPerAttempt,
+              overallAvgDurationPerQuestion: durationPerQuestion,
+              level5Attempts: userResultsList.map(r => ({ timestamp: r.timestamp, dateStr: r.date || new Date(r.timestamp).toISOString().split('T')[0] })),
+              coronations: [{
+                coronationIdx: 0,
+                promoTimestamp: promoTs,
+                fromLevel: 4,
+                avgScoreAtCoronation: avgScore,
+                totalAttemptsAtCoronation: totalAttempts || 1,
+                overallAvgDurationPerAttempt: durationPerAttempt,
+                overallAvgDurationPerQuestion: durationPerQuestion,
+                dateStr,
+                transitions: []
+              }],
+              totalAttempts,
+              totalScore,
+              totalDuration,
+              totalQuestions,
+              promoTimestamp: promoTs,
+              daysMaintaining: 1,
+              currentLevel: 5,
+              level: 5,
+              maxLevelReached: 5,
+              attempts: totalAttempts,
+              avgScore,
+              avgTimeSpent: Math.round(durationPerQuestion),
+              bestScore: userResultsList.length > 0 ? Math.max(...userResultsList.map(r => r.score), 30) : 30
+            } as any);
+          }
+        }
+      });
+    }
+
     // Ensure EVERY legend has their currentLevel evaluated correctly using calculateInactivityAugmentedLevel
     legendsList.forEach(l => {
       const normName = normalizeName(l.userName);
@@ -1301,11 +1426,15 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
           simulatedToday: inactivityTestMode ? '2026-06-14' : getVietnamDateString()
         }
       );
-      l.currentLevel = calcRes.level;
+      // If the user's computed level is less than 5, but they are Level 5 in their user profile (manually promoted), preserve Level 5!
+      const userProfile = (allUsers || rawUsers)?.find(u => u.id === l.userId || normalizeName(u.name || (u as any).userName) === normName);
+      const profileLvl = (userProfile as any)?.level || (userProfile as any)?.currentLevel || 1;
+      
+      l.currentLevel = profileLvl === 5 ? 5 : calcRes.level;
     });
 
     return legendsList;
-  }, [results, levelRules]);
+  }, [globalResultsForMonument, levelRules, allUsers, rawUsers]);
 
   // Compute stats for current active periods of legend monument
   const legendMonumentToday = useMemo(() => {
@@ -2082,6 +2211,19 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
         date: latestRes.date || ''
       };
 
+      // Helper to identify baseline records
+      const isBaselineHolder = (nameStr: string): boolean => {
+        const norm = nameStr.trim().normalize('NFC').toUpperCase().replace(/\s+/g, ' ');
+        return [
+          'TRAN PHUOC TRUNG',
+          'TRẦN VĂN TIÊN',
+          'QUÁCH THUÝ VÂN',
+          'PHAN THỊ NHÀN',
+          'HA HUU QUYNH',
+          'PHẠM VĂN ĐEN'
+        ].includes(norm);
+      };
+
       // 1. Quyết Tâm
       const attemptsCount = chronological.length;
       if (attemptsCount > maxAttempts) {
@@ -2096,11 +2238,17 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
         const normName = lNormalizeName(userProfile.name);
         const exists = bestQuyetTamUser.holders?.some((h: any) => lNormalizeName(h.name) === normName);
         if (!exists) {
-          bestQuyetTamUser.holders.push({
+          const onlyBaseline = bestQuyetTamUser.holders?.every((h: any) => isBaselineHolder(h.name));
+          const newH = {
             ...userProfile,
             attemptsCount,
             proofText: `Chinh phục số lượt ôn luyện bền bỉ cao nhất hệ thống: ${attemptsCount} lượt.`
-          });
+          };
+          if (onlyBaseline) {
+            bestQuyetTamUser = { ...newH, holders: [newH] };
+          } else {
+            bestQuyetTamUser.holders.push(newH);
+          }
         }
       }
 
@@ -2123,12 +2271,18 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
         const normName = lNormalizeName(userProfile.name);
         const exists = bestTriTueUser.holders?.some((h: any) => lNormalizeName(h.name) === normName);
         if (!exists) {
-          bestTriTueUser.holders.push({
+          const onlyBaseline = bestTriTueUser.holders?.every((h: any) => isBaselineHolder(h.name));
+          const newH = {
             ...userProfile,
             date: latestPerfect.date || userProfile.date,
             perfectsCount,
             proofText: `Chinh phục điểm số tuyệt đối 30/30 cao nhất hệ thống: ${perfectsCount} lượt.`
-          });
+          };
+          if (onlyBaseline) {
+            bestTriTueUser = { ...newH, holders: [newH] };
+          } else {
+            bestTriTueUser.holders.push(newH);
+          }
         }
       }
 
@@ -2146,15 +2300,21 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
             proofText: `Phản xạ phán đoán siêu hạng với thời gian trả lời trung bình chỉ ${finalSpeed} giây/câu.`
           };
           bestTocDoUser = { ...newH, holders: [newH] };
-        } else if (finalSpeed === parseFloat(minSpeedPerQ.toFixed(1)) && totalQ >= 6) {
+        } else if (avgSpeed > 0 && finalSpeed === parseFloat(minSpeedPerQ.toFixed(1)) && totalQ >= 6) {
           const normName = lNormalizeName(userProfile.name);
           const exists = bestTocDoUser.holders?.some((h: any) => lNormalizeName(h.name) === normName);
           if (!exists) {
-            bestTocDoUser.holders.push({
+            const onlyBaseline = bestTocDoUser.holders?.every((h: any) => isBaselineHolder(h.name));
+            const newH = {
               ...userProfile,
               durationPerQ: finalSpeed,
               proofText: `Phản xạ phán đoán siêu hạng với thời gian trả lời trung bình chỉ ${finalSpeed} giây/câu.`
-            });
+            };
+            if (onlyBaseline) {
+              bestTocDoUser = { ...newH, holders: [newH] };
+            } else {
+              bestTocDoUser.holders.push(newH);
+            }
           }
         }
       }
@@ -2188,12 +2348,18 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
         const normName = lNormalizeName(userProfile.name);
         const exists = bestBatBaiUser.holders?.some((h: any) => lNormalizeName(h.name) === normName);
         if (!exists) {
-          bestBatBaiUser.holders.push({
+          const onlyBaseline = bestBatBaiUser.holders?.every((h: any) => isBaselineHolder(h.name));
+          const newH = {
             ...userProfile,
             date: streakDate || userProfile.date,
             streak: userMaxStreak,
             proofText: `Thiết lập chuỗi ${userMaxStreak} lượt liên tục đạt điểm số tối đa 30/30 và không hề nếm mùi thất bại.`
-          });
+          };
+          if (onlyBaseline) {
+            bestBatBaiUser = { ...newH, holders: [newH] };
+          } else {
+            bestBatBaiUser.holders.push(newH);
+          }
         }
       }
 
@@ -2242,12 +2408,18 @@ export default function StatsDashboard({ users: rawUsers, results: rawResults, o
               const normName = lNormalizeName(userProfile.name);
               const exists = bestBinhMinhUser.holders?.some((h: any) => lNormalizeName(h.name) === normName);
               if (!exists) {
-                bestBinhMinhUser.holders.push({
+                const onlyBaseline = bestBinhMinhUser.holders?.every((h: any) => isBaselineHolder(h.name));
+                const newH = {
                   ...userProfile,
                   date: customDate,
                   timeString,
                   proofText: `Chủ động ôn luyện từ sáng tinh sương lúc ${timeString} ngày ${proofDateStr}.`
-                });
+                };
+                if (onlyBaseline) {
+                  bestBinhMinhUser = { ...newH, holders: [newH] };
+                } else {
+                  bestBinhMinhUser.holders.push(newH);
+                }
               }
             }
           }

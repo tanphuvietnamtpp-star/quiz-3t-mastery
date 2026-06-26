@@ -1778,7 +1778,7 @@ export default function EmployeeDashboard({
         } else if (currentLevel === 2) {
           if (score === 30) consecutiveMaxAtLevel++; else consecutiveMaxAtLevel = 0;
           const demotionMin = parseDemotionThreshold(1, 20);
-          if (score < demotionMin) consecutiveLowAtLevel++;
+          if (score < demotionMin) consecutiveLowAtLevel++; else consecutiveLowAtLevel = 0;
           const reqConsecutive = parseRequiredConsecutive(1, 10);
           if (consecutiveMaxAtLevel >= reqConsecutive) {
             currentLevel = 3; consecutiveMaxAtLevel = 0; consecutiveLowAtLevel = 0;
@@ -1788,7 +1788,7 @@ export default function EmployeeDashboard({
         } else if (currentLevel === 3) {
           if (score === 30) consecutiveMaxAtLevel++; else consecutiveMaxAtLevel = 0;
           const demotionMin = parseDemotionThreshold(2, 26);
-          if (score < demotionMin) consecutiveLowAtLevel++;
+          if (score < demotionMin) consecutiveLowAtLevel++; else consecutiveLowAtLevel = 0;
           const reqConsecutive = parseRequiredConsecutive(2, 10);
           if (consecutiveMaxAtLevel >= reqConsecutive) {
             currentLevel = 4; consecutiveMaxAtLevel = 0; consecutiveLowAtLevel = 0;
@@ -1798,7 +1798,7 @@ export default function EmployeeDashboard({
         } else if (currentLevel === 4) {
           if (score === 30) consecutiveMaxAtLevel++; else consecutiveMaxAtLevel = 0;
           const demotionMin = parseDemotionThreshold(3, 27);
-          if (score < demotionMin) consecutiveLowAtLevel++;
+          if (score < demotionMin) consecutiveLowAtLevel++; else consecutiveLowAtLevel = 0;
           const reqConsecutive = parseRequiredConsecutive(3, 10);
           if (consecutiveMaxAtLevel >= reqConsecutive) {
             currentLevel = 5; consecutiveMaxAtLevel = 0; consecutiveLowAtLevel = 0;
@@ -1808,7 +1808,7 @@ export default function EmployeeDashboard({
         } else if (currentLevel === 5) {
           if (score === 30) consecutiveMaxAtLevel++; else consecutiveMaxAtLevel = 0;
           const demotionMin = parseDemotionThreshold(4, 28);
-          if (score < demotionMin) consecutiveLowAtLevel++;
+          if (score < demotionMin) consecutiveLowAtLevel++; else consecutiveLowAtLevel = 0;
           if (consecutiveLowAtLevel >= 2) {
             currentLevel = 4; consecutiveMaxAtLevel = 0; consecutiveLowAtLevel = 0;
           }
@@ -1994,6 +1994,72 @@ export default function EmployeeDashboard({
       }
     });
 
+    // Ensure manually promoted level 5 users from allUsersList are included
+    if (Array.isArray(allUsersList)) {
+      allUsersList.forEach(u => {
+        const uStatus = (u.status || '').toUpperCase();
+        if (uStatus !== 'APPROVED' && uStatus !== 'APPROVED_MEMBER') return;
+        if (u.role === 'admin' || u.role === 'executive') return;
+
+        const uLvl = u.level || u.currentLevel || 1;
+        if (uLvl === 5) {
+          const normName = lNormalizeName(u.name || u.userName);
+          const exists = legendsList.some(l => lNormalizeName(l.userName) === normName || l.userId === u.id);
+          if (!exists) {
+            const userResultsList = userGroups[u.id] || userGroups[normName] || [];
+            const totalAttempts = userResultsList.length;
+            const totalScore = userResultsList.reduce((sum, r) => sum + r.score, 0);
+            const totalDuration = userResultsList.reduce((sum, r) => sum + (r.duration || 0), 0);
+            const totalQuestions = userResultsList.reduce((sum, r) => sum + (r.totalQuestions || 3), 0);
+            
+            const avgScore = totalAttempts > 0 ? parseFloat((totalScore / totalAttempts).toFixed(1)) : 30;
+            const durationPerAttempt = totalAttempts > 0 ? parseFloat((totalDuration / totalAttempts).toFixed(1)) : 10;
+            const durationPerQuestion = totalQuestions > 0 ? parseFloat((totalDuration / totalQuestions).toFixed(1)) : 3;
+
+            const promoTs = u.createdAt ? new Date(u.createdAt).getTime() : Date.now();
+            const d = new Date(promoTs);
+            const dateStr = d.toISOString().split('T')[0];
+
+            legendsList.push({
+              userId: u.id || normName,
+              userName: u.name || normName,
+              dept: u.department || 'Hội sở',
+              department: u.department || 'Hội sở',
+              branch: u.branch || 'Hội sở',
+              avgScoreAtFirstLegend: avgScore,
+              overallAvgDurationPerAttempt: durationPerAttempt,
+              overallAvgDurationPerQuestion: durationPerQuestion,
+              level5Attempts: userResultsList.map(r => ({ timestamp: r.timestamp, dateStr: r.date || new Date(r.timestamp).toISOString().split('T')[0] })),
+              coronations: [{
+                coronationIdx: 0,
+                promoTimestamp: promoTs,
+                fromLevel: 4,
+                avgScoreAtCoronation: avgScore,
+                totalAttemptsAtCoronation: totalAttempts || 1,
+                overallAvgDurationPerAttempt: durationPerAttempt,
+                overallAvgDurationPerQuestion: durationPerQuestion,
+                dateStr,
+                transitions: []
+              }],
+              totalAttempts,
+              totalScore,
+              totalDuration,
+              totalQuestions,
+              promoTimestamp: promoTs,
+              daysMaintaining: 1,
+              currentLevel: 5,
+              level: 5,
+              maxLevelReached: 5,
+              attempts: totalAttempts,
+              avgScore,
+              avgTimeSpent: Math.round(durationPerQuestion),
+              bestScore: userResultsList.length > 0 ? Math.max(...userResultsList.map(r => r.score), 30) : 30
+            });
+          }
+        }
+      });
+    }
+
     // Ensure EVERY legend has their currentLevel / level evaluated correctly using calculateInactivityAugmentedLevel
     legendsList.forEach(l => {
       const normName = lNormalizeName(l.userName);
@@ -2007,8 +2073,13 @@ export default function EmployeeDashboard({
           simulatedToday: inactivityTestMode ? '2026-06-14' : getVietnamDateString()
         }
       );
-      l.currentLevel = calcRes.level;
-      l.level = calcRes.level;
+      // If the user's computed level is less than 5, but they are Level 5 in their user profile (manually promoted), preserve Level 5!
+      const userProfile = allUsersList?.find(u => u.id === l.userId || lNormalizeName(u.name || u.userName) === normName);
+      const profileLvl = userProfile?.level || userProfile?.currentLevel || 1;
+      
+      const resolvedLvl = profileLvl === 5 ? 5 : calcRes.level;
+      l.currentLevel = resolvedLvl;
+      l.level = resolvedLvl;
     });
 
     // Sort matching exactly how the Admin's list is sorted!
@@ -2021,7 +2092,7 @@ export default function EmployeeDashboard({
       }
       return a.totalAttempts - b.totalAttempts;
     });
-  }, [resultsForRankings, levelRules, inactivityTestMode]);
+  }, [resultsForRankings, levelRules, inactivityTestMode, allUsersList]);
 
   // Records 3T calculations based on actual results paired with historic high-standards
   const records3T = useMemo(() => {
@@ -2177,6 +2248,18 @@ export default function EmployeeDashboard({
       const dateStr = formatToDDMMYY(lastRes.timestamp);
       const normName = lNormalizeName(userName);
 
+      const isBaselineHolder = (nameStr: string): boolean => {
+        const norm = nameStr.trim().normalize('NFC').toUpperCase().replace(/\s+/g, ' ');
+        return [
+          'TRAN PHUOC TRUNG',
+          'TRẦN VĂN TIÊN',
+          'QUÁCH THUÝ VÂN',
+          'PHAN THỊ NHÀN',
+          'HA HUU QUYNH',
+          'PHẠM VĂN ĐEN'
+        ].includes(norm);
+      };
+
       if (attemptsCount > bestQuyetTam.attemptsCount) {
         const newHolder = {
           name: userName,
@@ -2193,7 +2276,8 @@ export default function EmployeeDashboard({
       } else if (attemptsCount === bestQuyetTam.attemptsCount) {
         const exists = bestQuyetTam.holders?.some((h: any) => lNormalizeName(h.name) === normName);
         if (!exists) {
-          bestQuyetTam.holders.push({
+          const onlyBaseline = bestQuyetTam.holders?.every((h: any) => isBaselineHolder(h.name));
+          const newH = {
             name: userName,
             dept,
             branch,
@@ -2203,7 +2287,13 @@ export default function EmployeeDashboard({
             attempts: attemptsCount,
             avgTimeSpent: userAvgTimeSpent,
             proofText: `Chinh phục số lượt ôn luyện bền bỉ cao nhất hệ thống: ${attemptsCount} lượt.`
-          });
+          };
+          if (onlyBaseline) {
+            bestQuyetTam.holders = [newH];
+            Object.assign(bestQuyetTam, newH);
+          } else {
+            bestQuyetTam.holders.push(newH);
+          }
         }
       }
 
@@ -2224,7 +2314,8 @@ export default function EmployeeDashboard({
       } else if (perfectsCount === bestTriTue.perfectsCount && perfectsCount > 0) {
         const exists = bestTriTue.holders?.some((h: any) => lNormalizeName(h.name) === normName);
         if (!exists) {
-          bestTriTue.holders.push({
+          const onlyBaseline = bestTriTue.holders?.every((h: any) => isBaselineHolder(h.name));
+          const newH = {
             name: userName,
             dept,
             branch,
@@ -2234,7 +2325,13 @@ export default function EmployeeDashboard({
             attempts: attemptsCount,
             avgTimeSpent: userAvgTimeSpent,
             proofText: `Chinh phục điểm số tuyệt đối 30/30 cao nhất hệ thống: ${perfectsCount} lượt.`
-          });
+          };
+          if (onlyBaseline) {
+            bestTriTue.holders = [newH];
+            Object.assign(bestTriTue, newH);
+          } else {
+            bestTriTue.holders.push(newH);
+          }
         }
       }
 
@@ -2242,9 +2339,8 @@ export default function EmployeeDashboard({
         const totalDuration = chronological.reduce((sum, r) => sum + (r.duration || 0), 0);
         const totalQuestions = chronological.reduce((sum, r) => sum + (r.totalQuestions || 3), 0);
         const avgSpeed = parseFloat((totalDuration / totalQuestions).toFixed(2));
-        const diff = avgSpeed - bestTocDo.durationPerQ;
 
-        if (avgSpeed > 0 && avgSpeed < bestTocDo.durationPerQ && Math.abs(diff) >= 0.05) {
+        if (avgSpeed > 0 && avgSpeed < bestTocDo.durationPerQ) {
           const newHolder = {
             name: userName,
             dept,
@@ -2257,10 +2353,11 @@ export default function EmployeeDashboard({
             proofText: `Phản xạ phán đoán siêu hạng với thời gian trả lời trung bình chỉ ${avgSpeed.toFixed(2)} giây/câu.`
           };
           Object.assign(bestTocDo, newHolder, { holders: [newHolder] });
-        } else if (Math.abs(diff) < 0.05 || avgSpeed.toFixed(1) === bestTocDo.durationPerQ.toFixed(1)) {
+        } else if (avgSpeed > 0 && avgSpeed.toFixed(1) === bestTocDo.durationPerQ.toFixed(1)) {
           const exists = bestTocDo.holders?.some((h: any) => lNormalizeName(h.name) === normName);
           if (!exists) {
-            bestTocDo.holders.push({
+            const onlyBaseline = bestTocDo.holders?.every((h: any) => isBaselineHolder(h.name));
+            const newH = {
               name: userName,
               dept,
               branch,
@@ -2270,7 +2367,13 @@ export default function EmployeeDashboard({
               attempts: attemptsCount,
               avgTimeSpent: userAvgTimeSpent,
               proofText: `Phản xạ phán đoán siêu hạng với thời gian trả lời trung bình chỉ ${avgSpeed.toFixed(2)} giây/câu.`
-            });
+            };
+            if (onlyBaseline) {
+              bestTocDo.holders = [newH];
+              Object.assign(bestTocDo, newH);
+            } else {
+              bestTocDo.holders.push(newH);
+            }
           }
         }
       }
@@ -2302,7 +2405,8 @@ export default function EmployeeDashboard({
       } else if (maxStreak === bestBatBai.streak) {
         const exists = bestBatBai.holders?.some((h: any) => lNormalizeName(h.name) === normName);
         if (!exists) {
-          bestBatBai.holders.push({
+          const onlyBaseline = bestBatBai.holders?.every((h: any) => isBaselineHolder(h.name));
+          const newH = {
             name: userName,
             dept,
             branch,
@@ -2312,7 +2416,13 @@ export default function EmployeeDashboard({
             attempts: attemptsCount,
             avgTimeSpent: userAvgTimeSpent,
             proofText: `Thiết lập chuỗi ${maxStreak} lượt liên tục đạt điểm số tối đa 30/30 và không hề nếm mùi thất bại.`
-          });
+          };
+          if (onlyBaseline) {
+            bestBatBai.holders = [newH];
+            Object.assign(bestBatBai, newH);
+          } else {
+            bestBatBai.holders.push(newH);
+          }
         }
       }
 
@@ -2359,7 +2469,8 @@ export default function EmployeeDashboard({
 
               const exists = bestBinhMinh.holders?.some((h: any) => lNormalizeName(h.name) === normName);
               if (!exists) {
-                bestBinhMinh.holders.push({
+                const onlyBaseline = bestBinhMinh.holders?.every((h: any) => isBaselineHolder(h.name));
+                const newH = {
                   name: r.userName || userName,
                   dept: r.department || dept,
                   branch: r.branch || branch,
@@ -2369,7 +2480,13 @@ export default function EmployeeDashboard({
                   attempts: attemptsCount,
                   avgTimeSpent: userAvgTimeSpent,
                   proofText: `Chủ động ôn luyện từ sáng tinh sương lúc ${formattedTime} ngày ${fullDateStr}.`
-                });
+                };
+                if (onlyBaseline) {
+                  bestBinhMinh.holders = [newH];
+                  Object.assign(bestBinhMinh, newH);
+                } else {
+                  bestBinhMinh.holders.push(newH);
+                }
               }
             }
           }
@@ -2634,7 +2751,9 @@ export default function EmployeeDashboard({
       honorTitle: `CẤP 5 HUYỀN THOẠI`,
       proofText: 'Tượng đài thi đua vĩnh cửu đạt tối cao Cấp 5 Huyền thoại.',
       categoryTitle: '✨ TƯỢNG ĐÀI HUYỀN THOẠI (🔮)',
-      categoryLabel: 'Tôn Vinh'
+      categoryLabel: 'Tôn Vinh',
+      currentLevel: data.currentLevel !== undefined ? data.currentLevel : (data.level !== undefined ? data.level : 5),
+      daysMaintaining: data.daysMaintaining !== undefined ? data.daysMaintaining : 1
     }));
 
     // 2. Kỷ lục 3T (🔥, 🧠, ⚡, 🌅, 🚀, 🛡️) - record holders (flat mapped to support multi-holders)
@@ -3180,6 +3299,8 @@ export default function EmployeeDashboard({
             onBackToHome={() => setAdminMobileTab('home')}
             companyMappings={companyMappings}
             isAdmin={user.role === 'admin'}
+            allUsers={allUsersList}
+            allResults={allResults}
           />
         </div>
       </div>
@@ -7308,10 +7429,19 @@ export default function EmployeeDashboard({
                                    <div className="flex items-center gap-1.5 flex-1 min-w-0">
                                      <span className="text-[12px] shrink-0 select-none">{cand.leftEmoji}</span>
                                      <div className="flex flex-col min-w-0 flex-1 justify-center text-left">
-                                       <span className={`font-black tracking-tight text-[9.7px] uppercase truncate block leading-tight ${
-                                         isCurrentUser ? 'text-amber-950 font-black underline decoration-amber-400 decoration-1' : 'text-gray-805'
+                                       <span className={`tracking-tight text-[9.7px] uppercase truncate block leading-tight ${
+                                         cand.type === 'legend' ? (cand.currentLevel < 5 ? 'text-slate-500 font-bold' : 'text-black font-black') : (isCurrentUser ? 'text-amber-950 font-black underline decoration-amber-400 decoration-1' : 'text-gray-805 font-black')
                                        }`}>
-                                         <span translate="no" className="notranslate">{cand.name}</span>
+                                         <span translate="no" className="notranslate">
+                                            {cand.name}
+                                            {cand.type === 'legend' && (
+                                              <span className={`text-[8.5px] font-bold normal-case lowercase ml-1 shrink-0 ${
+                                                cand.currentLevel < 5 ? 'text-slate-400' : 'text-gray-600'
+                                              }`}>
+                                                ({cand.daysMaintaining || 1} ngày)
+                                              </span>
+                                            )}
+                                          </span>
                                        </span>
                                        <span className="text-[7.5px] text-gray-400 font-bold leading-none mt-0.5 truncate whitespace-nowrap block max-w-full">
                                          <span translate="no" className="notranslate">
