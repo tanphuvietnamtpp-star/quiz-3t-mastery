@@ -609,11 +609,11 @@ export default function StatsDashboard({
         const matchedUser = users.find(u => u.id === resolvedUserId || normalizeName(u.name) === resolvedNormalizedName);
         grouped[personKey] = {
           userId: resolvedUserId,
-          userName: resolvedNormalizedName || 'Thành viên ẩn danh',
+          userName: matchedUser?.name || resolvedNormalizedName || 'Thành viên ẩn danh',
           phone: matchedUser?.phone || 'Lưu trữ cũ',
           employeeId: matchedUser?.employeeId || 'Không rõ',
-          department: res.department || matchedUser?.department || 'Hội sở',
-          branch: res.branch || matchedUser?.branch || 'Hội sở',
+          department: matchedUser?.department || res.department || 'Hội sở',
+          branch: matchedUser?.branch || res.branch || 'Hội sở',
           attempts: 0,
           bestScore: 0,
           totalScore: 0,
@@ -889,11 +889,12 @@ export default function StatsDashboard({
         if (personKey === 'anonymous') return;
 
         const isLNT = resolvedUserId === 'admin_lenhattruong' || resolvedNormalizedName === 'LÊ NHẬT TRƯỜNG';
+        const matchedUser = users.find(u => u.id === resolvedUserId || normalizeName(u.name) === resolvedNormalizedName);
         if (!counts[personKey]) {
           counts[personKey] = {
-            name: resolvedNormalizedName || 'THÀNH VIÊN ẨN DANH',
-            dept: isLNT ? 'Phòng Quản Lý Chất Lượng' : (res.department || 'Hội sở'),
-            branch: res.branch || 'Hội sở',
+            name: matchedUser?.name || resolvedNormalizedName || 'THÀNH VIÊN ẨN DANH',
+            dept: isLNT ? 'Phòng Quản Lý Chất Lượng' : (matchedUser?.department || res.department || 'Hội sở'),
+            branch: matchedUser?.branch || res.branch || 'Hội sở',
             attempts: 0,
             maxScore: 0,
             totalScore: 0,
@@ -908,8 +909,16 @@ export default function StatsDashboard({
           counts[personKey].maxScore = res.score;
         }
         // Keep department and branch updated
-        if (res.department) counts[personKey].dept = isLNT ? 'Phòng Quản Lý Chất Lượng' : res.department;
-        if (res.branch) counts[personKey].branch = res.branch;
+        if (matchedUser?.department) {
+          counts[personKey].dept = isLNT ? 'Phòng Quản Lý Chất Lượng' : matchedUser.department;
+        } else if (res.department) {
+          counts[personKey].dept = isLNT ? 'Phòng Quản Lý Chất Lượng' : res.department;
+        }
+        if (matchedUser?.branch) {
+          counts[personKey].branch = matchedUser.branch;
+        } else if (res.branch) {
+          counts[personKey].branch = res.branch;
+        }
       }
     });
 

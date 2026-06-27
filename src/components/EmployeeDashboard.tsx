@@ -1302,7 +1302,7 @@ export default function EmployeeDashboard({
       return name.trim().normalize('NFC').toUpperCase().replace(/\s+/g, ' ');
     };
 
-    return allResults.filter(res => {
+    const filtered = allResults.filter(res => {
       if (res.userId) {
         const found = allUsersList.find(u => u.id === res.userId);
         if (!found) return false;
@@ -1332,6 +1332,31 @@ export default function EmployeeDashboard({
       }
       
       return false;
+    });
+
+    // Override result name and department with the latest profile to ensure automatic propagation of edits
+    return filtered.map(res => {
+      let matchedUser = null;
+      if (res.userId) {
+        matchedUser = allUsersList.find(u => u.id === res.userId);
+      } else {
+        const normName = lNormalizeName(res.userName);
+        matchedUser = allUsersList.find(u => {
+          const uNorm = u.name ? u.name.trim().normalize('NFC').toUpperCase().replace(/\s+/g, ' ') : '';
+          return uNorm === normName;
+        });
+      }
+
+      if (matchedUser) {
+        return {
+          ...res,
+          userName: matchedUser.name || res.userName,
+          department: matchedUser.department || res.department,
+          branch: matchedUser.branch || res.branch,
+          company: matchedUser.company || res.company
+        };
+      }
+      return res;
     });
   }, [allResults, allUsersList]);
 
