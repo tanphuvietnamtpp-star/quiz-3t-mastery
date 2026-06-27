@@ -1293,7 +1293,7 @@ export default function EmployeeDashboard({
     syncInactivityDemotions();
   }, [allResults, allUsersList, levelRules, allAnnouncements]);
 
-  // Filtered results to exclude unapproved, deleted, admin, and executive (exempt / "đặc cách" / "đã bị loại") users for all public rankings and honor boards
+  // Filtered results to include unapproved, deleted (but allow admin and executive roles and ban tổng giám đốc department as they should be recorded and displayed) users for all public rankings and honor boards
   const resultsForRankings = useMemo(() => {
     if (allResults.length === 0) return [];
     
@@ -1312,15 +1312,6 @@ export default function EmployeeDashboard({
           return false;
         }
         
-        if (found.role === 'admin' || found.role === 'executive') {
-          return false;
-        }
-        
-        const deptNorm = (found.department || '').trim().toLowerCase();
-        if (deptNorm === 'ban tổng giám đốc') {
-          return false;
-        }
-        
         return true;
       }
       
@@ -1334,15 +1325,6 @@ export default function EmployeeDashboard({
         
         const fStatus = (found.status || '').toUpperCase();
         if (fStatus !== 'APPROVED' && fStatus !== 'APPROVED_MEMBER') {
-          return false;
-        }
-        
-        if (found.role === 'admin' || found.role === 'executive') {
-          return false;
-        }
-        
-        const deptNorm = (found.department || '').trim().toLowerCase();
-        if (deptNorm === 'ban tổng giám đốc') {
           return false;
         }
         
@@ -1954,8 +1936,8 @@ export default function EmployeeDashboard({
         const newItem = {
           userId: lastResult.userId || lastResult.userName,
           userName: rName,
-          dept: isLNT ? 'Phòng Quản Lý Chất Lượng (QLCL)' : (lastResult.department || 'Hội sở'),
-          department: isLNT ? 'Phòng Quản Lý Chất Lượng (QLCL)' : (lastResult.department || 'Hội sở'),
+          dept: isLNT ? 'Phòng Quản Lý Chất Lượng' : (lastResult.department || 'Hội sở'),
+          department: isLNT ? 'Phòng Quản Lý Chất Lượng' : (lastResult.department || 'Hội sở'),
           branch: lastResult.branch || 'Hội sở',
           avgScoreAtFirstLegend: coronations[coronations.length - 1].avgScoreAtCoronation,
           overallAvgDurationPerAttempt: coronations[coronations.length - 1].overallAvgDurationPerAttempt,
@@ -1999,7 +1981,6 @@ export default function EmployeeDashboard({
       allUsersList.forEach(u => {
         const uStatus = (u.status || '').toUpperCase();
         if (uStatus !== 'APPROVED' && uStatus !== 'APPROVED_MEMBER') return;
-        if (u.role === 'admin' || u.role === 'executive') return;
 
         const uLvl = u.level || u.currentLevel || 1;
         if (uLvl === 5) {
@@ -2083,8 +2064,13 @@ export default function EmployeeDashboard({
     });
 
     // Sort matching exactly how the Admin's list is sorted!
-    // Sort by promoTimestamp ascending as a base ranking (earliest achieved Level 5 first)
+    // Sort by daysMaintaining descending, then promoTimestamp ascending
     return legendsList.sort((a, b) => {
+      const aDays = a.daysMaintaining || 0;
+      const bDays = b.daysMaintaining || 0;
+      if (bDays !== aDays) {
+        return bDays - aDays;
+      }
       const aTime = a.promoTimestamp || Infinity;
       const bTime = b.promoTimestamp || Infinity;
       if (aTime !== bTime) {
@@ -5899,7 +5885,7 @@ export default function EmployeeDashboard({
 
   // Ranked list of active department participation
   const departmentsList = [
-    'Phòng Quản Lý Chất Lượng (QLCL)',
+    'Phòng Quản Lý Chất Lượng',
     'Phòng Sản Xuất',
     'Phòng Nhân Sự',
     'Phòng Kế Toán',
@@ -7438,7 +7424,7 @@ export default function EmployeeDashboard({
                                               <span className={`text-[8.5px] font-bold normal-case lowercase ml-1 shrink-0 ${
                                                 cand.currentLevel < 5 ? 'text-slate-400' : 'text-gray-600'
                                               }`}>
-                                                ({cand.daysMaintaining || 1} ngày)
+                                                (Vị thế: {cand.daysMaintaining || 1} ngày)
                                               </span>
                                             )}
                                           </span>

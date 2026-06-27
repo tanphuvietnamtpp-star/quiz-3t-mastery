@@ -168,7 +168,7 @@ const defaultAdmin: User = {
   password: '111222',
   role: 'admin',
   company: 'TÂN PHÚ VIỆT NAM',
-  department: 'Phòng Quản Lý Chất Lượng (TPP-CTY)',
+  department: 'Phòng Quản Lý Chất Lượng',
   branch: 'Văn Phòng Công Ty (TPP-CTY)',
   status: 'approved',
   createdAt: '2026-06-06T08:30:36Z',
@@ -188,7 +188,7 @@ const forceSeedSupremeAdmin = async () => {
         role: 'admin',
         status: 'approved',
         company: 'TÂN PHÚ VIỆT NAM',
-        department: 'Phòng Quản Lý Chất Lượng (TPP-CTY)',
+        department: 'Phòng Quản Lý Chất Lượng',
         branch: 'Văn Phòng Công Ty (TPP-CTY)',
         employeeId: '2018.00281',
         createdAt: '2026-06-06T08:30:36Z'
@@ -565,6 +565,9 @@ export const sanitizeUserList = (users: User[]): User[] => {
     if (dept.includes('Quản lí chất lượng')) {
       dept = dept.replace(/Quản lí chất lượng/g, 'Quản Lý Chất Lượng');
     }
+    if (dept.includes('(QLCL)')) {
+      dept = dept.replace(/\(QLCL\)/g, '').trim();
+    }
     return {
       ...u,
       department: dept
@@ -587,7 +590,7 @@ export const sanitizeUserList = (users: User[]): User[] => {
           role: 'admin',
           status: 'approved',
           company: 'TÂN PHÚ VIỆT NAM',
-          department: 'Phòng Quản Lý Chất Lượng (TPP-CTY)',
+          department: 'Phòng Quản Lý Chất Lượng',
           branch: 'Văn Phòng Công Ty (TPP-CTY)',
           employeeId: '2018.00281',
           createdAt: u.createdAt || '2026-06-06T08:30:36Z',
@@ -604,7 +607,7 @@ export const sanitizeUserList = (users: User[]): User[] => {
           role: 'admin',
           status: 'approved',
           company: 'TÂN PHÚ VIỆT NAM',
-          department: 'Phòng Quản Lý Chất Lượng (TPP-CTY)',
+          department: 'Phòng Quản Lý Chất Lượng',
           branch: 'Văn Phòng Công Ty (TPP-CTY)',
           employeeId: '2018.00281',
           password: supremeAdminMerged.password || u.password || '111222',
@@ -681,7 +684,7 @@ export const databaseService = {
       status,
       company: isLNT ? 'TÂN PHÚ VIỆT NAM' : (userData.company || 'TÂN PHÚ VIỆT NAM'),
       branch: isLNT ? 'Văn Phòng Công Ty (TPP-CTY)' : userData.branch,
-      department: isLNT ? 'Phòng Quản Lý Chất Lượng (TPP-CTY)' : userData.department,
+      department: isLNT ? 'Phòng Quản Lý Chất Lượng' : userData.department,
       employeeId: isLNT ? '2018.00281' : userData.employeeId,
       createdAt: new Date().toISOString()
     };
@@ -838,7 +841,7 @@ export const databaseService = {
             role: 'admin',
             status: 'approved',
             company: 'TÂN PHÚ VIỆT NAM',
-            department: 'Phòng Quản Lý Chất Lượng (TPP-CTY)',
+            department: 'Phòng Quản Lý Chất Lượng',
             branch: 'Văn Phòng Công Ty (TPP-CTY)',
             employeeId: '2018.00281'
           };
@@ -868,7 +871,7 @@ export const databaseService = {
       
       if (isLNT) {
         finalData.company = 'TÂN PHÚ VIỆT NAM';
-        finalData.department = 'Phòng Quản Lý Chất Lượng (TPP-CTY)';
+        finalData.department = 'Phòng Quản Lý Chất Lượng';
         finalData.branch = 'Văn Phòng Công Ty (TPP-CTY)';
         finalData.role = 'admin';
         finalData.status = 'approved';
@@ -897,7 +900,7 @@ export const databaseService = {
       
       if (isLNT) {
         finalData.company = 'TÂN PHÚ VIỆT NAM';
-        finalData.department = 'Phòng Quản Lý Chất Lượng (TPP-CTY)';
+        finalData.department = 'Phòng Quản Lý Chất Lượng';
         finalData.branch = 'Văn Phòng Công Ty (TPP-CTY)';
         finalData.role = 'admin';
         finalData.status = 'approved';
@@ -1095,8 +1098,13 @@ export const databaseService = {
       const results: QuizResult[] = [];
       querySnapshot.forEach((doc) => {
         const item = doc.data() as QuizResult;
-        if (item && item.department && item.department.includes('Quản lí chất lượng')) {
-          item.department = item.department.replace(/Quản lí chất lượng/g, 'Quản Lý Chất Lượng');
+        if (item && item.department) {
+          if (item.department.includes('Quản lí chất lượng')) {
+            item.department = item.department.replace(/Quản lí chất lượng/g, 'Quản Lý Chất Lượng');
+          }
+          if (item.department.includes('(QLCL)')) {
+            item.department = item.department.replace(/\(QLCL\)/g, '').trim();
+          }
         }
         results.push(item);
       });
@@ -1146,8 +1154,13 @@ export const databaseService = {
         const results: QuizResult[] = [];
         querySnapshot.forEach((doc) => {
           const item = doc.data() as QuizResult;
-          if (item && item.department && item.department.includes('Quản lí chất lượng')) {
-            item.department = item.department.replace(/Quản lí chất lượng/g, 'Quản Lý Chất Lượng');
+          if (item && item.department) {
+            if (item.department.includes('Quản lí chất lượng')) {
+              item.department = item.department.replace(/Quản lí chất lượng/g, 'Quản Lý Chất Lượng');
+            }
+            if (item.department.includes('(QLCL)')) {
+              item.department = item.department.replace(/\(QLCL\)/g, '').trim();
+            }
           }
           results.push(item);
         });

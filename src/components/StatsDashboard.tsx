@@ -197,15 +197,8 @@ export default function StatsDashboard({
       const uStatus = (u.status || '').toUpperCase();
       if (uStatus !== 'APPROVED' && uStatus !== 'APPROVED_MEMBER') return false;
 
-      if (u.role === 'admin' || u.role === 'executive') {
-        const uId = u.id || '';
-        const normName = u.name ? u.name.trim().normalize('NFC').toUpperCase().replace(/\s+/g, ' ') : '';
-        const hasResults = rawResults.some(r => r.userId === uId || (r.userName && r.userName.trim().normalize('NFC').toUpperCase().replace(/\s+/g, ' ') === normName));
-        if (!hasResults) return false;
-      }
-
+      // Allow admins and executives to be treated as normal employees
       const dNameNorm = (u.department || '').trim().normalize('NFC').toLowerCase();
-      if (dNameNorm === 'ban tổng giám đốc') return false;
 
       const bNameNorm = (u.branch || '').trim().normalize('NFC').toLowerCase();
       for (const co of mappings) {
@@ -243,11 +236,9 @@ export default function StatsDashboard({
       const uStatus = (foundUser.status || '').toUpperCase();
       if (uStatus !== 'APPROVED' && uStatus !== 'APPROVED_MEMBER') return false;
 
-      // Exclude admin and executive roles to sync with EmployeeDashboard
-      if (foundUser.role === 'admin' || foundUser.role === 'executive') return false;
+      // Allow admins, executives, and ban tổng giám đốc to be treated as normal employees
 
       const dNameNorm = (r.department || '').trim().normalize('NFC').toLowerCase();
-      if (dNameNorm === 'ban tổng giám đốc') return false;
 
       const bNameNorm = (r.branch || '').trim().normalize('NFC').toLowerCase();
       for (const co of mappings) {
@@ -287,11 +278,9 @@ export default function StatsDashboard({
       const uStatus = (foundUser.status || '').toUpperCase();
       if (uStatus !== 'APPROVED' && uStatus !== 'APPROVED_MEMBER') return false;
 
-      // Exclude admin and executive roles to sync with EmployeeDashboard
-      if (foundUser.role === 'admin' || foundUser.role === 'executive') return false;
+      // Allow admins, executives, and ban tổng giám đốc to be treated as normal employees
 
       const dNameNorm = (r.department || '').trim().normalize('NFC').toLowerCase();
-      if (dNameNorm === 'ban tổng giám đốc') return false;
 
       const bNameNorm = (r.branch || '').trim().normalize('NFC').toLowerCase();
       for (const co of mappings) {
@@ -903,7 +892,7 @@ export default function StatsDashboard({
         if (!counts[personKey]) {
           counts[personKey] = {
             name: resolvedNormalizedName || 'THÀNH VIÊN ẨN DANH',
-            dept: isLNT ? 'Phòng Quản Lý Chất Lượng (QLCL)' : (res.department || 'Hội sở'),
+            dept: isLNT ? 'Phòng Quản Lý Chất Lượng' : (res.department || 'Hội sở'),
             branch: res.branch || 'Hội sở',
             attempts: 0,
             maxScore: 0,
@@ -919,7 +908,7 @@ export default function StatsDashboard({
           counts[personKey].maxScore = res.score;
         }
         // Keep department and branch updated
-        if (res.department) counts[personKey].dept = isLNT ? 'Phòng Quản Lý Chất Lượng (QLCL)' : res.department;
+        if (res.department) counts[personKey].dept = isLNT ? 'Phòng Quản Lý Chất Lượng' : res.department;
         if (res.branch) counts[personKey].branch = res.branch;
       }
     });
@@ -1315,7 +1304,7 @@ export default function StatsDashboard({
         const newItem = {
           userId: lastResult.userId || lastResult.userName,
           userName: rName,
-          dept: isLNT ? 'Phòng Quản Lý Chất Lượng (QLCL)' : (lastResult.department || 'Hội sở'),
+          dept: isLNT ? 'Phòng Quản Lý Chất Lượng' : (lastResult.department || 'Hội sở'),
           branch: lastResult.branch || 'Hội sở',
           avgScoreAtFirstLegend: coronations[coronations.length - 1].avgScoreAtCoronation,
           overallAvgDurationPerAttempt: coronations[coronations.length - 1].overallAvgDurationPerAttempt,
@@ -1486,8 +1475,13 @@ export default function StatsDashboard({
   // Search and filter list of all legends
   const filteredMonumentLegends = useMemo(() => {
     let sortedLegends = [...legendMonumentData];
-    // Sort by promoTimestamp ascending as a base ranking (earliest achieved Level 5 first)
+    // Sort by daysMaintaining descending, then promoTimestamp ascending
     sortedLegends.sort((a, b) => {
+      const aDays = a.daysMaintaining || 0;
+      const bDays = b.daysMaintaining || 0;
+      if (bDays !== aDays) {
+        return bDays - aDays;
+      }
       const aTime = a.promoTimestamp || Infinity;
       const bTime = b.promoTimestamp || Infinity;
       if (aTime !== bTime) {
@@ -2097,7 +2091,7 @@ export default function StatsDashboard({
       const isLNT = personKey === 'admin_lenhattruong' || lNormalizeName(latestRes.userName) === 'LÊ NHẬT TRƯỜNG';
       const userProfile = {
         name: latestRes.userName || 'THÀNH VIÊN ẨN DANH',
-        dept: isLNT ? 'Phòng Quản Lý Chất Lượng (QLCL)' : (latestRes.department || 'Hội sở'),
+        dept: isLNT ? 'Phòng Quản Lý Chất Lượng' : (latestRes.department || 'Hội sở'),
         branch: latestRes.branch || 'Hội sở',
         date: latestRes.date || ''
       };
@@ -2206,7 +2200,7 @@ export default function StatsDashboard({
       const isLNT = personKey === 'admin_lenhattruong' || lNormalizeName(latestRes.userName) === 'LÊ NHẬT TRƯỜNG';
       const userProfile = {
         name: latestRes.userName || 'THÀNH VIÊN ẨN DANH',
-        dept: isLNT ? 'Phòng Quản Lý Chất Lượng (QLCL)' : (latestRes.department || 'Hội sở'),
+        dept: isLNT ? 'Phòng Quản Lý Chất Lượng' : (latestRes.department || 'Hội sở'),
         branch: latestRes.branch || 'Hội sở',
         date: latestRes.date || ''
       };
@@ -2577,7 +2571,7 @@ export default function StatsDashboard({
             </div>
 
             {/* List of active players on Monument */}
-            <div className="overflow-y-auto space-y-1 pr-1 max-h-[380px] min-h-[180px] flex-1 mt-2">
+            <div className="overflow-y-auto space-y-1 pr-1 max-h-[550px] min-h-[180px] flex-1 mt-2">
               {filteredMonumentLegends.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-center py-12 space-y-2 border border-dashed border-gray-200 rounded-xl bg-gray-50/50 flex-1">
                   <span className="text-xs text-gray-400 font-bold font-sans">Không tìm thấy Huyền Thoại nào phù hợp.</span>
@@ -2896,7 +2890,7 @@ export default function StatsDashboard({
             </div>
 
             {/* List of 3T Records - Chân phương, không màu sắc */}
-            <div className="overflow-y-auto space-y-1 pr-1 max-h-[380px] min-h-[180px] flex-1 mt-2">
+            <div className="overflow-y-auto space-y-1 pr-1 max-h-[550px] min-h-[180px] flex-1 mt-2">
               {recordCategories.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-center py-12 space-y-2 border border-dashed border-gray-200 rounded-xl bg-gray-50/50 flex-1">
                   <span className="text-xs text-gray-400 font-bold font-sans">Không tìm thấy Kỷ Lục nào phù hợp.</span>

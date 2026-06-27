@@ -562,7 +562,7 @@ export default function PersonalStats({ users, results, levelRulesFromCloud }: P
       const isLNT = personKey === 'admin_lenhattruong' || lNormalizeName(latestRes.userName) === 'LÊ NHẬT TRƯỜNG';
       const userProfile = {
         name: latestRes.userName || 'THÀNH VIÊN ẨN DANH',
-        dept: isLNT ? 'Phòng Quản Lý Chất Lượng (QLCL)' : (latestRes.department || 'Hội sở'),
+        dept: isLNT ? 'Phòng Quản Lý Chất Lượng' : (latestRes.department || 'Hội sở'),
         branch: latestRes.branch || 'Hội sở',
         date: latestRes.date || ''
       };
@@ -651,7 +651,7 @@ export default function PersonalStats({ users, results, levelRulesFromCloud }: P
       const isLNT = personKey === 'admin_lenhattruong' || lNormalizeName(latestRes.userName) === 'LÊ NHẬT TRƯỜNG';
       const userProfile = {
         name: latestRes.userName || 'THÀNH VIÊN ẨN DANH',
-        dept: isLNT ? 'Phòng Quản Lý Chất Lượng (QLCL)' : (latestRes.department || 'Hội sở'),
+        dept: isLNT ? 'Phòng Quản Lý Chất Lượng' : (latestRes.department || 'Hội sở'),
         branch: latestRes.branch || 'Hội sở',
         date: latestRes.date || ''
       };

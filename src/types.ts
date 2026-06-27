@@ -76,7 +76,7 @@ export const BRANCHES = [
 ] as const;
 
 export const DEPARTMENTS = [
-  'Phòng Quản Lý Chất Lượng (QLCL)',
+  'Phòng Quản Lý Chất Lượng',
   'Phòng Sản Xuất',
   'Phòng Nhân Sự',
   'Phòng Kế Toán',

@@ -1782,7 +1782,7 @@ export default function AdminDashboard({
             password,
             role,
             company: 'TÂN PHÚ VIỆT NAM',
-            department: department || 'Phòng Quản Lý Chất Lượng (QLCL)',
+            department: department || 'Phòng Quản Lý Chất Lượng',
             branch: branch || 'Hội sở chính',
             status,
             createdAt,
