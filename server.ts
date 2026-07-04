@@ -68,29 +68,92 @@ async function startServer() {
         });
       }
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: { parts },
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                text: { type: Type.STRING },
-                options: {
-                  type: Type.ARRAY,
-                  items: { type: Type.STRING }
-                },
-                correctAnswerIndex: { type: Type.INTEGER },
-                explanation: { type: Type.STRING }
-              },
-              required: ["text", "options", "correctAnswerIndex", "explanation"]
+      let response = null;
+      let lastError: any = null;
+      // List of robust models in order of priority: 
+      // 1. gemini-3.5-flash (Smartest/best text understanding)
+      // 2. gemini-3.1-flash-lite (Extremely fast, lightweight, lowest utilization, highly available)
+      // 3. gemini-flash-latest (Very stable, widely available legacy fallback)
+      const modelsToTry = ["gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-flash-latest"];
+      
+      for (const modelName of modelsToTry) {
+        try {
+          console.log(`[Gemini AI] Đang gọi model ${modelName}...`);
+          response = await ai.models.generateContent({
+            model: modelName,
+            contents: { parts },
+            config: {
+              responseMimeType: "application/json",
+              responseSchema: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    text: { type: Type.STRING },
+                    options: {
+                      type: Type.ARRAY,
+                      items: { type: Type.STRING }
+                    },
+                    correctAnswerIndex: { type: Type.INTEGER },
+                    explanation: { type: Type.STRING }
+                  },
+                  required: ["text", "options", "correctAnswerIndex", "explanation"]
+                }
+              }
             }
+          });
+          if (response && response.text) {
+            console.log(`[Gemini AI] Gọi thành công bằng model: ${modelName}`);
+            break; // Exit the loop on success
           }
+        } catch (err: any) {
+          lastError = err;
+          console.error(`[Gemini AI] Lỗi với model ${modelName}:`, err.message || err);
+          // If a model is overloaded (503), immediately try the next model cluster without delay!
         }
-      });
+      }
+
+      // If all three models failed on their first try, let's do a fast second try with gemini-3.1-flash-lite (as it is the most available one)
+      if (!response || !response.text) {
+        console.log(`[Gemini AI] Tất cả các model chính đều bận. Thử lại lần cuối bằng gemini-3.1-flash-lite sau 1 giây...`);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        try {
+          response = await ai.models.generateContent({
+            model: "gemini-3.1-flash-lite",
+            contents: { parts },
+            config: {
+              responseMimeType: "application/json",
+              responseSchema: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    text: { type: Type.STRING },
+                    options: {
+                      type: Type.ARRAY,
+                      items: { type: Type.STRING }
+                    },
+                    correctAnswerIndex: { type: Type.INTEGER },
+                    explanation: { type: Type.STRING }
+                  },
+                  required: ["text", "options", "correctAnswerIndex", "explanation"]
+                }
+              }
+            }
+          });
+          if (response && response.text) {
+            console.log(`[Gemini AI] Gọi thành công trong lượt thử lại bằng: gemini-3.1-flash-lite`);
+          }
+        } catch (err: any) {
+          lastError = err;
+          console.error(`[Gemini AI] Lượt thử lại cuối bằng gemini-3.1-flash-lite thất bại:`, err.message || err);
+        }
+      }
+
+      if (!response || !response.text) {
+        console.error("[Gemini AI] Tất cả các models đều thất bại.");
+        throw lastError || new Error("Không thể kết nối đến máy chủ Gemini AI sau nhiều lần thử.");
+      }
 
       const textOutput = response.text || "[]";
       let parsedQuestions = [];
