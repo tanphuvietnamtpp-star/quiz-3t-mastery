@@ -5727,18 +5727,23 @@ export default function EmployeeDashboard({
       duration: quizTimerRef.current
     };
 
-    try {
-      await databaseService.saveQuizResult(newResult);
-      checkNewRecordOrPromotion(newResult);
-      setLastQuizResult(newResult);
-      setResults(prev => [newResult, ...prev]);
-      setAllResults(prev => [newResult, ...prev]);
-      setShowResultsReview(true);
-      setReviewMode(false);
-      setReviewQuestionIndex(0);
-    } catch (err) {
-      console.error("Lỗi khi nộp bài thi tự động:", err);
-    }
+    // Cập nhật giao diện lập tức (Optimistic Update) để người dùng không phải chờ đợi
+    setLastQuizResult(newResult);
+    setResults(prev => [newResult, ...prev]);
+    setAllResults(prev => [newResult, ...prev]);
+    setShowResultsReview(true);
+    setReviewMode(false);
+    setReviewQuestionIndex(0);
+
+    // Lưu kết quả và kiểm tra thăng cấp/kỷ lục ngầm dưới nền để tránh trễ mạng
+    (async () => {
+      try {
+        await databaseService.saveQuizResult(newResult);
+        await checkNewRecordOrPromotion(newResult);
+      } catch (err: any) {
+        console.error("Lỗi ngầm khi nộp bài thi tự động lên đám mây:", err);
+      }
+    })();
   };
 
   const handleQuestionTimeout = () => {
@@ -5845,18 +5850,23 @@ export default function EmployeeDashboard({
       duration: quizTimer
     };
 
-    try {
-      await databaseService.saveQuizResult(newResult);
-      checkNewRecordOrPromotion(newResult);
-      setLastQuizResult(newResult);
-      setResults(prev => [newResult, ...prev]);
-      setAllResults(prev => [newResult, ...prev]);
-      setShowResultsReview(true);
-      setReviewMode(false);
-      setReviewQuestionIndex(0);
-    } catch (err) {
-      console.error("Lỗi khi lưu kết quả bài thi:", err);
-    }
+    // Cập nhật giao diện lập tức (Optimistic Update) để người dùng không phải chờ đợi
+    setLastQuizResult(newResult);
+    setResults(prev => [newResult, ...prev]);
+    setAllResults(prev => [newResult, ...prev]);
+    setShowResultsReview(true);
+    setReviewMode(false);
+    setReviewQuestionIndex(0);
+
+    // Lưu kết quả và kiểm tra thăng cấp/kỷ lục ngầm dưới nền để tránh trễ mạng
+    (async () => {
+      try {
+        await databaseService.saveQuizResult(newResult);
+        await checkNewRecordOrPromotion(newResult);
+      } catch (err: any) {
+        console.error("Lỗi ngầm khi lưu kết quả bài thi lên đám mây:", err);
+      }
+    })();
   };
 
   // Expanded explanations in practice mode state

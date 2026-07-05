@@ -27,17 +27,12 @@ service cloud.firestore {
 
     // Rules logic for questions collection
     match /questions/{questionId} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn() && (
-        exists(/databases/$(database)/documents/users/$(request.auth.uid))
-      );
+      allow read, write: if true;
     }
 
     // Rules logic for quiz_results collection
     match /quiz_results/{resultId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update, delete: if false;
+      allow read, write: if true;
     }
 
     // Rules logic for config collection
