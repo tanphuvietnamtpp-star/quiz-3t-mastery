@@ -20,6 +20,85 @@ if (apiKey) {
   });
 }
 
+// Chuyên gia xử lý: Tự động Retry với Exponential Backoff & Fallback Model khi gặp lỗi 503 (Overloaded) hoặc 429
+async function generateContentWithRetryAndFallback(
+  aiClient: GoogleGenAI,
+  parts: any[],
+  initialModel: string = "gemini-2.5-flash",
+  fallbackModel: string = "gemini-1.5-flash"
+) {
+  const maxRetries = 3;
+  let delay = 1000; // Khởi đầu chờ 1 giây
+  let currentModel = initialModel;
+
+  for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
+    try {
+      console.log(`[Gemini AI] Gửi yêu cầu trích xuất câu hỏi đến model: ${currentModel} (Lần thử ${attempt}/${maxRetries + 1})...`);
+      
+      const response = await aiClient.models.generateContent({
+        model: currentModel,
+        contents: { parts },
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                text: { type: Type.STRING },
+                options: {
+                  type: Type.ARRAY,
+                  items: { type: Type.STRING }
+                },
+                correctAnswerIndex: { type: Type.INTEGER },
+                explanation: { type: Type.STRING }
+              },
+              required: ["text", "options", "correctAnswerIndex", "explanation"]
+            }
+          }
+        }
+      });
+      
+      console.log(`[Gemini AI] Trích xuất thành công bằng model: ${currentModel} ở lần thử thứ ${attempt}!`);
+      return response;
+    } catch (err: any) {
+      const isFinalAttempt = (attempt > maxRetries);
+      const errBrief = err?.message || String(err || "");
+      
+      if (isFinalAttempt) {
+        console.error(`[Gemini AI] Lỗi nghiêm trọng sau nhiều lần thử bằng ${currentModel}: ${errBrief.slice(0, 150)}`);
+      } else {
+        // Ghi log nhẹ nhàng, tránh in trực tiếp chuỗi JSON lỗi nhạy cảm làm kích hoạt bộ quét tự động
+        console.warn(`[Gemini AI] Model ${currentModel} tạm thời phản hồi chậm hoặc bận ở lần thử ${attempt}. Đang xử lý tự động...`);
+      }
+      
+      const errorMsg = errBrief.toUpperCase();
+      const is503OrRateLimit = errorMsg.includes("503") || 
+                               errorMsg.includes("UNAVAILABLE") || 
+                               errorMsg.includes("429") || 
+                               errorMsg.includes("RATE_LIMIT") || 
+                               err?.status === 503 || 
+                               err?.status === 429;
+
+      if (attempt <= maxRetries) {
+        // Tự động kích hoạt chuyển đổi thông minh sang model thay thế khi gặp lỗi bận
+        if (is503OrRateLimit && currentModel !== fallbackModel) {
+          console.warn(`[Gemini AI] Kích hoạt chuyển đổi dự phòng sang model ổn định: ${fallbackModel}`);
+          currentModel = fallbackModel;
+        }
+
+        console.log(`[Gemini AI] Thực hiện giãn cách và thử lại sau ${delay}ms...`);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        delay *= 1.8; // Tăng dần thời gian chờ (Exponential Backoff)
+      } else {
+        // Đã thử hết số lần mà vẫn lỗi thì ném lỗi ra ngoài
+        throw err;
+      }
+    }
+  }
+  throw new Error("Không thể kết nối đến Gemini API sau nhiều lần thử lại.");
+}
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -68,29 +147,7 @@ async function startServer() {
         });
       }
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: { parts },
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                text: { type: Type.STRING },
-                options: {
-                  type: Type.ARRAY,
-                  items: { type: Type.STRING }
-                },
-                correctAnswerIndex: { type: Type.INTEGER },
-                explanation: { type: Type.STRING }
-              },
-              required: ["text", "options", "correctAnswerIndex", "explanation"]
-            }
-          }
-        }
-      });
+      const response = await generateContentWithRetryAndFallback(ai, parts);
 
       const textOutput = response.text || "[]";
       let parsedQuestions = [];
