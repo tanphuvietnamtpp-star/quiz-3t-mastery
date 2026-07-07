@@ -3228,7 +3228,7 @@ export default function EmployeeDashboard({
                     )}
                     
                     {/* Promoting Role buttons */}
-                    {item.role !== 'admin' && (
+                    {item.role !== 'admin' && (user.role === 'admin' || user.role === 'executive') && (
                       <button
                         onClick={() => handleMobileToggleRole(item.id, item.role || 'employee')}
                         className={`py-1 px-2 border rounded-lg text-[9.5px] font-semibold active:scale-95 transition-all outline-none cursor-pointer ${
@@ -3243,7 +3243,7 @@ export default function EmployeeDashboard({
                     )}
                   </div>
 
-                  {item.role !== 'admin' && (
+                  {item.role !== 'admin' && (user.role === 'admin' || user.role === 'executive') && (
                     <button
                       onClick={() => handleMobileDeleteUser(item.id)}
                       className="p-1 px-1.5 bg-red-50 hover:bg-red-100 text-red-650 rounded-lg border border-red-200/50 hover:border-red-300 transition-all active:scale-95 cursor-pointer ml-1 inline-flex items-center justify-center"
@@ -3291,9 +3291,9 @@ export default function EmployeeDashboard({
         {/* Stats content area */}
         <div className="-mx-4 px-4 pb-24 text-left">
           <StatsDashboard 
-            users={deptUsers} 
+            users={user.role === 'approver' ? allUsersList : deptUsers} 
             results={
-              user.role === 'admin' 
+              user.role === 'admin' || user.role === 'approver'
                 ? allResults 
                 : (() => {
                     const deptNorm = (user.department || '').trim().toLowerCase();
@@ -3310,6 +3310,7 @@ export default function EmployeeDashboard({
             onBackToHome={() => setAdminMobileTab('home')}
             companyMappings={companyMappings}
             isAdmin={user.role === 'admin'}
+            isApprover={user.role === 'approver'}
             allUsers={allUsersList}
             allResults={allResults}
           />
@@ -6946,19 +6947,10 @@ export default function EmployeeDashboard({
                     <div className="flex flex-col items-center justify-center text-center space-y-3 sm:space-y-4 flex-1 w-full shrink-0">
                       
                       {/* Admin rapid action buttons */}
-                      {isAdminReview && (user.role === 'admin' || user.role === 'executive') && (
+                      {((isAdminReview && (user.role === 'admin' || user.role === 'executive' || user.role === 'approver')) || user.canViewStats) && (
                         <div className="w-full max-w-sm mx-auto bg-slate-50/90 border border-slate-200/60 rounded-xl p-2 shadow-xs mb-4 sm:mb-5 font-sans">
-                          <div className="text-[9px] font-extrabold text-[#0B3A60]/85 uppercase tracking-wider mb-2 text-center flex items-center justify-center gap-1.5 whitespace-nowrap">
-                            <span>CÔNG CỤ QUẢN TRỊ HỆ THỐNG</span>
-                            {(user.role === 'admin' || user.role === 'executive') && (
-                              <span className="flex items-center gap-1 bg-emerald-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full shadow-2xs shrink-0 normal-case">
-                                <span className="h-1 w-1 rounded-full bg-white block animate-ping" />
-                                <span>{onlineUsersCount} Online</span>
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex flex-row items-center justify-between gap-1 overflow-x-auto no-scrollbar px-1 pt-2.5 pb-1 mb-1">
-                            {(user.role === 'admin' || user.role === 'executive') && (
+                          <div className="flex flex-row items-center justify-between gap-1 overflow-x-auto no-scrollbar px-3 pt-4 pb-2 mb-1">
+                            {(user.role === 'admin' || user.role === 'executive' || user.role === 'approver') && (
                               <button
                                 onClick={() => setAdminMobileTab('users')}
                                 className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group shrink-0"
@@ -7016,10 +7008,10 @@ export default function EmployeeDashboard({
                                 localStorage.setItem('3t_last_read_ann_ts', String(ts));
                                 setUnreadNotificationsCount(0);
                               }}
-                              className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group shrink-0"
+                              className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group shrink-0 animate-fadeIn"
                               title="Thông Báo"
                             >
-                              <div className="h-7 w-7 rounded-lg bg-orange-50 border border-orange-100 flex items-center justify-center group-hover:bg-orange-100 transition-colors shrink-0 relative animate-fadeIn">
+                              <div className="h-7 w-7 rounded-lg bg-orange-50 border border-orange-100 flex items-center justify-center group-hover:bg-orange-100 transition-colors shrink-0 relative">
                                 <Bell className="h-3.5 w-3.5 text-orange-600" />
                                 {unreadNotificationsCount > 0 && (
                                   <span className="absolute -top-2 -right-1.5 bg-red-600 text-white text-[9px] font-extrabold h-4 px-1 rounded-full border border-white flex items-center justify-center shadow-md min-w-[16px] leading-none animate-bounce">
@@ -7035,10 +7027,10 @@ export default function EmployeeDashboard({
                               onClick={() => {
                                 setAdminMobileTab('exchange');
                               }}
-                              className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group shrink-0"
+                              className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group shrink-0 animate-fadeIn"
                               title="Chat BQT"
                             >
-                              <div className="h-7 w-7 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center group-hover:bg-blue-100 transition-colors shrink-0 relative animate-fadeIn">
+                              <div className="h-7 w-7 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center group-hover:bg-blue-100 transition-colors shrink-0 relative">
                                 <MessageSquare className="h-3.5 w-3.5 text-blue-600" />
                                 {unreadExchangeCount > 0 && (
                                   <span className="absolute -top-2 -right-1.5 bg-red-600 text-white text-[9px] font-extrabold h-4 px-1 rounded-full border border-white flex items-center justify-center shadow-md min-w-[16px] leading-none animate-bounce">
@@ -7093,8 +7085,8 @@ export default function EmployeeDashboard({
 
                       {/* CBNV (Nhân viên thường) rapid action buttons */}
                       {!(user.role === 'admin' || user.role === 'executive') && !(user.role === 'approver' || user.canViewStats) && (
-                        <div className="w-full max-w-sm mx-auto bg-gradient-to-br from-amber-50/95 via-amber-50/85 to-yellow-50/70 rounded-xl p-2 shadow-xs mb-3 sm:mb-3.5 font-sans relative overflow-hidden backdrop-blur-xs">
-                          <div className="flex flex-row items-center justify-around gap-1 px-1 pt-1 pb-1">
+                        <div className="w-full max-w-sm mx-auto bg-gradient-to-br from-amber-50/95 via-amber-50/85 to-yellow-50/70 rounded-xl p-2 shadow-xs mb-3 sm:mb-3.5 font-sans relative backdrop-blur-xs">
+                          <div className="flex flex-row items-center justify-between gap-1 overflow-x-auto no-scrollbar px-3 pt-4 pb-2 w-full whitespace-nowrap">
                             {/* Tượng đài huyền thoại */}
                             <button
                               onClick={() => setAdminMobileTab('legends')}
@@ -7146,6 +7138,18 @@ export default function EmployeeDashboard({
                               <span className="text-[8.5px] font-extrabold leading-tight text-center text-amber-950 truncate max-w-[64px]">Top Kiên Trì</span>
                             </button>
 
+                            {/* Mã QR */}
+                            <button
+                              onClick={() => setAdminMobileTab('qr')}
+                              className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-indigo-50/20 active:scale-95 transition-all text-amber-950 font-sans cursor-pointer group shrink-0"
+                              title="Mã QR"
+                            >
+                              <div className="h-7 w-7 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center group-hover:bg-indigo-100 transition-colors shrink-0">
+                                <QrCode className="h-3.5 w-3.5 text-indigo-600" />
+                              </div>
+                              <span className="text-[8.5px] font-extrabold leading-tight text-center text-amber-950 truncate max-w-[64px]">Mã QR</span>
+                            </button>
+
                             {/* Thông báo */}
                             <button
                               onClick={() => {
@@ -7189,9 +7193,7 @@ export default function EmployeeDashboard({
                           </div>
                         </div>
                       )}
-
-
-
+ 
                     {/* 3T Logo replacing Trophy Icon */}
                     <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#0B3A60] border-2 border-orange-500/50 shadow-md select-none shrink-0 relative overflow-hidden group">
                       {/* Glossy light effect */}
