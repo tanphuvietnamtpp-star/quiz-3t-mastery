@@ -1,16 +1,19 @@
 import express from "express";
 import path from "path";
-import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
 
 dotenv.config();
 
-// Shared Gemini client initialization - as instructed by gemini-api skill
-const apiKey = process.env.GEMINI_API_KEY;
-let ai: GoogleGenAI | null = null;
-if (apiKey) {
-  ai = new GoogleGenAI({
+// Lazy-initialized Gemini client - highly resilient to timing issues and serverless setups
+let aiInstance: GoogleGenAI | null = null;
+function getGeminiClient(): GoogleGenAI {
+  if (aiInstance) return aiInstance;
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error("Gemini API chưa được cấu hình. Vui lòng thêm GEMINI_API_KEY trong cấu hình Environment Variables của Vercel.");
+  }
+  aiInstance = new GoogleGenAI({
     apiKey: apiKey,
     httpOptions: {
       headers: {
@@ -18,6 +21,7 @@ if (apiKey) {
       }
     }
   });
+  return aiInstance;
 }
 
 // Chuyên gia xử lý: Tự động Retry với Exponential Backoff & Fallback Model khi gặp lỗi 503 (Overloaded) hoặc 429
@@ -105,8 +109,8 @@ const app = express();
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
-// API Route: Extract questions from multiple uploaded images
-app.post("/api/extract-questions", async (req, res) => {
+// API Route: Extract questions from multiple uploaded images (matches both /api/extract-questions and /extract-questions for routing compatibility)
+app.post(["/api/extract-questions", "/extract-questions"], async (req, res) => {
   try {
     const { images } = req.body; // Array of base64 images { data: string, mimeType: string }
     
@@ -114,10 +118,11 @@ app.post("/api/extract-questions", async (req, res) => {
       return res.status(400).json({ error: "Vui lòng tải lên ít nhất một hình ảnh." });
     }
 
-    if (!ai) {
-      return res.status(500).json({ 
-        error: "Gemini API chưa được cấu hình. Vui lòng thêm GEMINI_API_KEY trong cấu hình Secrets." 
-      });
+    let aiClient;
+    try {
+      aiClient = getGeminiClient();
+    } catch (apiErr: any) {
+      return res.status(500).json({ error: apiErr.message || "Gemini API chưa được cấu hình chính xác." });
     }
 
     console.log(`Bắt đầu xử lý trích xuất ${images.length} hình ảnh bằng Gemini AI...`);
@@ -145,12 +150,25 @@ app.post("/api/extract-questions", async (req, res) => {
       });
     }
 
-    const response = await generateContentWithRetryAndFallback(ai, parts);
+    const response = await generateContentWithRetryAndFallback(aiClient, parts);
 
-    const textOutput = response.text || "[]";
+    let textOutput = response.text || "[]";
+    textOutput = textOutput.trim();
+
+    // Clean markdown blocks if present
+    if (textOutput.startsWith("```json")) {
+      textOutput = textOutput.substring(7);
+    } else if (textOutput.startsWith("```")) {
+      textOutput = textOutput.substring(3);
+    }
+    if (textOutput.endsWith("```")) {
+      textOutput = textOutput.substring(0, textOutput.length - 3);
+    }
+    textOutput = textOutput.trim();
+
     let parsedQuestions = [];
     try {
-      parsedQuestions = JSON.parse(textOutput.trim());
+      parsedQuestions = JSON.parse(textOutput);
     } catch (parseErr) {
       console.error("Failed to parse output as JSON:", textOutput);
       throw new Error("Dữ liệu phản hồi từ AI không đúng định dạng JSON.");
@@ -222,7 +240,7 @@ function robustParseFirebaseConfig(str: string): any {
 }
 
 // API to retrieve database configs dynamically at runtime (highly robust for user-defined config)
-app.get("/api/firebase-config", (req, res) => {
+app.get(["/api/firebase-config", "/firebase-config"], (req, res) => {
   let config: any = {};
   const envConfigStr = process.env.VITE_FIREBASE_CONFIG;
   if (envConfigStr) {
@@ -257,6 +275,7 @@ async function startServer() {
 
   if (process.env.NODE_ENV !== "production") {
     console.log("Starting server in development mode with Vite middleware...");
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
