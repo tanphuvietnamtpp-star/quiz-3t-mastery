@@ -5297,8 +5297,8 @@ export default function EmployeeDashboard({
           let width = img.width;
           let height = img.height;
           
-          // Max dimension scaling constraint (optimized to 800px for faster mobile uploads and higher success rate)
-          const MAX_SIZE = 800;
+          // Max dimension scaling constraint (optimized to 700px for faster mobile uploads and higher success rate)
+          const MAX_SIZE = 700;
           if (width > height) {
             if (width > MAX_SIZE) {
               height *= MAX_SIZE / width;
@@ -5316,7 +5316,7 @@ export default function EmployeeDashboard({
           const ctx = canvas.getContext('2d');
           if (ctx) {
             ctx.drawImage(img, 0, 0, width, height);
-            const dataUrl = canvas.toDataURL('image/jpeg', 0.60);
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.50);
             const base64Chunk = dataUrl.split(',')[1];
             resolve(base64Chunk);
           } else {
@@ -5354,12 +5354,25 @@ export default function EmployeeDashboard({
 
   const handleExtractWithAI = async () => {
     if (selectedImages.length === 0) return;
+
+    // Warning if too many images to prevent serverless timeout on Vercel
+    if (selectedImages.length > 2) {
+      const proceed = window.confirm(
+        "Lưu ý: Bạn đang chọn bóc tách nhiều hình ảnh cùng lúc (" + selectedImages.length + " ảnh).\n" +
+        "Việc này có thể vượt quá giới hạn thời gian xử lý (10 giây) của máy chủ và gây lỗi 'FUNCTION_INVOCATION_FAILED'.\n\n" +
+        "Khuyên dùng: Nên thực hiện bóc tách từ 1 đến 2 ảnh mỗi lượt để đạt tốc độ nhanh và tỉ lệ thành công cao nhất.\n\n" +
+        "Bạn vẫn muốn tiếp tục?"
+      );
+      if (!proceed) return;
+    }
+
     setAiNotice(null);
     setExtracting(true);
 
     try {
+      // Map base64 representations with strict "image/jpeg" mimeType since it was compressed to jpeg
       const imagePayloads = selectedImages.map(img => ({
-        mimeType: img.file.type || "image/jpeg",
+        mimeType: "image/jpeg",
         data: img.compressedBase64
       }));
 
