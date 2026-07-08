@@ -28,8 +28,8 @@ function getGeminiClient(): GoogleGenAI {
 async function generateContentWithRetryAndFallback(
   aiClient: GoogleGenAI,
   parts: any[],
-  initialModel: string = "gemini-2.5-flash",
-  fallbackModel: string = "gemini-1.5-flash"
+  initialModel: string = "gemini-3.5-flash",
+  fallbackModel: string = "gemini-3.5-flash"
 ) {
   const maxRetries = 3;
   let delay = 1000; // Khởi đầu chờ 1 giây
