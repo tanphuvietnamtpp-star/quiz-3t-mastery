@@ -503,24 +503,104 @@ let isQuestionsFetchedThisSession = false;
 // Memory cache flag for quiz results to ensure we load from Firestore at least once per app launch/refresh
 let isQuizResultsFetchedThisSession = false;
 let isFullQuizResultsFetchedThisSession = false;
+let memoryQuizResults: QuizResult[] = [];
 
 export const incrementQuota = (type: 'reads' | 'writes' | 'deletes', count: number = 1) => {
   const todayStr = new Date().toISOString().split('T')[0];
   const stats = getQuotaStats();
   stats[type] += count;
-  localStorage.setItem('3t_firebase_quota', JSON.stringify({
-    ...stats,
-    date: todayStr
-  }));
+  try {
+    localStorage.setItem('3t_firebase_quota', JSON.stringify({
+      ...stats,
+      date: todayStr
+    }));
+  } catch (e) {
+    console.warn("Could not save quota stats to localStorage:", e);
+  }
 };
 
 const getLocalData = <T>(key: string, defaultValue: T): T => {
-  const data = localStorage.getItem(key);
-  return data ? JSON.parse(data) : defaultValue;
+  try {
+    const data = localStorage.getItem(key);
+    return data ? JSON.parse(data) : defaultValue;
+  } catch (e) {
+    console.warn(`Error reading localStorage key: ${key}`, e);
+    return defaultValue;
+  }
 };
 
 const setLocalData = <T>(key: string, value: T): void => {
-  localStorage.setItem(key, JSON.stringify(value));
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (e: any) {
+    const isQuotaError = e.name === 'QuotaExceededError' || 
+                         e.code === 22 || 
+                         e.name === 'NS_ERROR_DOM_QUOTA_REACHED' || 
+                         String(e).includes('quota') || 
+                         String(e).includes('Quota');
+                         
+    if (isQuotaError) {
+      console.warn(`[QuotaExceededError] Failed to set item for key: ${key}. Attempting recovery...`);
+      
+      if (key === '3t_quiz_results' && Array.isArray(value)) {
+        // Prune the array keeping only the latest results
+        const pruned = [...value].sort((a, b) => {
+          const tA = typeof a.timestamp === 'number' ? a.timestamp : 0;
+          const tB = typeof b.timestamp === 'number' ? b.timestamp : 0;
+          return tB - tA;
+        });
+        
+        // Progressively try smaller sizes to fit into localStorage quota
+        const targetSizes = [1500, 1000, 800, 500, 300, 150, 50];
+        for (const size of targetSizes) {
+          if (pruned.length > size) {
+            const temp = pruned.slice(0, size);
+            try {
+              localStorage.setItem(key, JSON.stringify(temp));
+              console.log(`[QuotaExceededError Resolved] Successfully saved pruned quiz results. Kept newest ${size} records in localStorage.`);
+              return;
+            } catch (innerErr) {
+              // try next size
+            }
+          }
+        }
+      }
+      
+      // If still failing or not the quiz results, try clearing large disposable caches like chat message keys
+      try {
+        console.warn(`[QuotaExceededError] Clearing disposable local cache keys to free space...`);
+        for (let i = localStorage.length - 1; i >= 0; i--) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith('3t_chat_msg_')) {
+            localStorage.removeItem(k);
+          }
+        }
+        // Retry original operation
+        localStorage.setItem(key, JSON.stringify(value));
+        console.log(`[QuotaExceededError Resolved] Successfully saved key: ${key} after clearing disposable keys.`);
+        return;
+      } catch (secondErr) {
+        // If it's still failing and it's quiz results, do an aggressive prune to 30 items
+        if (key === '3t_quiz_results' && Array.isArray(value)) {
+          try {
+            const pruned = [...value].sort((a, b) => {
+              const tA = typeof a.timestamp === 'number' ? a.timestamp : 0;
+              const tB = typeof b.timestamp === 'number' ? b.timestamp : 0;
+              return tB - tA;
+            });
+            localStorage.setItem(key, JSON.stringify(pruned.slice(0, 30)));
+            console.log(`[QuotaExceededError Resolved] Aggressively pruned quiz results to latest 30 items in localStorage.`);
+            return;
+          } catch (aggErr) {
+            console.error("[QuotaExceededError] Aggressive pruning failed.", aggErr);
+          }
+        }
+        console.error(`[QuotaExceededError] Fatal: Could not write key ${key} to localStorage even after cleaning.`, secondErr);
+      }
+    } else {
+      console.error(`Error setting localStorage key: ${key}`, e);
+    }
+  }
 };
 
 // Seed questions if not present
@@ -1088,8 +1168,10 @@ export const databaseService = {
 
   subscribeQuizResults(onUpdate: (results: QuizResult[]) => void): () => void {
     if (!isFirebaseConfigured || !db) {
-      const local = getLocalData<QuizResult[]>('3t_quiz_results', []);
-      onUpdate(local);
+      if (memoryQuizResults.length === 0) {
+        memoryQuizResults = getLocalData<QuizResult[]>('3t_quiz_results', []);
+      }
+      onUpdate(memoryQuizResults);
       return () => {};
     }
     const q = collection(db, 'quiz_results');
@@ -1110,6 +1192,7 @@ export const databaseService = {
       });
       // Sort them descending by timestamp so active computations start with latest
       results.sort((a, b) => b.timestamp - a.timestamp);
+      memoryQuizResults = results;
       setLocalData('3t_quiz_results', results);
       onUpdate(results);
     }, (error) => {
@@ -1122,22 +1205,21 @@ export const databaseService = {
   async getQuizResults(fetchOnlyRecent = true, forceRefresh = false): Promise<QuizResult[]> {
     await initializeDatabase();
 
-    // If we're not forcing a refresh, check memory flags and verify the level of details cached
+    // Ensure memory cache is initialized
+    if (memoryQuizResults.length === 0) {
+      memoryQuizResults = getLocalData<QuizResult[]>('3t_quiz_results', []);
+    }
+
+    // If we're not forcing a refresh, check memory cache first
     if (!forceRefresh) {
       if (fetchOnlyRecent && isQuizResultsFetchedThisSession) {
-        const localData = getLocalData<QuizResult[]>('3t_quiz_results', []);
-        if (localData.length > 0) {
-          console.log(`[CACHE SUCCESS] Lấy ${localData.length} kết quả từ LocalStorage sạch sẽ, tiêu thụ 0 lượt đọc Firestore!`);
-          const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
-          return localData.filter(r => r.timestamp >= thirtyDaysAgo);
-        }
+        console.log(`[CACHE SUCCESS] Lấy kết quả từ bộ nhớ đệm (Recent), tiêu thụ 0 lượt đọc Firestore!`);
+        const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+        return memoryQuizResults.filter(r => r.timestamp >= thirtyDaysAgo);
       }
       if (!fetchOnlyRecent && isFullQuizResultsFetchedThisSession) {
-        const localData = getLocalData<QuizResult[]>('3t_quiz_results', []);
-        if (localData.length > 0) {
-          console.log(`[CACHE SUCCESS] Lấy TOÀN BỘ ${localData.length} kết quả từ LocalStorage sòng phẳng, tiêu thụ 0 lượt đọc Firestore!`);
-          return localData;
-        }
+        console.log(`[CACHE SUCCESS] Lấy TOÀN BỘ kết quả từ bộ nhớ đệm (Full), tiêu thụ 0 lượt đọc Firestore!`);
+        return memoryQuizResults;
       }
     }
 
@@ -1165,12 +1247,13 @@ export const databaseService = {
           results.push(item);
         });
 
-        // Merge or replace cached results in localStorage smartly
-        const localData = getLocalData<QuizResult[]>('3t_quiz_results', []);
+        // Merge or replace cached results smartly
         const resultMap = new Map<string, QuizResult>();
-        localData.forEach(r => resultMap.set(r.id, r));
+        memoryQuizResults.forEach(r => resultMap.set(r.id, r));
         results.forEach(r => resultMap.set(r.id, r));
         const mergedResults = Array.from(resultMap.values());
+        
+        memoryQuizResults = mergedResults;
         setLocalData('3t_quiz_results', mergedResults);
 
         isQuizResultsFetchedThisSession = true;
@@ -1184,16 +1267,15 @@ export const databaseService = {
       }
     }
 
-    const localData = getLocalData<QuizResult[]>('3t_quiz_results', []);
     isQuizResultsFetchedThisSession = true;
     if (!fetchOnlyRecent) {
       isFullQuizResultsFetchedThisSession = true;
     }
     if (fetchOnlyRecent) {
       const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
-      return localData.filter(r => r.timestamp >= thirtyDaysAgo);
+      return memoryQuizResults.filter(r => r.timestamp >= thirtyDaysAgo);
     }
-    return localData;
+    return memoryQuizResults;
   },
 
   async deleteQuizResults(resultIds: string[]): Promise<number> {
@@ -1211,9 +1293,11 @@ export const databaseService = {
       }
     }
 
-    const results = getLocalData<QuizResult[]>('3t_quiz_results', []);
-    const filtered = results.filter(r => !resultIds.includes(r.id));
-    setLocalData('3t_quiz_results', filtered);
+    if (memoryQuizResults.length === 0) {
+      memoryQuizResults = getLocalData<QuizResult[]>('3t_quiz_results', []);
+    }
+    memoryQuizResults = memoryQuizResults.filter(r => !resultIds.includes(r.id));
+    setLocalData('3t_quiz_results', memoryQuizResults);
 
     return deletedCount;
   },
@@ -1229,9 +1313,11 @@ export const databaseService = {
       }
     }
 
-    const results = getLocalData<QuizResult[]>('3t_quiz_results', []);
-    results.push(result);
-    setLocalData('3t_quiz_results', results);
+    if (memoryQuizResults.length === 0) {
+      memoryQuizResults = getLocalData<QuizResult[]>('3t_quiz_results', []);
+    }
+    memoryQuizResults.push(result);
+    setLocalData('3t_quiz_results', memoryQuizResults);
   },
 
   async getSlogan(): Promise<string> {
@@ -1813,7 +1899,8 @@ export const databaseService = {
           }
           return updatedRes;
         });
-        localStorage.setItem('3t_quiz_results', JSON.stringify(updatedLocalRes));
+        memoryQuizResults = updatedLocalRes;
+        setLocalData('3t_quiz_results', updatedLocalRes);
       } catch (e) {
         console.warn(e);
       }

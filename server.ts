@@ -29,7 +29,7 @@ async function generateContentWithRetryAndFallback(
   aiClient: GoogleGenAI,
   parts: any[],
   initialModel: string = "gemini-3.5-flash",
-  fallbackModel: string = "gemini-3.5-flash"
+  fallbackModel: string = "gemini-flash-latest"
 ) {
   const maxRetries = 3;
   let delay = 1000; // Khởi đầu chờ 1 giây
@@ -73,21 +73,13 @@ async function generateContentWithRetryAndFallback(
         console.error(`[Gemini AI] Lỗi nghiêm trọng sau nhiều lần thử bằng ${currentModel}: ${errBrief.slice(0, 150)}`);
       } else {
         // Ghi log nhẹ nhàng, tránh in trực tiếp chuỗi JSON lỗi nhạy cảm làm kích hoạt bộ quét tự động
-        console.warn(`[Gemini AI] Model ${currentModel} tạm thời phản hồi chậm hoặc bận ở lần thử ${attempt}. Đang xử lý tự động...`);
+        console.warn(`[Gemini AI] Model ${currentModel} tạm thời gặp lỗi hoặc bận ở lần thử ${attempt}. Đang xử lý tự động...`);
       }
       
-      const errorMsg = errBrief.toUpperCase();
-      const is503OrRateLimit = errorMsg.includes("503") || 
-                               errorMsg.includes("UNAVAILABLE") || 
-                               errorMsg.includes("429") || 
-                               errorMsg.includes("RATE_LIMIT") || 
-                               err?.status === 503 || 
-                               err?.status === 429;
-
       if (attempt <= maxRetries) {
-        // Tự động kích hoạt chuyển đổi thông minh sang model thay thế khi gặp lỗi bận
-        if (is503OrRateLimit && currentModel !== fallbackModel) {
-          console.warn(`[Gemini AI] Kích hoạt chuyển đổi dự phòng sang model ổn định: ${fallbackModel}`);
+        // Tự động kích hoạt chuyển đổi thông minh sang model thay thế khi gặp lỗi bận hoặc bất kỳ lỗi nào từ model chính
+        if (currentModel !== fallbackModel) {
+          console.warn(`[Gemini AI] Kích hoạt chuyển đổi dự phòng sang model ổn định hơn: ${fallbackModel}`);
           currentModel = fallbackModel;
         }
 

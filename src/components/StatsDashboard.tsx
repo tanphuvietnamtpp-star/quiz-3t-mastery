@@ -195,42 +195,82 @@ export default function StatsDashboard({
 
   // Filter users based on companyMappings exclusion
   const users = useMemo(() => {
+    const excludedBranches = new Set<string>();
+    const excludedDepartments = new Set<string>(); // key format: "branch_name|dept_name"
+    
+    mappings.forEach(co => {
+      co.branches.forEach(br => {
+        const brNameNorm = br.name.trim().normalize('NFC').toLowerCase();
+        if (br.excludeFromStats) {
+          excludedBranches.add(brNameNorm);
+        }
+        br.departments.forEach(d => {
+          const dNameNorm = d.name.trim().normalize('NFC').toLowerCase();
+          if (d.excludeFromStats) {
+            excludedDepartments.add(`${brNameNorm}|${dNameNorm}`);
+          }
+        });
+      });
+    });
+
     return rawUsers.filter(u => {
       const uStatus = (u.status || '').toUpperCase();
       if (uStatus !== 'APPROVED' && uStatus !== 'APPROVED_MEMBER') return false;
 
-      // Allow admins and executives to be treated as normal employees
-      const dNameNorm = (u.department || '').trim().normalize('NFC').toLowerCase();
-
       const bNameNorm = (u.branch || '').trim().normalize('NFC').toLowerCase();
-      for (const co of mappings) {
-        for (const br of co.branches) {
-          if (br.name.trim().normalize('NFC').toLowerCase() === bNameNorm) {
-            if (br.excludeFromStats) return false;
-            for (const d of br.departments) {
-              if (d.name.trim().normalize('NFC').toLowerCase() === dNameNorm) {
-                if (d.excludeFromStats) return false;
-              }
-            }
-          }
-        }
-      }
+      if (excludedBranches.has(bNameNorm)) return false;
+
+      const dNameNorm = (u.department || '').trim().normalize('NFC').toLowerCase();
+      if (excludedDepartments.has(`${bNameNorm}|${dNameNorm}`)) return false;
+
       return true;
     });
   }, [rawUsers, mappings]);
 
   // Filter results based on companyMappings exclusion
   const results = useMemo(() => {
+    // 1. Create maps for O(1) user lookup
+    const userByIdMap = new Map<string, User>();
+    const userByNameMap = new Map<string, User>();
+    
+    rawUsers.forEach(u => {
+      if (u.id) {
+        userByIdMap.set(u.id, u);
+      }
+      if (u.name) {
+        const uNorm = u.name.trim().normalize('NFC').toUpperCase().replace(/\s+/g, ' ');
+        if (uNorm) {
+          userByNameMap.set(uNorm, u);
+        }
+      }
+    });
+
+    // 2. Pre-normalize mappings check for fast lookup
+    const excludedBranches = new Set<string>();
+    const excludedDepartments = new Set<string>(); // key format: "branch_name|dept_name"
+    
+    mappings.forEach(co => {
+      co.branches.forEach(br => {
+        const brNameNorm = br.name.trim().normalize('NFC').toLowerCase();
+        if (br.excludeFromStats) {
+          excludedBranches.add(brNameNorm);
+        }
+        br.departments.forEach(d => {
+          const dNameNorm = d.name.trim().normalize('NFC').toLowerCase();
+          if (d.excludeFromStats) {
+            excludedDepartments.add(`${brNameNorm}|${dNameNorm}`);
+          }
+        });
+      });
+    });
+
     return rawResults.filter(r => {
       let foundUser: User | undefined;
       if (r.userId) {
-        foundUser = rawUsers.find(u => u.id === r.userId);
+        foundUser = userByIdMap.get(r.userId);
       } else if (r.userName) {
         const normName = r.userName.trim().normalize('NFC').toUpperCase().replace(/\s+/g, ' ');
-        foundUser = rawUsers.find(u => {
-          const uNorm = u.name ? u.name.trim().normalize('NFC').toUpperCase().replace(/\s+/g, ' ') : '';
-          return uNorm === normName;
-        });
+        foundUser = userByNameMap.get(normName);
       }
 
       if (!foundUser) return false;
@@ -238,23 +278,12 @@ export default function StatsDashboard({
       const uStatus = (foundUser.status || '').toUpperCase();
       if (uStatus !== 'APPROVED' && uStatus !== 'APPROVED_MEMBER') return false;
 
-      // Allow admins, executives, and ban tổng giám đốc to be treated as normal employees
+      const bNameNorm = (r.branch || '').trim().normalize('NFC').toLowerCase();
+      if (excludedBranches.has(bNameNorm)) return false;
 
       const dNameNorm = (r.department || '').trim().normalize('NFC').toLowerCase();
+      if (excludedDepartments.has(`${bNameNorm}|${dNameNorm}`)) return false;
 
-      const bNameNorm = (r.branch || '').trim().normalize('NFC').toLowerCase();
-      for (const co of mappings) {
-        for (const br of co.branches) {
-          if (br.name.trim().normalize('NFC').toLowerCase() === bNameNorm) {
-            if (br.excludeFromStats) return false;
-            for (const d of br.departments) {
-              if (d.name.trim().normalize('NFC').toLowerCase() === dNameNorm) {
-                if (d.excludeFromStats) return false;
-              }
-            }
-          }
-        }
-      }
       return true;
     });
   }, [rawResults, rawUsers, mappings]);
@@ -263,16 +292,49 @@ export default function StatsDashboard({
   const globalResultsForMonument = useMemo(() => {
     const srcResults = allResults || rawResults;
     const srcUsers = allUsers || rawUsers;
+
+    // 1. Create maps for O(1) user lookup
+    const userByIdMap = new Map<string, User>();
+    const userByNameMap = new Map<string, User>();
+    
+    srcUsers.forEach(u => {
+      if (u.id) {
+        userByIdMap.set(u.id, u);
+      }
+      if (u.name) {
+        const uNorm = u.name.trim().normalize('NFC').toUpperCase().replace(/\s+/g, ' ');
+        if (uNorm) {
+          userByNameMap.set(uNorm, u);
+        }
+      }
+    });
+
+    // 2. Pre-normalize mappings check for fast lookup
+    const excludedBranches = new Set<string>();
+    const excludedDepartments = new Set<string>(); // key format: "branch_name|dept_name"
+    
+    mappings.forEach(co => {
+      co.branches.forEach(br => {
+        const brNameNorm = br.name.trim().normalize('NFC').toLowerCase();
+        if (br.excludeFromStats) {
+          excludedBranches.add(brNameNorm);
+        }
+        br.departments.forEach(d => {
+          const dNameNorm = d.name.trim().normalize('NFC').toLowerCase();
+          if (d.excludeFromStats) {
+            excludedDepartments.add(`${brNameNorm}|${dNameNorm}`);
+          }
+        });
+      });
+    });
+
     return srcResults.filter(r => {
       let foundUser: User | undefined;
       if (r.userId) {
-        foundUser = srcUsers.find(u => u.id === r.userId);
+        foundUser = userByIdMap.get(r.userId);
       } else if (r.userName) {
         const normName = r.userName.trim().normalize('NFC').toUpperCase().replace(/\s+/g, ' ');
-        foundUser = srcUsers.find(u => {
-          const uNorm = u.name ? u.name.trim().normalize('NFC').toUpperCase().replace(/\s+/g, ' ') : '';
-          return uNorm === normName;
-        });
+        foundUser = userByNameMap.get(normName);
       }
 
       if (!foundUser) return false;
@@ -280,23 +342,12 @@ export default function StatsDashboard({
       const uStatus = (foundUser.status || '').toUpperCase();
       if (uStatus !== 'APPROVED' && uStatus !== 'APPROVED_MEMBER') return false;
 
-      // Allow admins, executives, and ban tổng giám đốc to be treated as normal employees
+      const bNameNorm = (r.branch || '').trim().normalize('NFC').toLowerCase();
+      if (excludedBranches.has(bNameNorm)) return false;
 
       const dNameNorm = (r.department || '').trim().normalize('NFC').toLowerCase();
+      if (excludedDepartments.has(`${bNameNorm}|${dNameNorm}`)) return false;
 
-      const bNameNorm = (r.branch || '').trim().normalize('NFC').toLowerCase();
-      for (const co of mappings) {
-        for (const br of co.branches) {
-          if (br.name.trim().normalize('NFC').toLowerCase() === bNameNorm) {
-            if (br.excludeFromStats) return false;
-            for (const d of br.departments) {
-              if (d.name.trim().normalize('NFC').toLowerCase() === dNameNorm) {
-                if (d.excludeFromStats) return false;
-              }
-            }
-          }
-        }
-      }
       return true;
     });
   }, [allResults, rawResults, allUsers, rawUsers, mappings]);
@@ -1989,6 +2040,19 @@ export default function StatsDashboard({
       historicGroups[personKey].push(res);
     });
 
+    const historicGroupsSorted = Object.entries(historicGroups).map(([personKey, userResultsList]) => {
+      const chronological = [...userResultsList].sort((a, b) => a.timestamp - b.timestamp);
+      const latestRes = chronological[chronological.length - 1] || userResultsList[0];
+      const isLNT = personKey === 'admin_lenhattruong' || lNormalizeName(latestRes.userName) === 'LÊ NHẬT TRƯỜNG';
+      const userProfile = {
+        name: latestRes.userName || 'THÀNH VIÊN ẨN DANH',
+        dept: isLNT ? 'Phòng Quản Lý Chất Lượng' : (latestRes.department || 'Hội sở'),
+        branch: latestRes.branch || 'Hội sở',
+        date: latestRes.date || ''
+      };
+      return { personKey, userProfile, chronological };
+    });
+
 
     const activeRules = levelRules || DEFAULT_LEVEL_RULES;
 
@@ -2096,17 +2160,7 @@ export default function StatsDashboard({
       maxLevelReachedTimestamp?: number;
     }> = [];
 
-    Object.entries(historicGroups).forEach(([personKey, userResultsList]) => {
-      const chronological = [...userResultsList].sort((a, b) => a.timestamp - b.timestamp);
-      const latestRes = chronological[chronological.length - 1] || userResultsList[0];
-      const isLNT = personKey === 'admin_lenhattruong' || lNormalizeName(latestRes.userName) === 'LÊ NHẬT TRƯỜNG';
-      const userProfile = {
-        name: latestRes.userName || 'THÀNH VIÊN ẨN DANH',
-        dept: isLNT ? 'Phòng Quản Lý Chất Lượng' : (latestRes.department || 'Hội sở'),
-        branch: latestRes.branch || 'Hội sở',
-        date: latestRes.date || ''
-      };
-
+    historicGroupsSorted.forEach(({ userProfile, chronological }) => {
       let currentLevel = 1;
       let consecMax = 0;
       let consecLow = 0;
@@ -2205,30 +2259,19 @@ export default function StatsDashboard({
     }
 
     // All-time specific calculations
-    Object.entries(historicGroups).forEach(([personKey, userResultsList]) => {
-      const chronological = [...userResultsList].sort((a, b) => a.timestamp - b.timestamp);
-      const latestRes = chronological[chronological.length - 1] || userResultsList[0];
-      const isLNT = personKey === 'admin_lenhattruong' || lNormalizeName(latestRes.userName) === 'LÊ NHẬT TRƯỜNG';
-      const userProfile = {
-        name: latestRes.userName || 'THÀNH VIÊN ẨN DANH',
-        dept: isLNT ? 'Phòng Quản Lý Chất Lượng' : (latestRes.department || 'Hội sở'),
-        branch: latestRes.branch || 'Hội sở',
-        date: latestRes.date || ''
-      };
+    const isBaselineHolder = (nameStr: string): boolean => {
+      const norm = nameStr.trim().normalize('NFC').toUpperCase().replace(/\s+/g, ' ');
+      return [
+        'TRAN PHUOC TRUNG',
+        'TRẦN VĂN TIÊN',
+        'QUÁCH THUÝ VÂN',
+        'PHAN THỊ NHÀN',
+        'HA HUU QUYNH',
+        'PHẠM VĂN ĐEN'
+      ].includes(norm);
+    };
 
-      // Helper to identify baseline records
-      const isBaselineHolder = (nameStr: string): boolean => {
-        const norm = nameStr.trim().normalize('NFC').toUpperCase().replace(/\s+/g, ' ');
-        return [
-          'TRAN PHUOC TRUNG',
-          'TRẦN VĂN TIÊN',
-          'QUÁCH THUÝ VÂN',
-          'PHAN THỊ NHÀN',
-          'HA HUU QUYNH',
-          'PHẠM VĂN ĐEN'
-        ].includes(norm);
-      };
-
+    historicGroupsSorted.forEach(({ userProfile, chronological }) => {
       // 1. Quyết Tâm
       const attemptsCount = chronological.length;
       if (attemptsCount > maxAttempts) {
@@ -2258,11 +2301,11 @@ export default function StatsDashboard({
       }
 
       // 2. Trí Tuệ
-      const perfectsCount = chronological.filter(r => r.score === 30).length;
+      const perfects = chronological.filter(r => r.score === 30);
+      const perfectsCount = perfects.length;
       if (perfectsCount > maxPerfects) {
         maxPerfects = perfectsCount;
-        const perfects = chronological.filter(r => r.score === 30);
-        const latestPerfect = perfects[perfects.length - 1] || latestRes;
+        const latestPerfect = perfects[perfects.length - 1] || chronological[chronological.length - 1];
         const newH = {
           ...userProfile,
           date: latestPerfect.date || userProfile.date,
@@ -2271,8 +2314,7 @@ export default function StatsDashboard({
         };
         bestTriTueUser = { ...newH, holders: [newH] };
       } else if (perfectsCount === maxPerfects && perfectsCount > 0) {
-        const perfects = chronological.filter(r => r.score === 30);
-        const latestPerfect = perfects[perfects.length - 1] || latestRes;
+        const latestPerfect = perfects[perfects.length - 1] || chronological[chronological.length - 1];
         const normName = lNormalizeName(userProfile.name);
         const exists = bestTriTueUser.holders?.some((h: any) => lNormalizeName(h.name) === normName);
         if (!exists) {
