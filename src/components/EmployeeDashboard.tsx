@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { databaseService, getQuotaStats } from '../firebase';
 import { User, Question, QuizResult, CompanyMapping, MotivationalSloganBand, LevelRulesConfig, LevelRuleItem } from '../types';
 import { formatDate, formatTimeInSeconds, cleanOptionText } from '../utils/format';
@@ -271,7 +271,7 @@ export default function EmployeeDashboard({
   const [inactivityTestMode, setInactivityTestMode] = useState(() => localStorage.getItem('3t_inactivity_test_mode') === 'true');
   
   // Admin mobile action states
-  const [adminMobileTab, setAdminMobileTab] = useState<'home' | 'users' | 'stats' | 'encoding' | 'qr' | 'firebase_data' | 'personal' | 'notifications' | 'legends' | 'records' | 'patience_top' | 'exchange' | 'details'>('home');
+  const [adminMobileTab, setAdminMobileTab] = useState<'home' | 'users' | 'stats' | 'encoding' | 'qr' | 'firebase_data' | 'personal' | 'notifications' | 'legends' | 'records' | 'patience_top' | 'exchange' | 'details' | 'online'>('home');
   const [adminMobileNotice, setAdminMobileNotice] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
   const [adminDetailSearch, setAdminDetailSearch] = useState('');
   const [adminSelectedUserId, setAdminSelectedUserId] = useState<string | null>(null);
@@ -4952,6 +4952,162 @@ export default function EmployeeDashboard({
     );
   };
 
+  const renderMobileOnlinePanel = () => {
+    // We want to list all users who are currently online (active in last 4 minutes)
+    // To make it comprehensive, we sort online users by who was active most recently (Date.now() - lastActive ascending)
+    const activeOnlineUsers = deptUsers.filter((u) => {
+      if (!u.lastActive) return false;
+      return Math.abs(Date.now() - u.lastActive) <= 240000;
+    }).sort((a, b) => {
+      const timeA = a.lastActive || 0;
+      const timeB = b.lastActive || 0;
+      return timeB - timeA; // Most recent first
+    });
+
+    const getActiveTimeAgo = (lastActiveTime?: number) => {
+      if (!lastActiveTime) return 'Không rõ';
+      const diffSecs = Math.floor((Date.now() - lastActiveTime) / 1000);
+      if (diffSecs < 10) return 'Vừa xong';
+      if (diffSecs < 60) return `${diffSecs} giây trước`;
+      const diffMins = Math.floor(diffSecs / 60);
+      if (diffMins < 60) return `${diffMins} phút trước`;
+      return `${Math.floor(diffMins / 60)} giờ trước`;
+    };
+
+    return (
+      <div className="flex-1 flex flex-col min-h-0 bg-white border border-gray-155 rounded-xl p-3 shadow-xs overflow-hidden text-left font-sans animate-fadeIn">
+        {/* Panel Header */}
+        <div className="flex items-center justify-between border-b border-gray-100 pb-2 mb-3 shrink-0">
+          <button
+            onClick={() => setAdminMobileTab('home')}
+            className="flex items-center gap-1 text-xs font-bold text-gray-500 hover:text-gray-700 p-1 rounded-lg hover:bg-gray-100 cursor-pointer"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span>Sảnh chính</span>
+          </button>
+          <span className="text-[13px] font-extrabold text-emerald-800 uppercase tracking-wide flex items-center gap-1.5">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            DANH SÁCH ONLINE ({activeOnlineUsers.length})
+          </span>
+          <button 
+            onClick={refreshData}
+            className="p-1 border border-gray-200 hover:bg-gray-50 rounded-lg text-gray-500 transition-all cursor-pointer"
+            title="Tải lại dữ liệu"
+          >
+            <RefreshCcw className="h-3.5 w-3.5" />
+          </button>
+        </div>
+
+        {/* List Content */}
+        <div className="flex-1 overflow-y-auto space-y-2 pr-0.5 pb-4">
+          {activeOnlineUsers.length === 0 ? (
+            <div className="text-center py-12 px-4 space-y-3">
+              <div className="h-12 w-12 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center mx-auto text-slate-350">
+                <Users className="h-6 w-6" />
+              </div>
+              <p className="text-gray-450 text-xs italic text-center">Hiện không có CBNV nào đang trực tuyến.</p>
+            </div>
+          ) : (
+            activeOnlineUsers.map((emp) => {
+              const empResults = allResults.filter(r => 
+                (r.userId && r.userId === emp.id) || 
+                (emp.phone && r.userId === emp.phone) || 
+                (r.userName && r.userName.toLowerCase().trim() === emp.name.toLowerCase().trim())
+              );
+              
+              const state = calculateInactivityAugmentedLevel(
+                emp.id, 
+                empResults, 
+                levelRules || DEFAULT_LEVEL_RULES,
+                {
+                  isTestModeEnabled: inactivityTestMode,
+                  simulatedToday: inactivityTestMode ? '2026-06-14' : getVietnamDateString()
+                }
+              );
+
+              // Get initials for Avatar
+              const nameParts = (emp.name || 'C B').trim().split(' ');
+              const initials = nameParts.length >= 2 
+                ? (nameParts[0][0] + nameParts[nameParts.length - 1][0]).toUpperCase()
+                : (emp.name || 'CB').slice(0, 2).toUpperCase();
+
+              return (
+                <div
+                  key={emp.id}
+                  className="w-full p-2.5 bg-gradient-to-r from-emerald-50/10 to-teal-50/5 border border-slate-150 rounded-lg flex flex-col gap-2.5 transition-all shadow-3xs hover:border-emerald-200"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      {/* Avatar with live status dot */}
+                      <div className="relative h-8 w-8 rounded-full bg-emerald-50 border border-emerald-150 flex items-center justify-center font-bold text-emerald-800 text-[11px] font-sans shrink-0">
+                        {initials}
+                        <span className="absolute bottom-0 right-0 h-2 w-2 rounded-full bg-emerald-500 border border-white"></span>
+                      </div>
+                      
+                      <div className="min-w-0">
+                        <div className="text-xs font-black text-slate-800 uppercase tracking-tight flex items-center gap-1.5 truncate">
+                          <span>{emp.name}</span>
+                          <span className={`px-1 h-3.5 inline-flex items-center justify-center rounded-[3px] border text-[7.5px] font-extrabold tracking-wide uppercase shrink-0 ${
+                            emp.role === 'admin' ? 'bg-purple-50 text-purple-700 border-purple-200' :
+                            emp.role === 'executive' ? 'bg-orange-50 text-[#E8590C] border-orange-200' :
+                            emp.role === 'approver' ? 'bg-yellow-50 text-yellow-700 border-yellow-250' :
+                            'bg-gray-50 text-gray-500 border-gray-200'
+                          }`}>
+                            {emp.role === 'admin' ? 'ADMIN' : 
+                             emp.role === 'executive' ? 'TGĐ' :
+                             emp.role === 'approver' ? 'DUYỆT' : 'CBNV'}
+                          </span>
+                        </div>
+                        <div className="text-[9px] text-zinc-400 font-medium leading-none mt-0.5 truncate">
+                          {emp.branch} &rarr; <span className="font-bold text-zinc-550">{emp.department}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="text-right shrink-0">
+                      <div className="text-[10px] font-bold text-emerald-600 font-mono flex items-center gap-1 justify-end">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-ping"></span>
+                        <span>{getActiveTimeAgo(emp.lastActive)}</span>
+                      </div>
+                      {emp.employeeId && (
+                        <div className="text-[8px] text-gray-400 font-mono mt-0.5 font-bold">
+                          MNV: {emp.employeeId}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Actions / Meta */}
+                  <div className="flex items-center justify-between border-t border-slate-100/70 pt-2 text-[9px] text-slate-500">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">Cấp độ hiện tại: <strong className="text-slate-800 font-extrabold font-mono">Cấp {state.level}</strong></span>
+                      <span className="text-slate-300">|</span>
+                      <span className="font-medium">Lượt đã thi: <strong className="text-slate-800 font-extrabold font-mono">{empResults.length}</strong></span>
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        setAdminMobileTab('exchange');
+                      }}
+                      className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 border border-emerald-150 text-emerald-700 rounded-md font-bold text-[8.5px] transition-all flex items-center gap-1 cursor-pointer"
+                      title="Gửi tin nhắn trao đổi"
+                    >
+                      <MessageSquare className="h-3 w-3" />
+                      <span>Nhắn tin</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+    );
+  };
+
   const old_unused_renderMobileRulesEditorPanel = () => {
 
     const handleSaveRulesClick = async () => {
@@ -5787,6 +5943,104 @@ export default function EmployeeDashboard({
     }
   }, [quizStarted, showResultsReview, difficulty]);
 
+  // Calculation of wrong & low score questions needing practice (part 2 feature)
+  // Filters questions answered wrong or from low score attempts (< 7 pts).
+  // If user practices a wrong question and answers correctly 3 times (consecutive after wrong), it is removed from the wrong list.
+  const wrongQuestionsForPractice = useMemo(() => {
+    if (!results || results.length === 0 || !questions || questions.length === 0) {
+      return [];
+    }
+
+    // Sort results chronologically ascending (oldest first)
+    const sortedResults = [...results].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+
+    // Map to track question practice state
+    const questionMap = new Map<string, { needsPractice: boolean; correctStreakAfterWrong: number }>();
+
+    sortedResults.forEach(res => {
+      const isLowScoreAttempt = (res.score || 0) < 7;
+      if (res.answers && Array.isArray(res.answers)) {
+        res.answers.forEach(ans => {
+          const qId = ans.questionId;
+          const isCorrect = ans.correct === true;
+
+          let state = questionMap.get(qId);
+          if (!state) {
+            state = { needsPractice: false, correctStreakAfterWrong: 0 };
+            questionMap.set(qId, state);
+          }
+
+          if (!isCorrect || isLowScoreAttempt) {
+            // Answered wrong OR in a low-score attempt (< 7 pts)
+            state.needsPractice = true;
+            state.correctStreakAfterWrong = 0; // Reset streak on wrong answer
+          } else {
+            // Answered correctly in a valid attempt
+            if (state.needsPractice) {
+              state.correctStreakAfterWrong += 1;
+              // If answered correctly 3 times since being wrong, mark as mastered / clear from wrong list
+              if (state.correctStreakAfterWrong >= 3) {
+                state.needsPractice = false;
+              }
+            }
+          }
+        });
+      }
+    });
+
+    const list: Question[] = [];
+    questionMap.forEach((state, qId) => {
+      if (state.needsPractice) {
+        const qObj = questions.find(q => q.id === qId);
+        if (qObj) {
+          list.push(qObj);
+        }
+      }
+    });
+
+    return list;
+  }, [results, questions]);
+
+  // Start practice session specifically targeting wrong & low-score questions
+  const startWrongQuestionsPractice = () => {
+    if (wrongQuestionsForPractice.length === 0) {
+      alert("Chúc mừng! Bạn chưa có câu hỏi nào bị sai hoặc tất cả các câu sai đã được bạn ôn luyện làm đúng đủ 3 lần.\n\nHãy làm 'BẮT ĐẦU ĐÁNH GIÁ' để tiếp tục nâng cao kiến thức!");
+      return;
+    }
+
+    setErrorState(null);
+    setSelectedAnswers({});
+    setCurrentQuestionIndex(0);
+    setQuizTimer(0);
+    setQuestionTimer(getMaxQuestionTimer(difficulty));
+    setQuestionTimes({ 0: 0, 1: 0, 2: 0 });
+    setBackChanceUsed(false);
+    setBackClicksCount(0);
+    setQuizInfoMessage(null);
+    setShowResultsReview(false);
+
+    // Pick 3 questions for practice session
+    let selected: Question[] = [];
+    if (wrongQuestionsForPractice.length >= 3) {
+      const shuffled = [...wrongQuestionsForPractice].sort(() => 0.5 - Math.random());
+      selected = shuffled.slice(0, 3);
+    } else {
+      // If fewer than 3 wrong questions available, take all wrong questions
+      const shuffledWrong = [...wrongQuestionsForPractice].sort(() => 0.5 - Math.random());
+      selected = [...shuffledWrong];
+      
+      // Fill remaining slots up to 3 from the general question bank
+      const existingIds = new Set(selected.map(q => q.id));
+      const remainingQuestions = questions.filter(q => !existingIds.has(q.id));
+      const shuffledRemaining = [...remainingQuestions].sort(() => 0.5 - Math.random());
+      const needed = 3 - selected.length;
+      selected = [...selected, ...shuffledRemaining.slice(0, needed)];
+    }
+
+    setCurrentQuizQuestions(selected);
+    setQuizStarted(true);
+  };
+
   // Start the 3T Daily Mock Quiz (3 random questions)
   const startQuiz = () => {
     if (questions.length < 3) {
@@ -5811,12 +6065,15 @@ export default function EmployeeDashboard({
     setQuizStarted(true);
   };
 
-  const handleSelectOption = (questionId: string, optionIndex: number) => {
-    setSelectedAnswers(prev => ({
-      ...prev,
-      [questionId]: optionIndex
-    }));
-  };
+  const handleSelectOption = useCallback((questionId: string, optionIndex: number) => {
+    setSelectedAnswers(prev => {
+      if (prev[questionId] === optionIndex) return prev;
+      return {
+        ...prev,
+        [questionId]: optionIndex
+      };
+    });
+  }, []);
 
   const [errorState, setErrorState] = useState<string | null>(null);
 
@@ -5875,69 +6132,89 @@ export default function EmployeeDashboard({
   // Expanded explanations in practice mode state
   const [expandedPracticeId, setExpandedPracticeId] = useState<string | null>(null);
 
-  // Statistics calculation
-  const totalQuizzes = results.length;
-  const averageScore = totalQuizzes > 0 
-    ? Math.round(results.reduce((acc, curr) => acc + curr.score, 0) / totalQuizzes)
-    : 0;
-  const passingRate = totalQuizzes > 0
-    ? Math.round((results.filter(r => r.score === 30).length / totalQuizzes) * 100)
-    : 0;
+  // Statistics calculation (Memoized to prevent render delays during quiz)
+  const { totalQuizzes, averageScore, passingRate } = useMemo(() => {
+    const total = results.length;
+    const avg = total > 0 
+      ? Math.round(results.reduce((acc, curr) => acc + curr.score, 0) / total)
+      : 0;
+    const pass = total > 0
+      ? Math.round((results.filter(r => r.score === 30).length / total) * 100)
+      : 0;
+    return { totalQuizzes: total, averageScore: avg, passingRate: pass };
+  }, [results]);
 
-  // Collective stats for department & branch (e.g., P. QLCL)
-  const myDeptResults = allResults.filter(r => r.department === user.department);
-  const deptTotalQuizzes = myDeptResults.length;
-  const deptAverageScore = deptTotalQuizzes > 0
-    ? Math.round((myDeptResults.reduce((acc, curr) => acc + curr.score, 0) / deptTotalQuizzes) * 10) / 10
-    : 0;
-  const deptPassingRate = deptTotalQuizzes > 0
-    ? Math.round((myDeptResults.filter(r => r.score === 30).length / deptTotalQuizzes) * 100)
-    : 0;
+  // Collective stats for department & branch (Memoized to prevent filtering thousands of results on every second tick)
+  const {
+    myDeptResults,
+    deptTotalQuizzes,
+    deptAverageScore,
+    deptPassingRate,
+    deptT1Percent,
+    deptT2Percent,
+    deptT3Percent,
+    deptLeaderboard
+  } = useMemo(() => {
+    const myDeptRes = allResults.filter(r => r.department === user.department);
+    const deptTotal = myDeptRes.length;
+    const deptAvg = deptTotal > 0
+      ? Math.round((myDeptRes.reduce((acc, curr) => acc + curr.score, 0) / deptTotal) * 10) / 10
+      : 0;
+    const deptPass = deptTotal > 0
+      ? Math.round((myDeptRes.filter(r => r.score === 30).length / deptTotal) * 100)
+      : 0;
 
-  // 3T values detailed evaluation for the user's department
-  // T1: Trọng tâm khách hàng (indices % 3 === 0)
-  // T2: Tinh gọn (indices % 3 === 1)
-  // T3: Tốc độ quyết liệt (indices % 3 === 2)
-  let t1Correct = 0, t1Total = 0;
-  let t2Correct = 0, t2Total = 0;
-  let t3Correct = 0, t3Total = 0;
+    let t1Correct = 0, t1Total = 0;
+    let t2Correct = 0, t2Total = 0;
+    let t3Correct = 0, t3Total = 0;
 
-  myDeptResults.forEach(res => {
-    res.answers.forEach((ans, idx) => {
-      if (idx % 3 === 0) {
-        t1Total++;
-        if (ans.correct) t1Correct++;
-      } else if (idx % 3 === 1) {
-        t2Total++;
-        if (ans.correct) t2Correct++;
-      } else {
-        t3Total++;
-        if (ans.correct) t3Correct++;
-      }
+    myDeptRes.forEach(res => {
+      res.answers.forEach((ans, idx) => {
+        if (idx % 3 === 0) {
+          t1Total++;
+          if (ans.correct) t1Correct++;
+        } else if (idx % 3 === 1) {
+          t2Total++;
+          if (ans.correct) t2Correct++;
+        } else {
+          t3Total++;
+          if (ans.correct) t3Correct++;
+        }
+      });
     });
-  });
 
-  const deptT1Percent = t1Total > 0 ? Math.round((t1Correct / t1Total) * 100) : 88;
-  const deptT2Percent = t2Total > 0 ? Math.round((t2Correct / t2Total) * 100) : 84;
-  const deptT3Percent = t3Total > 0 ? Math.round((t3Correct / t3Total) * 100) : 80;
+    const t1Pct = t1Total > 0 ? Math.round((t1Correct / t1Total) * 100) : 88;
+    const t2Pct = t2Total > 0 ? Math.round((t2Correct / t2Total) * 100) : 84;
+    const t3Pct = t3Total > 0 ? Math.round((t3Correct / t3Total) * 100) : 80;
 
-  // Ranked list of active department participation
-  const departmentsList = [
-    'Phòng Quản Lý Chất Lượng',
-    'Phòng Sản Xuất',
-    'Phòng Nhân Sự',
-    'Phòng Kế Toán',
-    'Phòng Kinh Doanh',
-    'Phòng Kỹ Thuật',
-    'Phòng Kho Vận'
-  ];
-  const deptLeaderboard = departmentsList.map(dept => {
-    const deptRes = allResults.filter(r => r.department === dept);
-    const count = deptRes.length;
-    const avg = count > 0 ? Math.round((deptRes.reduce((sum, r) => sum + r.score, 0) / count) * 10) / 10 : 0;
-    const rate = count > 0 ? Math.round((deptRes.filter(r => r.score === 30).length / count) * 100) : 0;
-    return { name: dept, count, avg, rate };
-  }).sort((a, b) => b.count - a.count || b.avg - a.avg);
+    const departmentsList = [
+      'Phòng Quản Lý Chất Lượng',
+      'Phòng Sản Xuất',
+      'Phòng Nhân Sự',
+      'Phòng Kế Toán',
+      'Phòng Kinh Doanh',
+      'Phòng Kỹ Thuật',
+      'Phòng Kho Vận'
+    ];
+    const leaderboard = departmentsList.map(dept => {
+      const deptRes = allResults.filter(r => r.department === dept);
+      const count = deptRes.length;
+      const avg = count > 0 ? Math.round((deptRes.reduce((sum, r) => sum + r.score, 0) / count) * 10) / 10 : 0;
+      const rate = count > 0 ? Math.round((deptRes.filter(r => r.score === 30).length / count) * 100) : 0;
+      return { name: dept, count, avg, rate };
+    }).sort((a, b) => b.count - a.count || b.avg - a.avg);
+
+    return {
+      myDeptResults: myDeptRes,
+      deptTotalQuizzes: deptTotal,
+      deptAverageScore: deptAvg,
+      deptPassingRate: deptPass,
+      deptT1Percent: t1Pct,
+      deptT2Percent: t2Pct,
+      deptT3Percent: t3Pct,
+      deptLeaderboard: leaderboard
+    };
+  }, [allResults, user.department]);
 
   const formatCountdown = (secs: number) => {
     const m = Math.floor(secs / 60);
@@ -6932,6 +7209,7 @@ export default function EmployeeDashboard({
                     {adminMobileTab === 'records' && renderMobileRecordsPanel()}
                     {adminMobileTab === 'patience_top' && renderMobilePatiencePanel()}
                     {adminMobileTab === 'details' && renderMobileDetailsPanel()}
+                    {adminMobileTab === 'online' && renderMobileOnlinePanel()}
                     {adminMobileTab === 'exchange' && (
                       <div className="flex flex-col flex-1 min-h-0 w-full bg-white rounded-t-2xl shadow-inner border-t border-gray-100 overflow-hidden">
                         <ConversationExchange 
@@ -6969,6 +7247,23 @@ export default function EmployeeDashboard({
                                 <span className="text-[8.5px] font-bold leading-tight truncate w-full text-center text-gray-700 font-sans">Phê Duyệt</span>
                               </button>
                             )}
+
+                            {/* Nút Hiển Thị Số Người Đang Online */}
+                            <button
+                              onClick={() => setAdminMobileTab('online')}
+                              className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-150/20 active:scale-95 transition-all text-slate-700 font-sans cursor-pointer group shrink-0"
+                              title="Ai Đang Online"
+                            >
+                              <div className="h-7 w-7 rounded-lg bg-emerald-50 border border-emerald-100/60 flex items-center justify-center group-hover:bg-emerald-100 transition-colors shrink-0 relative">
+                                <Users className="h-3.5 w-3.5 text-emerald-600 animate-pulse" />
+                                {onlineUsersCount > 0 && (
+                                  <span className="absolute -top-2 -right-1.5 bg-emerald-600 text-white text-[9.5px] font-extrabold h-4 px-1 rounded-full border border-white flex items-center justify-center shadow-md min-w-[16px] leading-none animate-bounce">
+                                    {onlineUsersCount}
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-[8.5px] font-bold leading-tight truncate w-full text-center text-gray-700 font-sans">Online ({onlineUsersCount})</span>
+                            </button>
 
                             <button
                               onClick={() => setAdminMobileTab('qr')}
@@ -7336,7 +7631,7 @@ export default function EmployeeDashboard({
                       <div className="space-y-0.5">
                         <div className="text-[9.5px] sm:text-[10px] text-gray-455 uppercase tracking-wider font-semibold">Số câu hỏi</div>
                         <div className="font-bold text-[#0B3A60]">
-                           <span translate="no" className="notranslate">30 câu (Ngẫu nhiên)</span>
+                           <span translate="no" className="notranslate">3 câu (Ngẫu nhiên)</span>
                         </div>
                       </div>
                       <div className="space-y-0.5">
@@ -7350,7 +7645,7 @@ export default function EmployeeDashboard({
                       <div className="space-y-0.5">
                         <div className="text-[9.5px] sm:text-[10px] text-gray-455 uppercase tracking-wider font-semibold">Tổng điểm tối đa</div>
                         <div className="font-bold text-gray-805">
-                          <span translate="no" className="notranslate">30 Điểm (1đ / câu)</span>
+                          <span translate="no" className="notranslate">30 Điểm (10đ / câu)</span>
                         </div>
                       </div>
                       <div className="space-y-0.5">
@@ -7538,14 +7833,29 @@ export default function EmployeeDashboard({
                     </button>
                   </div>
 
-                  {/* Big Primary Start Button */}
-                  <div className="w-full flex justify-center shrink-0">
+                  {/* Action Buttons Row: ÔN LUYỆN CÂU SAI (left) & BẮT ĐẦU ĐÁNH GIÁ (right) */}
+                  <div className="w-full flex items-center justify-center gap-2 sm:gap-3 shrink-0 my-0.5">
+                    {/* Left Button: ÔN LUYỆN CÂU SAI */}
+                    <button
+                      onClick={startWrongQuestionsPractice}
+                      className="flex-1 max-w-[190px] sm:max-w-[210px] flex items-center justify-center gap-1.5 py-3 px-2 sm:px-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-extrabold text-[11px] sm:text-xs rounded-xl shadow-md transition-all active:scale-[0.98] cursor-pointer group"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 group-hover:-rotate-45 transition-transform text-amber-100" />
+                      <span translate="no" className="notranslate whitespace-nowrap">ÔN LUYỆN CÂU SAI</span>
+                      {wrongQuestionsForPractice.length > 0 && (
+                        <span className="bg-red-600 text-white text-[9px] sm:text-[10px] font-black rounded-full px-1.5 py-0.5 min-w-[18px] text-center shadow-2xs ml-0.5 animate-pulse">
+                          {wrongQuestionsForPractice.length}
+                        </span>
+                      )}
+                    </button>
+
+                    {/* Right Button: BẮT ĐẦU ĐÁNH GIÁ */}
                     <button
                       onClick={startQuiz}
-                      className="w-full max-w-sm flex items-center justify-center gap-2 py-3 px-4 bg-[#1971C2] hover:bg-opacity-95 text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-md transition-all active:scale-[0.98] cursor-pointer"
+                      className="flex-1 max-w-[190px] sm:max-w-[210px] flex items-center justify-center gap-1.5 py-3 px-2 sm:px-3 bg-[#1971C2] hover:bg-opacity-95 text-white font-extrabold text-[11px] sm:text-xs rounded-xl shadow-md transition-all active:scale-[0.98] cursor-pointer group"
                     >
-                      <span translate="no" className="notranslate">Bắt Đầu Làm Bài Đánh Giá</span>
-                      <ArrowRight className="h-4 w-4 shrink-0" />
+                      <span translate="no" className="notranslate whitespace-nowrap">BẮT ĐẦU ĐÁNH GIÁ</span>
+                      <ArrowRight className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 group-hover:translate-x-0.5 transition-transform" />
                     </button>
                   </div>
                   </div>
@@ -8118,7 +8428,7 @@ export default function EmployeeDashboard({
                                     onClick={() => {
                                       handleSelectOption(qId, oIdx);
                                       // Clear temporary success messages when selecting
-                                      setQuizInfoMessage(null);
+                                      if (quizInfoMessage) setQuizInfoMessage(null);
                                     }}
                                     className={`w-full text-left p-3.5 sm:p-4 text-xs sm:text-sm rounded-xl border transition-all flex items-center gap-3 active:scale-[0.99] group shadow-2xs ${
                                       isSelected 
@@ -8149,7 +8459,7 @@ export default function EmployeeDashboard({
                             disabled={currentQuestionIndex === 0}
                             onClick={() => {
                               setCurrentQuestionIndex(prev => prev - 1);
-                              setQuizInfoMessage(null);
+                              if (quizInfoMessage) setQuizInfoMessage(null);
                             }}
                             className="px-4 py-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-600 rounded-lg text-xs font-bold disabled:opacity-40 transition-colors cursor-pointer"
                           >
@@ -8160,7 +8470,7 @@ export default function EmployeeDashboard({
                             <button
                               onClick={() => {
                                 setCurrentQuestionIndex(prev => prev + 1);
-                                setQuizInfoMessage(null);
+                                if (quizInfoMessage) setQuizInfoMessage(null);
                               }}
                               className="px-5 py-2 bg-[#0B3A60] hover:bg-[#0B3A60]/90 border border-transparent text-white rounded-lg text-xs font-bold shadow-xs transition-all cursor-pointer"
                             >

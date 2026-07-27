@@ -1,10 +1,10 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { User, QuizResult, CompanyMapping, LevelRulesConfig } from '../types';
+import { User, QuizResult, CompanyMapping, LevelRulesConfig, Question } from '../types';
 import { 
   Users, Trophy, Award, BarChart3, Clock, TrendingUp, 
   Calendar, Zap, AlertTriangle, Search, CheckCircle2, 
   Sparkles, FileDown, Activity, RefreshCcw, BookOpen, ChevronRight,
-  ChevronDown, Building2
+  ChevronDown, Building2, XCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -12,8 +12,9 @@ import {
   CartesianGrid, Tooltip, Legend, BarChart, Bar, Cell 
 } from 'recharts';
 import * as XLSX from 'xlsx';
-import { formatDate } from '../utils/format';
+import { formatDate, cleanOptionText } from '../utils/format';
 import { calculateInactivityAugmentedLevel, getVietnamDateString } from '../utils/levelCalculator';
+import { databaseService } from '../firebase';
 
 const DEFAULT_LEVEL_RULES: LevelRulesConfig = {
   introduction: "Hệ thống Quiz 3T Mastery áp dụng cơ chế phân hạng và thay đổi cấp độ tự động dựa trên thành tích luyện tập thực tế.",
@@ -124,6 +125,26 @@ export default function PersonalStats({ users, results, levelRulesFromCloud }: P
   const [panelTab, setPanelTab] = useState<'personal' | 'records'>('personal');
   const [recordSearch, setRecordSearch] = useState<string>('');
   const [showRuleAccordion, setShowRuleAccordion] = useState<boolean>(true);
+
+  // Wrong questions state
+  const [allQuestions, setAllQuestions] = useState<Question[]>([]);
+  const [expandedWrongQuestionId, setExpandedWrongQuestionId] = useState<string | null>(null);
+  const [wrongQuestionsSearch, setWrongQuestionsSearch] = useState<string>('');
+  const [wrongQuestionsFilter, setWrongQuestionsFilter] = useState<'all' | 'multiple' | 'low_score'>('all');
+
+  useEffect(() => {
+    let active = true;
+    databaseService.getQuestions().then(qs => {
+      if (active) {
+        setAllQuestions(qs);
+      }
+    }).catch(err => {
+      console.error("Failed to load questions in PersonalStats:", err);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   // Set default selected user
   useEffect(() => {
@@ -420,6 +441,117 @@ export default function PersonalStats({ users, results, levelRulesFromCloud }: P
       scoreHistory
     };
   }, [userResults]);
+
+  // Analyze wrong questions and low-score questions for the selected user
+  const baseWrongQuestionsList = useMemo(() => {
+    if (!selectedUser || userResults.length === 0 || allQuestions.length === 0) {
+      return [];
+    }
+
+    const map = new Map<string, {
+      questionId: string;
+      wrongCount: number;
+      correctCount: number;
+      lastSelectedIndex: number;
+      isFromLowScoreAttempt: boolean;
+      lastAttemptDate: string;
+      lastAttemptScore: number;
+    }>();
+
+    userResults.forEach(res => {
+      const isLowScoreAttempt = (res.score || 0) < 7;
+      if (res.answers && Array.isArray(res.answers)) {
+        res.answers.forEach(ans => {
+          const qId = ans.questionId;
+          const isCorrect = ans.correct === true;
+          
+          if (!map.has(qId)) {
+            map.set(qId, {
+              questionId: qId,
+              wrongCount: 0,
+              correctCount: 0,
+              lastSelectedIndex: ans.selectedIndex,
+              isFromLowScoreAttempt: false,
+              lastAttemptDate: res.date,
+              lastAttemptScore: res.score,
+            });
+          }
+
+          const existing = map.get(qId)!;
+          if (isCorrect) {
+            existing.correctCount += 1;
+          } else {
+            existing.wrongCount += 1;
+            existing.lastSelectedIndex = ans.selectedIndex;
+            existing.lastAttemptDate = res.date;
+            existing.lastAttemptScore = res.score;
+          }
+
+          if (isLowScoreAttempt) {
+            existing.isFromLowScoreAttempt = true;
+            if (!isCorrect) {
+              existing.lastAttemptScore = res.score;
+            }
+          }
+        });
+      }
+    });
+
+    const list: {
+      questionId: string;
+      wrongCount: number;
+      correctCount: number;
+      lastSelectedIndex: number;
+      isFromLowScoreAttempt: boolean;
+      lastAttemptDate: string;
+      lastAttemptScore: number;
+      question: Question;
+    }[] = [];
+
+    map.forEach((val, qId) => {
+      if (val.wrongCount > 0 || val.isFromLowScoreAttempt) {
+        const questionObj = allQuestions.find(q => q.id === qId);
+        if (questionObj) {
+          list.push({
+            ...val,
+            question: questionObj
+          });
+        }
+      }
+    });
+
+    return list.sort((a, b) => b.wrongCount - a.wrongCount);
+  }, [selectedUser, userResults, allQuestions]);
+
+  const searchedWrongQuestions = useMemo(() => {
+    const searchLower = wrongQuestionsSearch.toLowerCase().trim();
+    if (!searchLower) return baseWrongQuestionsList;
+    return baseWrongQuestionsList.filter(item => {
+      const matchText = item.question.text.toLowerCase().includes(searchLower);
+      const matchOptions = item.question.options.some((opt: string) => opt.toLowerCase().includes(searchLower));
+      return matchText || matchOptions;
+    });
+  }, [baseWrongQuestionsList, wrongQuestionsSearch]);
+
+  const finalFilteredWrongQuestions = useMemo(() => {
+    return searchedWrongQuestions.filter(item => {
+      if (wrongQuestionsFilter === 'multiple') {
+        return item.wrongCount >= 2;
+      }
+      if (wrongQuestionsFilter === 'low_score') {
+        return item.isFromLowScoreAttempt;
+      }
+      return true;
+    });
+  }, [searchedWrongQuestions, wrongQuestionsFilter]);
+
+  const wrongQuestionsCounts = useMemo(() => {
+    return {
+      all: searchedWrongQuestions.length,
+      multiple: searchedWrongQuestions.filter(item => item.wrongCount >= 2).length,
+      lowScore: searchedWrongQuestions.filter(item => item.isFromLowScoreAttempt).length,
+    };
+  }, [searchedWrongQuestions]);
 
   // Records 3T calculations based on standard logic mimicking StatsDashboard.tsx 1:1
   const records3T = useMemo(() => {
@@ -1264,10 +1396,12 @@ export default function PersonalStats({ users, results, levelRulesFromCloud }: P
               <p className="text-xs text-gray-400 font-medium">Vui lòng tìm kiếm và chọn một nhân sự bên trên để xem phân tích dữ liệu chuyên sâu.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* LEFT PANEL: User Information & Level Details Card */}
-          <div className="lg:col-span-1 space-y-6">
-            <div className="bg-white border border-gray-150 rounded-xl shadow-3xs p-5 relative overflow-hidden flex flex-col h-full justify-between">
+            <div className="space-y-6">
+              {/* ROW 1: Profile and KPI/Charts */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* LEFT COLUMN: User Information & Level Details Card */}
+                <div className="lg:col-span-1">
+                  <div className="bg-white border border-gray-150 rounded-xl shadow-3xs p-5 relative overflow-hidden flex flex-col h-full justify-between">
               {/* Background gradient style decoration */}
               <div className={`absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r ${levelUIConfig.gradient.replace('from-', 'from-').replace('to-', 'to-')}`} />
 
@@ -1356,8 +1490,8 @@ export default function PersonalStats({ users, results, levelRulesFromCloud }: P
             </div>
           </div>
 
-          {/* RIGHT PANEL: Stats Overview & Charts and table */}
-          <div className="lg:col-span-2 space-y-6">
+          {/* RIGHT COLUMN: Stats Overview & Charts */}
+          <div className="lg:col-span-2 space-y-6 flex flex-col justify-between">
             
             {/* KPI Cards section */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -1416,7 +1550,7 @@ export default function PersonalStats({ users, results, levelRulesFromCloud }: P
             </div>
 
             {/* Recharts Graphical Visuals */}
-            <div className="bg-white border border-gray-150 rounded-xl p-5 shadow-3xs text-left space-y-4">
+            <div className="bg-white border border-gray-150 rounded-xl p-5 shadow-3xs text-left space-y-4 flex-1 flex flex-col justify-between mt-6">
               <h4 className="text-xs font-black text-[#0B3A60] uppercase tracking-wider flex items-center gap-1.5 border-b border-gray-100 pb-2.5">
                 <BarChart3 className="h-4 w-4 text-emerald-500" />
                 <span>Biểu Đồ Tiến Trình & Phong Độ Điểm Số Gần Nhất</span>
@@ -1477,9 +1611,193 @@ export default function PersonalStats({ users, results, levelRulesFromCloud }: P
                 </div>
               )}
             </div>
+          </div>
+        </div>
 
-            {/* Detailed table list of attempts */}
-            <div className="bg-white border border-gray-150 rounded-xl shadow-3xs overflow-hidden text-left">
+        {/* ROW 2: Wrong Questions Cabinet and Score History Log */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* LEFT COLUMN: Wrong Questions Card */}
+          <div className="lg:col-span-1">
+            <div className="bg-white border border-gray-150 rounded-xl shadow-3xs p-5 space-y-4 text-left flex flex-col h-[1080px]">
+              <div className="border-b border-gray-100 pb-2.5 flex items-center justify-between">
+                <h4 className="text-xs font-black text-red-600 uppercase tracking-wider flex items-center gap-1.5">
+                  <AlertTriangle className="h-4 w-4 text-red-500 animate-pulse" />
+                  <span>ÔN TẬP CÂU SAI & ĐIỂM THẤP</span>
+                </h4>
+                <span className="text-[10px] font-bold text-gray-400 font-mono bg-slate-50 border border-gray-150 px-1.5 py-0.5 rounded">
+                  {searchedWrongQuestions.length} câu
+                </span>
+              </div>
+
+              {/* Informative description */}
+              <p className="text-[10.5px] text-gray-500 leading-relaxed font-medium">
+                Tự động thống kê các câu hỏi nhân viên từng trả lời <strong className="text-red-500">sai</strong> hoặc trong lượt thi <strong className="text-amber-600">điểm thấp (dưới 7 điểm)</strong> để kịp thời rút kinh nghiệm.
+              </p>
+
+              {/* Quick Search and Filter */}
+              <div className="space-y-2.5">
+                <div className="relative">
+                  <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Tìm nhanh câu hỏi..."
+                    value={wrongQuestionsSearch}
+                    onChange={(e) => setWrongQuestionsSearch(e.target.value)}
+                    className="w-full pl-9 pr-4 py-2 border border-gray-250 rounded-lg text-xs font-medium focus:ring-1 focus:ring-red-400 focus:border-red-400 transition-all bg-slate-50 focus:bg-white"
+                  />
+                </div>
+
+                {/* Filter Pills */}
+                <div className="flex flex-wrap gap-1.5 text-[10px] font-bold">
+                  <button
+                    type="button"
+                    onClick={() => setWrongQuestionsFilter('all')}
+                    className={`px-2.5 py-1 rounded-full border transition-all cursor-pointer ${
+                      wrongQuestionsFilter === 'all'
+                        ? 'bg-red-50 border-red-200 text-red-700 font-black'
+                        : 'bg-slate-50 border-gray-200 text-gray-500 hover:bg-slate-100'
+                    }`}
+                  >
+                    Tất cả ({wrongQuestionsCounts.all})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setWrongQuestionsFilter('multiple')}
+                    className={`px-2.5 py-1 rounded-full border transition-all cursor-pointer ${
+                      wrongQuestionsFilter === 'multiple'
+                        ? 'bg-red-50 border-red-200 text-red-700 font-black'
+                        : 'bg-slate-50 border-gray-200 text-gray-500 hover:bg-slate-100'
+                    }`}
+                  >
+                    Sai ≥ 2 lần ({wrongQuestionsCounts.multiple})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setWrongQuestionsFilter('low_score')}
+                    className={`px-2.5 py-1 rounded-full border transition-all cursor-pointer ${
+                      wrongQuestionsFilter === 'low_score'
+                        ? 'bg-red-50 border-red-200 text-red-700 font-black'
+                        : 'bg-slate-50 border-gray-200 text-gray-500 hover:bg-slate-100'
+                    }`}
+                  >
+                    Bài thi &lt; 7đ ({wrongQuestionsCounts.lowScore})
+                  </button>
+                </div>
+              </div>
+
+              {/* Scrollable Questions list */}
+              <div className="flex-1 h-0 overflow-y-auto pr-1 space-y-2.5 scrollbar-thin">
+                {finalFilteredWrongQuestions.length === 0 ? (
+                  <div className="py-8 text-center text-xs text-gray-400 font-medium border border-dashed border-gray-200 rounded-lg">
+                    <BookOpen className="h-6 w-6 text-gray-300 mx-auto mb-1.5" />
+                    Không tìm thấy câu hỏi phù hợp.
+                  </div>
+                ) : (
+                  finalFilteredWrongQuestions.map((item, idx) => {
+                    const q = item.question;
+                    const isExpanded = expandedWrongQuestionId === q.id;
+                    return (
+                      <div
+                        key={q.id}
+                        className="bg-white border border-gray-150 rounded-lg p-3 hover:border-red-200 hover:shadow-3xs transition-all cursor-pointer"
+                        onClick={() => setExpandedWrongQuestionId(isExpanded ? null : q.id)}
+                      >
+                        <div className="flex justify-between items-start gap-2.5">
+                          <div className="space-y-1">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="text-[9.5px] font-bold text-red-600 bg-red-50 border border-red-100 px-2 py-0.5 rounded-full">
+                                Sai {item.wrongCount} lần
+                              </span>
+                              {item.isFromLowScoreAttempt && (
+                                <span className="text-[9.5px] font-bold text-amber-700 bg-amber-50 border border-amber-100 px-2 py-0.5 rounded-full">
+                                  Bài thi &lt; 7đ
+                                </span>
+                              )}
+                            </div>
+                            <h5 className="text-[11.5px] font-bold text-gray-800 pt-1 leading-normal">
+                              {q.text}
+                            </h5>
+                          </div>
+                          <ChevronDown
+                            className={`h-4 w-4 text-gray-400 transition-transform shrink-0 mt-0.5 ${
+                              isExpanded ? 'rotate-180 text-red-500' : ''
+                            }`}
+                          />
+                        </div>
+
+                        {/* Collapsible Details */}
+                        <AnimatePresence>
+                          {isExpanded && (
+                            <motion.div
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: 'auto', opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              className="overflow-hidden pt-3 mt-2.5 border-t border-gray-100 space-y-3"
+                              onClick={(e) => e.stopPropagation()} // Stop click bubbling to avoid auto-closing
+                            >
+                              {/* Option Choices */}
+                              <div className="grid grid-cols-1 gap-1.5">
+                                {q.options.map((opt, oIdx) => {
+                                  const isCorrect = oIdx === q.correctAnswerIndex;
+                                  const wasWronglyChosen = oIdx === item.lastSelectedIndex && !isCorrect;
+                                  return (
+                                    <div
+                                      key={oIdx}
+                                      className={`rounded-lg p-2.5 text-[11px] flex items-center justify-between border ${
+                                        isCorrect
+                                          ? 'bg-green-50 border-green-200 text-green-900 font-bold'
+                                          : wasWronglyChosen
+                                          ? 'bg-red-50 border-red-200 text-red-900 font-bold'
+                                          : 'bg-slate-50 border-gray-100 text-gray-600'
+                                      }`}
+                                    >
+                                      <span className="leading-normal">
+                                        {String.fromCharCode(65 + oIdx)}. {cleanOptionText(opt)}
+                                      </span>
+                                      {isCorrect ? (
+                                        <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0 ml-1.5" />
+                                      ) : wasWronglyChosen ? (
+                                        <div className="flex items-center gap-1 shrink-0 ml-1.5">
+                                          <span className="text-[8.5px] font-bold text-red-600 bg-white border border-red-200 px-1 py-0.2 rounded">Từng chọn</span>
+                                          <XCircle className="h-4 w-4 text-red-500" />
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+
+                              {/* Explanation & Memory Box */}
+                              {q.explanation && (
+                                <div className="bg-blue-50/50 rounded-lg p-2.5 border border-blue-50 text-[10.5px]">
+                                  <h6 className="font-bold text-blue-800 flex items-center gap-1 mb-0.5">
+                                    <span>Giải thích và Ghi nhớ:</span>
+                                  </h6>
+                                  <p className="text-blue-700 mt-0.5 leading-relaxed">
+                                    {q.explanation}
+                                  </p>
+                                </div>
+                              )}
+
+                              {/* Footer metadata */}
+                              <div className="text-[9.5px] text-gray-400 font-semibold border-t border-gray-100/70 pt-2 flex justify-between items-center">
+                                <span>Lần sai cuối: {item.lastAttemptDate}</span>
+                                <span>Bài thi đạt: {item.lastAttemptScore}/30 điểm</span>
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* RIGHT COLUMN: Sổ Log Lịch Sử Card */}
+          <div className="lg:col-span-2">
+            <div className="bg-white border border-gray-150 rounded-xl shadow-3xs overflow-hidden text-left flex flex-col h-[1080px]">
               <div className="p-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
                 <h4 className="text-xs font-black text-[#0B3A60] uppercase tracking-wider flex items-center gap-1.5">
                   <Calendar className="h-4 w-4 text-indigo-500" />
@@ -1488,7 +1806,7 @@ export default function PersonalStats({ users, results, levelRulesFromCloud }: P
                 <span className="text-[10px] font-bold text-gray-500 uppercase">Hiển thị {stats.scoreHistory.length} lượt</span>
               </div>
 
-              <div className="overflow-x-auto max-h-72 overflow-y-auto">
+              <div className="overflow-x-auto flex-1 h-0 overflow-y-auto scrollbar-thin">
                 <table className="w-full text-xs">
                   <thead className="bg-[#0B3A60]/5 text-[#0B3A60] font-bold uppercase tracking-wider text-[10px] sticky top-0 bg-white">
                     <tr>
@@ -1566,7 +1884,8 @@ export default function PersonalStats({ users, results, levelRulesFromCloud }: P
 
           </div>
         </div>
-      )}
+      </div>
+    )}
         </>
       )}
     </div>

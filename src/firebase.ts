@@ -12,7 +12,8 @@ import {
   query, 
   where,
   getDocFromServer,
-  onSnapshot
+  onSnapshot,
+  arrayUnion
 } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { User, Question, QuizResult, BRANCHES, DEPARTMENTS, CompanyMapping, MotivationalSloganBand, LevelRulesConfig, LevelRuleItem, ChatTopic, ChatMessage } from './types';
@@ -200,8 +201,46 @@ const forceSeedSupremeAdmin = async () => {
 
       // Check if default executive accounts have been seeded historically
       const seedStatusRef = doc(db, 'user_profiles', 'system_seed_status');
-      const seedStatusSnap = await getDocFromServer(seedStatusRef).catch(() => null);
-      const isAlreadySeeded = seedStatusSnap && seedStatusSnap.exists() && seedStatusSnap.data()?.executives_seeded === true;
+      let isAlreadySeeded = false;
+      let deletedExecutives: string[] = [];
+
+      try {
+        const seedStatusSnap = await getDoc(seedStatusRef);
+        if (seedStatusSnap.exists()) {
+          const data = seedStatusSnap.data();
+          isAlreadySeeded = data?.executives_seeded === true;
+          deletedExecutives = data?.deleted_executives || [];
+        }
+      } catch (err) {
+        // Safe fallback: if we fail to fetch seed status, assume already seeded so we never recreate deleted users
+        console.warn("Failed to read seed status safely. Assuming already seeded to prevent recreation of deleted users:", err);
+        isAlreadySeeded = true;
+      }
+
+      // Proactive cleanup: delete ghost accounts that user requested to be deleted (Phó Tổng Giám Đốc 2 & 3)
+      const ghostIds = ['exec_photonggiamdoc2', 'exec_photonggiamdoc3'];
+      let updatedDeleted = false;
+      for (const ghostId of ghostIds) {
+        if (!deletedExecutives.includes(ghostId)) {
+          deletedExecutives.push(ghostId);
+          updatedDeleted = true;
+          try {
+            await deleteDoc(doc(db, 'user_profiles', ghostId));
+            console.log(`Proactively deleted ghost account: ${ghostId}`);
+          } catch (e) {
+            console.warn(`Failed to delete ghost doc ${ghostId}:`, e);
+          }
+        }
+      }
+      if (updatedDeleted) {
+        try {
+          await setDoc(seedStatusRef, {
+            deleted_executives: deletedExecutives
+          }, { merge: true });
+        } catch (e) {
+          console.warn("Failed to write updated deleted_executives:", e);
+        }
+      }
 
       if (!isAlreadySeeded) {
         // Seed 5 Special Executive Accounts
@@ -269,22 +308,31 @@ const forceSeedSupremeAdmin = async () => {
         ];
 
         for (const exec of execUsers) {
+          if (deletedExecutives.includes(exec.id)) {
+            console.log(`Executive account ${exec.name} has been explicitly deleted. Skipping recreation.`);
+            continue;
+          }
+
           const ref = doc(db, 'user_profiles', exec.id);
-          const snap = await getDocFromServer(ref).catch(() => null);
-          if (!snap || !snap.exists()) {
-            const data = {
-              ...exec,
-              createdAt: new Date().toISOString()
-            };
-            await setDoc(ref, data);
-            console.log(`Seeded executive account: ${exec.name}`);
-          } else {
-            console.log(`Executive account ${exec.name} already exists, skipping seed.`);
+          try {
+            const snap = await getDoc(ref);
+            if (!snap.exists()) {
+              const data = {
+                ...exec,
+                createdAt: new Date().toISOString()
+              };
+              await setDoc(ref, data);
+              console.log(`Seeded executive account: ${exec.name}`);
+            } else {
+              console.log(`Executive account ${exec.name} already exists, skipping seed.`);
+            }
+          } catch (execErr) {
+            console.warn(`Failed to check or seed executive account ${exec.name}:`, execErr);
           }
         }
 
         // Write status to secure that they will never be seeded again if deleted
-        await setDoc(seedStatusRef, { executives_seeded: true });
+        await setDoc(seedStatusRef, { executives_seeded: true }, { merge: true });
         console.log("Successfully marked default executive accounts as permanently seeded on Firestore.");
       } else {
         console.log("Executive accounts have already been seeded previously. Skipping re-seeding to respect custom deletions.");
@@ -1004,6 +1052,20 @@ export const databaseService = {
     try {
       await deleteDoc(doc(db, 'user_profiles', userId));
       incrementQuota('deletes', 1);
+
+      // Record deletion of default executive accounts so they never get re-seeded
+      const defaultExecIds = ['exec_chutich', 'exec_tonggiamdoc', 'exec_photonggiamdoc1', 'exec_photonggiamdoc2', 'exec_photonggiamdoc3'];
+      if (defaultExecIds.includes(userId)) {
+        try {
+          const seedStatusRef = doc(db, 'user_profiles', 'system_seed_status');
+          await setDoc(seedStatusRef, {
+            deleted_executives: arrayUnion(userId)
+          }, { merge: true });
+          console.log(`Recorded deletion of executive account ID ${userId} in seed status.`);
+        } catch (err) {
+          console.warn("Failed to record executive account deletion in seed status:", err);
+        }
+      }
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, `user_profiles/${userId}`);
     }

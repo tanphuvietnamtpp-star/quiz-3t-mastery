@@ -8,6 +8,10 @@ import {
   ChevronDown, ChevronUp, Search
 } from 'lucide-react';
 import { motion } from 'motion/react';
+import { 
+  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, 
+  CartesianGrid, Tooltip, Legend, Cell
+} from 'recharts';
 import { calculateInactivityAugmentedLevel, getVietnamDateString } from '../utils/levelCalculator';
 
 const DEFAULT_LEVEL_RULES: LevelRulesConfig = {
@@ -155,6 +159,45 @@ const getDaysHeld = (dateStr?: string, timestamp?: number): number => {
   return Math.max(1, diffDays + 1);
 };
 
+const BRANCH_COLORS: Record<string, string> = {
+  'Hội sở chính': '#1C7ED6',       // Blue
+  'Văn Phòng Nam Kỳ': '#E8590C',   // Orange
+  'Chi nhánh miền Nam': '#0CA678',  // Emerald Green
+  'Chi nhánh miền Bắc': '#748FFC',  // Indigo
+  'Chi nhánh miền Trung': '#F59F00', // Yellow
+  'Chi nhánh miền Tây': '#AE3EC9',   // Purple/Violet
+};
+const DEFAULT_COLOR = '#868E96';    // Cool Gray
+
+const CustomTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    const total = payload.reduce((sum: number, entry: any) => sum + (entry.value || 0), 0);
+    return (
+      <div className="bg-white border border-slate-200 p-3 rounded-lg shadow-lg text-left font-sans text-xs max-w-[280px]">
+        <p className="font-extrabold text-slate-800 mb-1">{label}</p>
+        <p className="text-slate-500 font-bold mb-1.5 border-b border-slate-100 pb-1">
+          Tổng lượt làm: <span className="font-black text-slate-950 font-mono">{total} lượt</span>
+        </p>
+        <div className="space-y-1">
+          {payload.slice().reverse().map((entry: any, index: number) => {
+            if (!entry.value) return null;
+            return (
+              <div key={index} className="flex items-center justify-between gap-4">
+                <span className="flex items-center gap-1.5 text-slate-600 font-bold">
+                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: entry.color }} />
+                  <span className="truncate max-w-[150px]">{entry.name.replace('Chi nhánh ', 'CN ')}:</span>
+                </span>
+                <span className="font-black text-slate-800 font-mono">{entry.value}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+  return null;
+};
+
 interface StatsDashboardProps {
   users: User[];
   results: QuizResult[];
@@ -192,6 +235,33 @@ export default function StatsDashboard({
   const [recordSearch, setRecordSearch] = useState('');
   const [mappings, setMappings] = useState<CompanyMapping[]>(companyMappings || []);
   const [showRule3T, setShowRule3T] = useState(false);
+
+  // Extract unique branches from mappings dynamically, fallback to static if empty
+  const activeBranchesList = useMemo(() => {
+    return mappings.length > 0 
+      ? Array.from(new Set(mappings.flatMap(co => co.branches.map(b => b.name.trim()))))
+      : Array.from(BRANCHES);
+  }, [mappings]);
+
+  const trendBranchColors = useMemo(() => {
+    const colors: Record<string, string> = {};
+    const STANDARD_COLORS = [
+      '#1C7ED6', // Blue
+      '#E8590C', // Orange
+      '#0CA678', // Emerald Green
+      '#748FFC', // Indigo
+      '#F59F00', // Yellow
+      '#AE3EC9', // Purple
+      '#37B24D', // Green
+      '#F03E3E', // Red
+      '#1098AD', // Cyan
+      '#D6336C', // Pink
+    ];
+    activeBranchesList.forEach((b, idx) => {
+      colors[b] = STANDARD_COLORS[idx % STANDARD_COLORS.length];
+    });
+    return colors;
+  }, [activeBranchesList]);
 
   // Filter users based on companyMappings exclusion
   const users = useMemo(() => {
@@ -287,6 +357,244 @@ export default function StatsDashboard({
       return true;
     });
   }, [rawResults, rawUsers, mappings]);
+
+  const [trendStatsPeriod, setTrendStatsPeriod] = useState<'day' | 'month'>('day');
+  const [dailyScope, setDailyScope] = useState<'15days' | '30days' | 'all' | 'custom15' | 'customRange'>('15days');
+  const [customStartDate, setCustomStartDate] = useState<string>(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 14);
+    const startOfApp = new Date(2026, 5, 6);
+    const finalDate = d < startOfApp ? startOfApp : d;
+    return `${finalDate.getFullYear()}-${String(finalDate.getMonth() + 1).padStart(2, '0')}-${String(finalDate.getDate()).padStart(2, '0')}`;
+  });
+
+  const [customEndDate, setCustomEndDate] = useState<string>(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  });
+
+  // Programmatically generate 15-day periods starting from 06/06/2026 to today
+  const dailyPeriods = useMemo(() => {
+    const start = new Date(2026, 5, 6, 0, 0, 0, 0); // 06/06/2026
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    
+    const periods = [];
+    let currentStart = new Date(start);
+    
+    while (currentStart <= today) {
+      const currentEnd = new Date(currentStart);
+      currentEnd.setDate(currentEnd.getDate() + 14); // 15 days total (including start date)
+      
+      periods.push({
+        start: new Date(currentStart),
+        end: new Date(currentEnd),
+        label: `${String(currentStart.getDate()).padStart(2, '0')}/${String(currentStart.getMonth() + 1).padStart(2, '0')} - ${String(currentEnd.getDate()).padStart(2, '0')}/${String(currentEnd.getMonth() + 1).padStart(2, '0')}`
+      });
+      
+      const nextStart = new Date(currentEnd);
+      nextStart.setDate(nextStart.getDate() + 1);
+      currentStart = nextStart;
+    }
+    
+    return periods; // returns array of periods in ascending order
+  }, []);
+
+  const [custom15PageIndex, setCustom15PageIndex] = useState<number>(() => {
+    const start = new Date(2026, 5, 6, 0, 0, 0, 0); // 06/06/2026
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    
+    const periods = [];
+    let currentStart = new Date(start);
+    
+    while (currentStart <= today) {
+      const currentEnd = new Date(currentStart);
+      currentEnd.setDate(currentEnd.getDate() + 14);
+      periods.push({
+        start: new Date(currentStart),
+        end: new Date(currentEnd),
+      });
+      const nextStart = new Date(currentEnd);
+      nextStart.setDate(nextStart.getDate() + 1);
+      currentStart = nextStart;
+    }
+    return Math.max(0, periods.length - 1);
+  });
+
+  // Fast user branch lookup map
+  const userBranchMap = useMemo(() => {
+    const branchMap = new Map<string, string>(); // key: userId or normalized userName
+    rawUsers.forEach(u => {
+      const br = u.branch || '';
+      if (u.id) {
+        branchMap.set(u.id, br);
+      }
+      if (u.name) {
+        const norm = u.name.trim().normalize('NFC').toUpperCase().replace(/\s+/g, ' ');
+        if (norm) {
+          branchMap.set(norm, br);
+        }
+      }
+    });
+    return branchMap;
+  }, [rawUsers]);
+
+  const getResultBranch = (res: QuizResult): string => {
+    let rawBr = res.branch || '';
+    if (!rawBr) {
+      if (res.userId) {
+        rawBr = userBranchMap.get(res.userId) || '';
+      }
+      if (!rawBr && res.userName) {
+        const norm = res.userName.trim().normalize('NFC').toUpperCase().replace(/\s+/g, ' ');
+        rawBr = userBranchMap.get(norm) || '';
+      }
+    }
+    
+    const normalizedRaw = rawBr.trim().normalize('NFC');
+    if (!normalizedRaw) {
+      return activeBranchesList[0] || 'Hội sở chính';
+    }
+    const matched = activeBranchesList.find(b => b.toLowerCase() === normalizedRaw.toLowerCase());
+    return matched || normalizedRaw;
+  };
+
+  // Dynamic list of branches for trend chart
+  const trendBranchesList = useMemo(() => {
+    return activeBranchesList;
+  }, [activeBranchesList]);
+
+  // Daily statistics based on selected dailyScope or custom 15-day range
+  const dailyTrendStats = useMemo(() => {
+    const dates: Date[] = [];
+    
+    if (dailyScope === '15days') {
+      // 15 days including today
+      for (let i = 14; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        dates.push(d);
+      }
+    } else if (dailyScope === '30days') {
+      // 30 days including today
+      for (let i = 29; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        dates.push(d);
+      }
+    } else if (dailyScope === 'all') {
+      // From 06/06/2026 to today
+      const start = new Date(2026, 5, 6, 0, 0, 0, 0); // June 6th, 2026
+      const today = new Date();
+      let curr = new Date(start);
+      while (curr <= today) {
+        dates.push(new Date(curr));
+        curr.setDate(curr.getDate() + 1);
+      }
+    } else if (dailyScope === 'custom15') {
+      const period = dailyPeriods[custom15PageIndex];
+      if (period) {
+        let curr = new Date(period.start);
+        while (curr <= period.end) {
+          dates.push(new Date(curr));
+          curr.setDate(curr.getDate() + 1);
+        }
+      } else {
+        // Fallback to last 15 days
+        for (let i = 14; i >= 0; i--) {
+          const d = new Date();
+          d.setDate(d.getDate() - i);
+          dates.push(d);
+        }
+      }
+    } else if (dailyScope === 'customRange') {
+      const start = customStartDate ? new Date(customStartDate) : new Date(2026, 5, 6);
+      const end = customEndDate ? new Date(customEndDate) : new Date();
+      
+      start.setHours(0, 0, 0, 0);
+      end.setHours(23, 59, 59, 999);
+      
+      let curr = new Date(start);
+      let count = 0;
+      // Limit range to max 366 days for performance
+      while (curr <= end && count < 366) {
+        dates.push(new Date(curr));
+        curr.setDate(curr.getDate() + 1);
+        count++;
+      }
+    }
+
+    // Convert dates to data entries
+    const data = dates.map(d => {
+      const dateStr = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const fullDateLabel = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+      const entry: Record<string, any> = {
+        label: dateStr,
+        fullDateLabel,
+        total: 0,
+      };
+      trendBranchesList.forEach(b => {
+        entry[b] = 0;
+      });
+      return entry;
+    });
+
+    // Process all results (results contains the already filtered approved results)
+    results.forEach(res => {
+      if (!res.timestamp) return;
+      const d = new Date(res.timestamp);
+      const fullDateLabel = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+      const matchedEntry = data.find(e => e.fullDateLabel === fullDateLabel);
+      if (matchedEntry) {
+        matchedEntry.total += 1;
+        const br = getResultBranch(res);
+        if (trendBranchesList.includes(br)) {
+          matchedEntry[br] = (matchedEntry[br] || 0) + 1;
+        }
+      }
+    });
+
+    return data;
+  }, [results, trendBranchesList, userBranchMap, dailyScope, custom15PageIndex, dailyPeriods, customStartDate, customEndDate]);
+
+  // Monthly statistics for the last 6 months
+  const monthlyTrendStats = useMemo(() => {
+    const data = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      const mStr = `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+      const entry: Record<string, any> = {
+        label: `T${mStr}`, // e.g. T07/2026
+        rawMonth: d.getMonth(),
+        rawYear: d.getFullYear(),
+        total: 0,
+      };
+      trendBranchesList.forEach(b => {
+        entry[b] = 0;
+      });
+      data.push(entry);
+    }
+
+    // Process all results
+    results.forEach(res => {
+      if (!res.timestamp) return;
+      const d = new Date(res.timestamp);
+      const m = d.getMonth();
+      const y = d.getFullYear();
+      const matchedEntry = data.find(e => e.rawMonth === m && e.rawYear === y);
+      if (matchedEntry) {
+        matchedEntry.total += 1;
+        const br = getResultBranch(res);
+        if (trendBranchesList.includes(br)) {
+          matchedEntry[br] = (matchedEntry[br] || 0) + 1;
+        }
+      }
+    });
+
+    return data;
+  }, [results, trendBranchesList, userBranchMap]);
 
   // System-wide results for Monument Legends to sync across devices/roles
   const globalResultsForMonument = useMemo(() => {
@@ -396,11 +704,6 @@ export default function StatsDashboard({
       });
     }
   }, [companyMappings]);
-
-  // Extract unique branches from mappings dynamically, fallback to static if empty
-  const activeBranchesList = mappings.length > 0 
-    ? Array.from(new Set(mappings.flatMap(co => co.branches.map(b => b.name.trim()))))
-    : Array.from(BRANCHES);
 
   // Helper to extract branch abbreviation
   const getBranchAbbr = (branchName: string): string => {
@@ -4286,6 +4589,318 @@ export default function StatsDashboard({
             </table>
           </div>
         )}
+      </div>
+
+      {/* 8. Interactive Daily/Monthly Bar Charts Statistics */}
+      <div className="bg-white border border-gray-150 rounded-xl shadow-3xs p-5 space-y-5 text-left">
+        <div className="border-b border-gray-150 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h4 className="font-sans font-bold text-sm text-[#0B3A60] uppercase tracking-wider flex items-center gap-2">
+              <BarChart3 className="h-5 w-5 text-sky-500" />
+              <span>Biểu Đồ Thống Kê Xu Hướng Ôn Luyện</span>
+            </h4>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Phân tích tổng số lượt ôn luyện và chi tiết của từng chi nhánh theo Ngày hoặc Tháng.
+            </p>
+          </div>
+
+          <div className="flex bg-gray-100 p-0.5 rounded-lg border border-gray-250 shrink-0 self-start sm:self-center">
+            <button
+              onClick={() => setTrendStatsPeriod('day')}
+              className={`px-3 py-1.5 text-[10px] font-bold rounded-md transition-all cursor-pointer ${
+                trendStatsPeriod === 'day' ? 'bg-white text-gray-950 shadow-3xs border border-gray-200' : 'text-gray-500 hover:text-gray-950'
+              }`}
+            >
+              Xem theo Ngày
+            </button>
+            <button
+              onClick={() => setTrendStatsPeriod('month')}
+              className={`px-3 py-1.5 text-[10px] font-bold rounded-md transition-all cursor-pointer ${
+                trendStatsPeriod === 'month' ? 'bg-white text-gray-950 shadow-3xs border border-gray-200' : 'text-gray-500 hover:text-gray-950'
+              }`}
+            >
+              Xem theo Tháng
+            </button>
+          </div>
+        </div>
+
+        {/* Secondary controls for Daily Scope */}
+        {trendStatsPeriod === 'day' && (
+          <div className="flex flex-col gap-4 bg-slate-50/70 p-3.5 rounded-xl border border-slate-150/80">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <span className="text-[11px] font-extrabold text-slate-700 uppercase tracking-wider">Bộ lọc khoảng thời gian:</span>
+                <div className="inline-flex bg-white p-0.5 rounded-lg border border-slate-200 shadow-4xs">
+                  <button
+                    onClick={() => setDailyScope('15days')}
+                    className={`px-3 py-1.5 text-[10.5px] font-bold rounded-md cursor-pointer transition-all ${
+                      dailyScope === '15days' ? 'bg-[#0B3A60] text-white shadow-3xs' : 'text-gray-650 hover:text-gray-900'
+                    }`}
+                  >
+                    15 ngày gần nhất
+                  </button>
+                  <button
+                    onClick={() => setDailyScope('30days')}
+                    className={`px-3 py-1.5 text-[10.5px] font-bold rounded-md cursor-pointer transition-all ${
+                      dailyScope === '30days' ? 'bg-[#0B3A60] text-white shadow-3xs' : 'text-gray-650 hover:text-gray-900'
+                    }`}
+                  >
+                    30 ngày gần nhất
+                  </button>
+                  <button
+                    onClick={() => setDailyScope('all')}
+                    className={`px-3 py-1.5 text-[10.5px] font-bold rounded-md cursor-pointer transition-all ${
+                      dailyScope === 'all' ? 'bg-[#0B3A60] text-white shadow-3xs' : 'text-gray-650 hover:text-gray-900'
+                    }`}
+                  >
+                    Toàn bộ từ 06/06
+                  </button>
+                  <button
+                    onClick={() => setDailyScope('custom15')}
+                    className={`px-3 py-1.5 text-[10.5px] font-bold rounded-md cursor-pointer transition-all ${
+                      dailyScope === 'custom15' ? 'bg-[#0B3A60] text-white shadow-3xs' : 'text-gray-650 hover:text-gray-900'
+                    }`}
+                  >
+                    Lọc theo đợt 15 ngày
+                  </button>
+                  <button
+                    onClick={() => setDailyScope('customRange')}
+                    className={`px-3 py-1.5 text-[10.5px] font-bold rounded-md cursor-pointer transition-all ${
+                      dailyScope === 'customRange' ? 'bg-[#0B3A60] text-white shadow-3xs' : 'text-gray-650 hover:text-gray-900'
+                    }`}
+                  >
+                    Tự chọn ngày
+                  </button>
+                </div>
+              </div>
+
+              {/* Custom 15 days pagination controller */}
+              {dailyScope === 'custom15' && dailyPeriods.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2 self-end md:self-auto">
+                  <button
+                    disabled={custom15PageIndex <= 0}
+                    onClick={() => setCustom15PageIndex(prev => Math.max(0, prev - 1))}
+                    className="px-2.5 py-1.5 text-[11px] font-bold bg-white text-gray-700 rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer shadow-4xs"
+                  >
+                    &larr; Đợt trước
+                  </button>
+                  
+                  <select
+                    value={custom15PageIndex}
+                    onChange={(e) => setCustom15PageIndex(Number(e.target.value))}
+                    className="px-3 py-1.5 text-[11.5px] font-bold bg-white text-slate-800 rounded-lg border border-slate-200 outline-none cursor-pointer focus:border-sky-500 shadow-4xs"
+                  >
+                    {dailyPeriods.map((period, index) => (
+                      <option key={index} value={index}>
+                        {`Đợt ${index + 1}: ${period.label}`}
+                      </option>
+                    ))}
+                  </select>
+
+                  <button
+                    disabled={custom15PageIndex >= dailyPeriods.length - 1}
+                    onClick={() => setCustom15PageIndex(prev => Math.min(dailyPeriods.length - 1, prev + 1))}
+                    className="px-2.5 py-1.5 text-[11px] font-bold bg-white text-gray-700 rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer shadow-4xs"
+                  >
+                    Đợt sau &rarr;
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Custom Date Range selector */}
+            {dailyScope === 'customRange' && (
+              <div className="flex flex-wrap items-center gap-3 bg-white p-3 rounded-xl border border-slate-200 shadow-4xs animate-fade-in">
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-bold text-gray-500">Từ ngày:</span>
+                  <input
+                    type="date"
+                    value={customStartDate}
+                    min="2026-06-06"
+                    onChange={(e) => setCustomStartDate(e.target.value)}
+                    className="px-3 py-1.5 text-[11.5px] font-bold bg-slate-50 text-slate-800 rounded-lg border border-slate-200 outline-none focus:border-[#0B3A60] focus:bg-white transition-all shadow-4xs"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-bold text-gray-500">Đến ngày:</span>
+                  <input
+                    type="date"
+                    value={customEndDate}
+                    onChange={(e) => setCustomEndDate(e.target.value)}
+                    className="px-3 py-1.5 text-[11.5px] font-bold bg-slate-50 text-slate-800 rounded-lg border border-slate-200 outline-none focus:border-[#0B3A60] focus:bg-white transition-all shadow-4xs"
+                  />
+                </div>
+                <div className="text-[10px] text-gray-400 italic md:ml-auto">
+                  * Hệ thống tự động giới hạn hiển thị tối đa trong vòng 366 ngày để tối ưu trải nghiệm biểu đồ.
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Dashboard statistics summary cards */}
+        {(() => {
+          const activeData = trendStatsPeriod === 'day' ? dailyTrendStats : monthlyTrendStats;
+          const totalInPeriod = activeData.reduce((sum, item) => sum + item.total, 0);
+          const branchTotals = trendBranchesList.reduce((acc, b) => {
+            acc[b] = activeData.reduce((sum, item) => sum + (item[b] || 0), 0);
+            return acc;
+          }, {} as Record<string, number>);
+
+          // Find branch with highest contribution
+          let topBranch = 'Không có';
+          let topBranchVal = 0;
+          Object.entries(branchTotals).forEach(([b, val]) => {
+            const numVal = val as number;
+            if (numVal > topBranchVal) {
+              topBranchVal = numVal;
+              topBranch = b;
+            }
+          });
+
+          return (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="bg-sky-50/40 border border-sky-100 p-4 rounded-xl shadow-3xs">
+                <span className="text-[10px] font-extrabold text-sky-850 uppercase tracking-wider block">TỔNG LƯỢT ÔN LUYỆN</span>
+                <span className="text-2xl font-black text-sky-900 font-mono block mt-1">{totalInPeriod} <span className="text-xs font-bold text-sky-700">lượt làm</span></span>
+                <span className="text-[10px] text-sky-650 mt-1 block">
+                  Trong giai đoạn:{' '}
+                  {trendStatsPeriod === 'day' ? (
+                    dailyScope === '15days' ? '15 ngày gần nhất' :
+                    dailyScope === '30days' ? '30 ngày gần nhất' :
+                    dailyScope === 'all' ? 'Toàn bộ từ ngày 06/06' :
+                    dailyScope === 'custom15' ? `Đợt 15 ngày (${dailyPeriods[custom15PageIndex]?.label || ''})` :
+                    `Từ ${customStartDate.split('-').reverse().join('/')} đến ${customEndDate.split('-').reverse().join('/')}`
+                  ) : '6 tháng qua'}
+                </span>
+              </div>
+              
+              <div className="bg-emerald-50/40 border border-emerald-100 p-4 rounded-xl shadow-3xs">
+                <span className="text-[10px] font-extrabold text-emerald-850 uppercase tracking-wider block">CHI NHÁNH DẪN ĐẦU</span>
+                <span className="text-2xl font-black text-emerald-900 truncate block mt-1" title={topBranch}>
+                  {topBranch === 'Không có' ? 'Không có' : topBranch.replace('Chi nhánh ', 'CN ')}
+                </span>
+                <span className="text-[10px] text-emerald-650 mt-1 block">Đóng góp <strong className="font-mono">{topBranchVal} lượt làm</strong> ({totalInPeriod > 0 ? Math.round((topBranchVal / totalInPeriod) * 100) : 0}%)</span>
+              </div>
+
+              <div className="bg-purple-50/40 border border-purple-100 p-4 rounded-xl shadow-3xs">
+                <span className="text-[10px] font-extrabold text-purple-850 uppercase tracking-wider block">PHÂN PHỐI HOẠT ĐỘNG</span>
+                <div className="flex items-center gap-2 mt-2">
+                  <div className="flex -space-x-1 overflow-hidden shrink-0">
+                    {trendBranchesList.slice(0, 4).map((b, i) => (
+                      <span 
+                        key={b} 
+                        style={{ backgroundColor: trendBranchColors[b] || DEFAULT_COLOR }} 
+                        className="w-3.5 h-3.5 rounded-full border border-white"
+                        title={b}
+                      />
+                    ))}
+                  </div>
+                  <span className="text-[10.5px] font-bold text-purple-800">{trendBranchesList.length} chi nhánh hoạt động</span>
+                </div>
+                <span className="text-[10px] text-purple-650 mt-1 block">Ghi nhận thông tin trực tuyến tự động</span>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Chart + Table grid */}
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+          {/* Chart container */}
+          <div className="xl:col-span-8 bg-slate-50/50 border border-slate-150 rounded-xl p-4 shadow-3xs space-y-4">
+            <span className="text-[11px] font-extrabold text-[#0B3A60] uppercase tracking-wider flex items-center gap-1.5">
+              <span className="w-1.5 h-3 bg-sky-500 rounded-xs"></span>
+              BIỂU ĐỒ CỘT CHỒNG PHÂN TÍCH THEO CHI NHÁNH
+            </span>
+
+            <div className="h-[320px] sm:h-[350px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={trendStatsPeriod === 'day' ? dailyTrendStats : monthlyTrendStats}
+                  margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                  <XAxis 
+                    dataKey="label" 
+                    tick={{ fill: '#64748B', fontSize: 10, fontWeight: 600 }}
+                    tickLine={false}
+                    axisLine={{ stroke: '#CBD5E1' }}
+                  />
+                  <YAxis 
+                    tick={{ fill: '#64748B', fontSize: 10, fontWeight: 600 }}
+                    tickLine={false}
+                    axisLine={{ stroke: '#CBD5E1' }}
+                    allowDecimals={false}
+                  />
+                  <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(148, 163, 184, 0.08)' }} />
+                  <Legend 
+                    verticalAlign="bottom"
+                    height={36}
+                    iconSize={10}
+                    iconType="circle"
+                    wrapperStyle={{ fontSize: 10, fontWeight: 700, paddingTop: 12 }}
+                  />
+                  {trendBranchesList.map((b) => (
+                    <Bar 
+                      key={b}
+                      dataKey={b}
+                      name={b}
+                      stackId="branch_stack"
+                      fill={trendBranchColors[b] || DEFAULT_COLOR}
+                      radius={[0, 0, 0, 0]}
+                    />
+                  ))}
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Detailed values table */}
+          <div className="xl:col-span-4 bg-white border border-slate-150 rounded-xl shadow-3xs overflow-hidden flex flex-col h-[395px] text-left">
+            <div className="bg-[#59C3FF] p-3 text-slate-900 border-b border-slate-300 shrink-0">
+              <span className="text-[11px] font-extrabold uppercase tracking-wider block">BẢNG SỐ LIỆU TỔNG HỢP</span>
+              <span className="text-[9.5px] font-medium leading-none mt-0.5 opacity-90">Chi tiết số lượt làm bài của từng kỳ</span>
+            </div>
+
+            <div className="flex-1 overflow-y-auto divide-y divide-slate-100 scrollbar-thin">
+              {(trendStatsPeriod === 'day' ? dailyTrendStats : monthlyTrendStats).slice().reverse().map((item) => (
+                <div key={item.label} className="p-3 hover:bg-slate-50/50 transition-colors space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-extrabold text-slate-800 text-[11px] font-mono bg-slate-100 px-2 py-0.5 rounded-md">
+                      {trendStatsPeriod === 'day' ? `Ngày ${item.label}` : `${item.label}`}
+                    </span>
+                    <span className="font-black text-slate-900 text-xs font-mono">
+                      {item.total} <span className="text-[10px] font-normal text-gray-500">lượt</span>
+                    </span>
+                  </div>
+
+                  {item.total > 0 && (
+                    <div className="flex flex-wrap gap-1.5 pt-0.5">
+                      {trendBranchesList.map((b) => {
+                        const count = item[b] || 0;
+                        if (count === 0) return null;
+                        return (
+                          <span 
+                            key={b}
+                            style={{ 
+                              color: trendBranchColors[b] || DEFAULT_COLOR,
+                              borderColor: `${trendBranchColors[b] || DEFAULT_COLOR}25`,
+                              backgroundColor: `${trendBranchColors[b] || DEFAULT_COLOR}08`
+                            }}
+                            className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded border leading-none"
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: trendBranchColors[b] || DEFAULT_COLOR }} />
+                            <span>{b.replace('Chi nhánh ', 'CN ')}: <strong className="font-mono">{count}</strong></span>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
         </>
       )}
