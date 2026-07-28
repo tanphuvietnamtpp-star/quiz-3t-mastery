@@ -2,7 +2,27 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { databaseService, getQuotaStats } from '../firebase';
 import { User, Question, QuizResult, CompanyMapping, MotivationalSloganBand, LevelRulesConfig, LevelRuleItem } from '../types';
 import { formatDate, formatTimeInSeconds, cleanOptionText } from '../utils/format';
-import { BookOpen, Trophy, Award, BarChart3, ChevronRight, CheckCircle2, XCircle, ArrowRight, RotateCcw, HelpCircle, GraduationCap, AlertCircle, Users, TrendingUp, Building2, LogOut, Home, Maximize2, Minimize2, UserCheck, ImagePlus, Lock, Sparkles, X, Plus, Smartphone, Share, ArrowUp, ArrowLeft, Pencil, Trash2, Building, Landmark, Briefcase, Search, Database, RefreshCcw, QrCode, Server, ShieldCheck, Zap, FileDown, ChevronUp, ChevronDown, Timer, AlertTriangle, Bell, User as UserIcon, MessageSquare, ClipboardList } from 'lucide-react';
+import { BookOpen, Trophy, Award, BarChart3, ChevronRight, CheckCircle2, XCircle, ArrowRight, RotateCcw, HelpCircle, GraduationCap, AlertCircle, Users, TrendingUp, Building2, LogOut, Home, Maximize2, Minimize2, UserCheck, ImagePlus, Lock, Sparkles, X, Plus, Smartphone, Share, ArrowUp, ArrowLeft, Pencil, Trash2, Building, Landmark, Briefcase, Search, Database, RefreshCcw, QrCode, Server, ShieldCheck, Zap, FileDown, ChevronUp, ChevronDown, Timer, AlertTriangle, Bell, User as UserIcon, MessageSquare, ClipboardList, Loader2 } from 'lucide-react';
+
+const TwelveDotSpinner = ({ size = 42, color = "currentColor" }: { size?: number; color?: string }) => (
+  <svg className="animate-spin shrink-0" width={size} height={size} viewBox="0 0 100 100" style={{ color }}>
+    {[...Array(12)].map((_, i) => {
+      const angle = (i * 360) / 12;
+      const opacity = (i + 1) / 12;
+      return (
+        <circle
+          key={i}
+          cx="50"
+          cy="16"
+          r="5.5"
+          fill="currentColor"
+          opacity={opacity}
+          transform={`rotate(${angle} 50 50)`}
+        />
+      );
+    })}
+  </svg>
+);
 import { motion, AnimatePresence } from 'motion/react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts';
 import StatsDashboard from './StatsDashboard';
@@ -293,6 +313,10 @@ export default function EmployeeDashboard({
   const [mobileEditingAnnId, setMobileEditingAnnId] = useState<string | null>(null);
   const [mobileEditingAnnText, setMobileEditingAnnText] = useState<string>('');
   const [mobileDeletingAnnId, setMobileDeletingAnnId] = useState<string | null>(null);
+
+  // Global action processing state matching the dark blue rounded card loading indicator (12-dot spinner)
+  const [isActionLoading, setIsActionLoading] = useState(false);
+  const [loadingText, setLoadingText] = useState<string | null>(null);
 
   // Central rotating ticker for mobile button badges
   const [badgeTicker, setBadgeTicker] = useState(0);
@@ -6008,37 +6032,44 @@ export default function EmployeeDashboard({
       return;
     }
 
-    setErrorState(null);
-    setSelectedAnswers({});
-    setCurrentQuestionIndex(0);
-    setQuizTimer(0);
-    setQuestionTimer(getMaxQuestionTimer(difficulty));
-    setQuestionTimes({ 0: 0, 1: 0, 2: 0 });
-    setBackChanceUsed(false);
-    setBackClicksCount(0);
-    setQuizInfoMessage(null);
-    setShowResultsReview(false);
+    if (isActionLoading) return;
+    setIsActionLoading(true);
+    setLoadingText("Đang tạo bài ôn...");
 
-    // Pick 3 questions for practice session
-    let selected: Question[] = [];
-    if (wrongQuestionsForPractice.length >= 3) {
-      const shuffled = [...wrongQuestionsForPractice].sort(() => 0.5 - Math.random());
-      selected = shuffled.slice(0, 3);
-    } else {
-      // If fewer than 3 wrong questions available, take all wrong questions
-      const shuffledWrong = [...wrongQuestionsForPractice].sort(() => 0.5 - Math.random());
-      selected = [...shuffledWrong];
-      
-      // Fill remaining slots up to 3 from the general question bank
-      const existingIds = new Set(selected.map(q => q.id));
-      const remainingQuestions = questions.filter(q => !existingIds.has(q.id));
-      const shuffledRemaining = [...remainingQuestions].sort(() => 0.5 - Math.random());
-      const needed = 3 - selected.length;
-      selected = [...selected, ...shuffledRemaining.slice(0, needed)];
-    }
+    setTimeout(() => {
+      setErrorState(null);
+      setSelectedAnswers({});
+      setCurrentQuestionIndex(0);
+      setQuizTimer(0);
+      setQuestionTimer(getMaxQuestionTimer(difficulty));
+      setQuestionTimes({ 0: 0, 1: 0, 2: 0 });
+      setBackChanceUsed(false);
+      setBackClicksCount(0);
+      setQuizInfoMessage(null);
+      setShowResultsReview(false);
 
-    setCurrentQuizQuestions(selected);
-    setQuizStarted(true);
+      // Pick 3 questions for practice session
+      let selected: Question[] = [];
+      if (wrongQuestionsForPractice.length >= 3) {
+        const shuffled = [...wrongQuestionsForPractice].sort(() => 0.5 - Math.random());
+        selected = shuffled.slice(0, 3);
+      } else {
+        // If fewer than 3 wrong questions available, take all wrong questions
+        const shuffledWrong = [...wrongQuestionsForPractice].sort(() => 0.5 - Math.random());
+        selected = [...shuffledWrong];
+        
+        // Fill remaining slots up to 3 from the general question bank
+        const existingIds = new Set(selected.map(q => q.id));
+        const remainingQuestions = questions.filter(q => !existingIds.has(q.id));
+        const shuffledRemaining = [...remainingQuestions].sort(() => 0.5 - Math.random());
+        const needed = 3 - selected.length;
+        selected = [...selected, ...shuffledRemaining.slice(0, needed)];
+      }
+
+      setCurrentQuizQuestions(selected);
+      setQuizStarted(true);
+      setIsActionLoading(false);
+    }, 200);
   };
 
   // Start the 3T Daily Mock Quiz (3 random questions)
@@ -6047,22 +6078,30 @@ export default function EmployeeDashboard({
       alert("Ngân hàng câu hỏi hiện có ít hơn 3 câu, không thể thi thử. Vui lòng nhờ admin Lê Nhật Trường seed thêm dữ liệu.");
       return;
     }
-    setErrorState(null);
-    setSelectedAnswers({});
-    setCurrentQuestionIndex(0);
-    setQuizTimer(0);
-    setQuestionTimer(getMaxQuestionTimer(difficulty));
-    setQuestionTimes({ 0: 0, 1: 0, 2: 0 });
-    setBackChanceUsed(false);
-    setBackClicksCount(0);
-    setQuizInfoMessage(null);
-    setShowResultsReview(false);
-    
-    // Choose 3 random questions
-    const shuffled = [...questions].sort(() => 0.5 - Math.random());
-    const selected = shuffled.slice(0, 3);
-    setCurrentQuizQuestions(selected);
-    setQuizStarted(true);
+
+    if (isActionLoading) return;
+    setIsActionLoading(true);
+    setLoadingText("Đang chuẩn bị đề...");
+
+    setTimeout(() => {
+      setErrorState(null);
+      setSelectedAnswers({});
+      setCurrentQuestionIndex(0);
+      setQuizTimer(0);
+      setQuestionTimer(getMaxQuestionTimer(difficulty));
+      setQuestionTimes({ 0: 0, 1: 0, 2: 0 });
+      setBackChanceUsed(false);
+      setBackClicksCount(0);
+      setQuizInfoMessage(null);
+      setShowResultsReview(false);
+      
+      // Choose 3 random questions
+      const shuffled = [...questions].sort(() => 0.5 - Math.random());
+      const selected = shuffled.slice(0, 3);
+      setCurrentQuizQuestions(selected);
+      setQuizStarted(true);
+      setIsActionLoading(false);
+    }, 200);
   };
 
   const handleSelectOption = useCallback((questionId: string, optionIndex: number) => {
@@ -6079,6 +6118,10 @@ export default function EmployeeDashboard({
 
   // Submit Quiz Action
   const submitQuiz = async () => {
+    if (isActionLoading) return;
+    setIsActionLoading(true);
+    setLoadingText("Đang nộp bài...");
+
     setErrorState(null);
     let finalScore = 0;
     const answerLog = currentQuizQuestions.map((q, idx) => {
@@ -6117,6 +6160,10 @@ export default function EmployeeDashboard({
     setShowResultsReview(true);
     setReviewMode(false);
     setReviewQuestionIndex(0);
+
+    setTimeout(() => {
+      setIsActionLoading(false);
+    }, 250);
 
     // Lưu kết quả và kiểm tra thăng cấp/kỷ lục ngầm dưới nền để tránh trễ mạng
     (async () => {
@@ -8852,6 +8899,34 @@ export default function EmployeeDashboard({
               </motion.button>
             </div>
           )}
+
+        {/* Centered Processing Loading Overlay (Matching User's Photo) */}
+        <AnimatePresence>
+          {isActionLoading && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="fixed inset-0 z-100 flex items-center justify-center bg-black/25 backdrop-blur-[1.5px] p-4 pointer-events-auto"
+            >
+              <motion.div
+                initial={{ scale: 0.85, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.85, opacity: 0 }}
+                transition={{ type: "spring", stiffness: 380, damping: 26 }}
+                className="bg-[#0B3A60] rounded-2xl w-32 h-32 sm:w-36 sm:h-36 shadow-2xl border border-white/10 flex flex-col items-center justify-center p-3 gap-2.5 text-center"
+              >
+                <TwelveDotSpinner size={42} color="#FFFFFF" />
+                {loadingText && (
+                  <span className="text-white text-[11px] sm:text-xs font-bold leading-tight px-1 animate-pulse tracking-wide select-none">
+                    {loadingText}
+                  </span>
+                )}
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
         </div>
       </main>
     </div>

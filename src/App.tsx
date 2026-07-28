@@ -243,16 +243,19 @@ export default function App() {
     loadStartupData();
   }, []);
 
-  // Tự động kiểm tra và kích hoạt chế độ toàn màn hình để ẩn thanh địa chỉ trình duyệt khi có tương tác đầu tiên, đồng thời hỗ trợ click đúp (Desktop) hoặc gõ đúp (Mobile) để bật/tắt toàn màn hình
+  // Tự động kiểm tra và kích hoạt chế độ toàn màn hình: Double-click/tap chỉ PHÓNG TO fullscreen, Nhấn 3 lần liên tiếp mới THU LẠI màn hình bình thường
   useEffect(() => {
     const isMobileDevice = window.innerWidth < 1024 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    let lastTap = 0;
+    
+    let tapCount = 0;
+    let lastTapTime = 0;
+    let tapResetTimer: number | null = null;
+    let lastTouchTime = 0;
 
-    const toggleFullscreenOnInteraction = () => {
+    const requestFullscreenOnly = () => {
       const doc = document as any;
       const docEl = document.documentElement as any;
       const isCurrentlyFs = !!(doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement || doc.msFullscreenElement);
-      
       if (!isCurrentlyFs) {
         if (docEl.requestFullscreen) {
           docEl.requestFullscreen({ navigationUI: "hide" }).catch(() => {});
@@ -263,7 +266,13 @@ export default function App() {
         } else if (docEl.msRequestFullscreen) {
           docEl.msRequestFullscreen();
         }
-      } else {
+      }
+    };
+
+    const exitFullscreenOnly = () => {
+      const doc = document as any;
+      const isCurrentlyFs = !!(doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement || doc.msFullscreenElement);
+      if (isCurrentlyFs) {
         if (doc.exitFullscreen) {
           doc.exitFullscreen().catch(() => {});
         } else if (doc.webkitExitFullscreen) {
@@ -276,49 +285,67 @@ export default function App() {
       }
     };
 
-    const handleDblClick = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (target) {
-        if (
-          target.tagName === "INPUT" || 
-          target.tagName === "TEXTAREA" || 
-          target.tagName === "BUTTON" || 
-          target.tagName === "A" ||
-          target.closest(".cursor-zoom-in") || 
-          target.closest(".cursor-move") ||
-          target.closest("button")
-        ) {
-          return;
-        }
+    const isInteractiveTarget = (target: HTMLElement | null) => {
+      if (!target) return false;
+      return !!(
+        target.tagName === "INPUT" || 
+        target.tagName === "TEXTAREA" || 
+        target.tagName === "BUTTON" || 
+        target.tagName === "A" ||
+        target.tagName === "SELECT" ||
+        target.closest(".cursor-zoom-in") || 
+        target.closest(".cursor-move") ||
+        target.closest("button") ||
+        target.closest("a") ||
+        target.closest("input") ||
+        target.closest("textarea")
+      );
+    };
+
+    const processTap = (target: HTMLElement, e?: Event) => {
+      if (isInteractiveTarget(target)) {
+        tapCount = 0;
+        return;
       }
-      toggleFullscreenOnInteraction();
+
+      const now = Date.now();
+      const MULTI_TAP_DELAY = 400; // Khoảng thời gian 400ms giữa các lần nhấn liên tiếp
+
+      if (now - lastTapTime < MULTI_TAP_DELAY) {
+        tapCount++;
+      } else {
+        tapCount = 1;
+      }
+      lastTapTime = now;
+
+      if (tapResetTimer) clearTimeout(tapResetTimer);
+      tapResetTimer = window.setTimeout(() => {
+        tapCount = 0;
+      }, MULTI_TAP_DELAY);
+
+      if (tapCount === 2) {
+        // Nhấn đúp (2 lần liên tiếp): CHỈ PHÓNG TO FULLSCREEN
+        if (e && e.cancelable) e.preventDefault();
+        requestFullscreenOnly();
+      } else if (tapCount === 3) {
+        // Nhấn 3 lần liên tiếp: THU LẠI MÀN HÌNH BÌNH THƯỜNG
+        if (e && e.cancelable) e.preventDefault();
+        exitFullscreenOnly();
+        tapCount = 0; // Reset đếm sau khi thu lại
+      }
     };
 
     const handleTouchStart = (e: TouchEvent) => {
       const target = e.target as HTMLElement;
-      if (target) {
-        if (
-          target.tagName === "INPUT" || 
-          target.tagName === "TEXTAREA" || 
-          target.tagName === "BUTTON" || 
-          target.tagName === "A" ||
-          target.closest(".cursor-zoom-in") || 
-          target.closest(".cursor-move") ||
-          target.closest("button")
-        ) {
-          return;
-        }
-      }
+      lastTouchTime = Date.now();
+      processTap(target, e);
+    };
 
-      const now = Date.now();
-      const DOUBLE_TAP_DELAY = 300;
-      if (now - lastTap < DOUBLE_TAP_DELAY) {
-        if (e.cancelable) {
-          e.preventDefault();
-        }
-        toggleFullscreenOnInteraction();
-      }
-      lastTap = now;
+    const handleClick = (e: MouseEvent) => {
+      // Bỏ qua sự kiện click giả lập do trình duyệt sinh ra ngay sau touchstart
+      if (Date.now() - lastTouchTime < 500) return;
+      const target = e.target as HTMLElement;
+      processTap(target, e);
     };
 
     // Tự động kích hoạt khi có chạm/click đầu tiên trên di động
@@ -341,14 +368,15 @@ export default function App() {
       window.addEventListener("click", handleFirstInteraction);
     }
 
-    // Luôn hỗ trợ click đúp (Desktop) và gõ đúp (Mobile) để bật/tắt toàn màn hình
-    window.addEventListener("dblclick", handleDblClick);
+    // Luôn hỗ trợ click (Desktop) và touchstart (Mobile) để đếm số lần nhấn liên tiếp
+    window.addEventListener("click", handleClick);
     window.addEventListener("touchstart", handleTouchStart, { passive: false });
 
     return () => {
+      if (tapResetTimer) clearTimeout(tapResetTimer);
       window.removeEventListener("touchstart", handleFirstInteraction);
       window.removeEventListener("click", handleFirstInteraction);
-      window.removeEventListener("dblclick", handleDblClick);
+      window.removeEventListener("click", handleClick);
       window.removeEventListener("touchstart", handleTouchStart);
     };
   }, []);
