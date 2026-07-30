@@ -6118,9 +6118,9 @@ export default function EmployeeDashboard({
 
   // Submit Quiz Action
   const submitQuiz = async () => {
-    if (isActionLoading) return;
-    setIsActionLoading(true);
-    setLoadingText("Đang nộp bài...");
+    // Tắt loading overlay lập tức để giao diện hiển thị mượt mà không bị xoay đè
+    setIsActionLoading(false);
+    setLoadingText(null);
 
     setErrorState(null);
     let finalScore = 0;
@@ -6153,17 +6153,13 @@ export default function EmployeeDashboard({
       duration: quizTimer
     };
 
-    // Cập nhật giao diện lập tức (Optimistic Update) để người dùng không phải chờ đợi
+    // Cập nhật giao diện lập tức (Optimistic Update) để người dùng thấy điểm ngay lập tức
     setLastQuizResult(newResult);
     setResults(prev => [newResult, ...prev]);
     setAllResults(prev => [newResult, ...prev]);
     setShowResultsReview(true);
     setReviewMode(false);
     setReviewQuestionIndex(0);
-
-    setTimeout(() => {
-      setIsActionLoading(false);
-    }, 250);
 
     // Lưu kết quả và kiểm tra thăng cấp/kỷ lục ngầm dưới nền để tránh trễ mạng
     (async () => {
