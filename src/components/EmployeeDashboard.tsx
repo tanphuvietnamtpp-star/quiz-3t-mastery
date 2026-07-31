@@ -95,6 +95,107 @@ const DEFAULT_LEVEL_RULES: LevelRulesConfig = {
   ]
 };
 
+interface QuizQuestionCardProps {
+  question: Question;
+  questionIndex: number;
+  questionTime: number;
+  selectedOptionIndex: number | undefined;
+  onSelectOption: (qId: string, oIdx: number) => void;
+}
+
+const QuizQuestionCard = React.memo(function QuizQuestionCard({
+  question,
+  questionIndex,
+  questionTime,
+  selectedOptionIndex,
+  onSelectOption,
+}: QuizQuestionCardProps) {
+  // Optimistic local state for instantaneous answer button selection feedback
+  const [localSelected, setLocalSelected] = React.useState<number | undefined>(selectedOptionIndex);
+
+  React.useEffect(() => {
+    setLocalSelected(selectedOptionIndex);
+  }, [selectedOptionIndex, question.id]);
+
+  const handleSelect = (oIdx: number) => {
+    setLocalSelected(oIdx);
+    requestAnimationFrame(() => {
+      onSelectOption(question.id, oIdx);
+    });
+  };
+
+  return (
+    <div className="flex-1 flex flex-col justify-center space-y-3.5 text-left font-sans">
+      <div className="flex justify-between items-center shrink-0">
+        <div className="text-[10px] sm:text-xs font-extrabold text-gray-400 tracking-wider uppercase">
+          <span translate="no" className="notranslate">CÂU HỎI {questionIndex + 1}</span>
+        </div>
+        <div className="flex items-center gap-1.5 text-xs">
+          <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Thời gian:</span>
+          <span 
+            translate="no" 
+            className={`notranslate font-mono font-black text-xs px-2 py-0.5 rounded-md ${
+              questionTime <= 30
+                ? "text-emerald-600 bg-emerald-50 border border-emerald-200"
+                : questionTime <= 50
+                  ? "text-amber-600 bg-amber-50 border border-amber-200"
+                  : "text-red-600 bg-red-50 border border-red-200 animate-pulse font-extrabold"
+            }`}
+          >
+            {questionTime} giây
+          </span>
+        </div>
+      </div>
+      <h3 className="text-sm sm:text-base font-sans font-extrabold text-gray-950 leading-snug shrink-0">
+        <span translate="no" className="notranslate">{question.text}</span>
+      </h3>
+
+      {/* Image illustration if present */}
+      {question.imageUrl && (
+        <div className="rounded-xl overflow-hidden max-h-[160px] sm:max-h-[200px] border border-gray-150 flex justify-center bg-gray-50 my-1 shrink-0 shadow-3xs">
+          <img 
+            src={question.imageUrl} 
+            alt="Sơ đồ câu hỏi" 
+            className="object-contain h-full"
+            referrerPolicy="no-referrer"
+          />
+        </div>
+      )}
+
+      {/* Options list styling matching Company visual system */}
+      <div className="grid grid-cols-1 gap-2.5 sm:gap-3">
+        {question.options.map((opt, oIdx) => {
+          const isSelected = localSelected === oIdx;
+          
+          return (
+            <button
+              key={oIdx}
+              type="button"
+              onClick={() => handleSelect(oIdx)}
+              className={`w-full text-left p-3.5 sm:p-4 text-xs sm:text-sm rounded-xl border transition-all flex items-center gap-3 active:scale-[0.99] group shadow-2xs ${
+                isSelected 
+                ? 'bg-blue-50 border-[#1971C2] text-[#1971C2] font-bold ring-1 ring-[#1971C2]' 
+                : 'bg-white hover:bg-gray-50 border-gray-200 text-gray-700'
+              }`}
+            >
+              <div className={`h-5 w-5 rounded-full shrink-0 flex items-center justify-center border font-sans text-xs font-bold transition-all ${
+                isSelected 
+                ? 'bg-[#1971C2] text-white border-[#1971C2]' 
+                : 'border-gray-250 text-gray-450'
+              }`}>
+                {String.fromCharCode(65 + oIdx)}
+              </div>
+              <div className="flex-1 text-xs sm:text-sm font-semibold">
+                <span translate="no" className="notranslate">{cleanOptionText(opt)}</span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+});
+
 export default function EmployeeDashboard({ 
   user, 
   onLogout, 
@@ -701,8 +802,11 @@ export default function EmployeeDashboard({
     }
     return [];
   });
+
+  const memoizedTotalQuestions = useMemo(() => questions.length, [questions]);
   const [results, setResults] = useState<QuizResult[]>([]);
   const [allResults, setAllResults] = useState<QuizResult[]>([]);
+  const [quizStarted, setQuizStarted] = useState(false);
 
   // Đồng bộ lại các kết quả nộp bài offline (nếu có) khi vào Dashboard hoặc khi mạng ổn định
   useEffect(() => {
@@ -1212,7 +1316,7 @@ export default function EmployeeDashboard({
 
   // Synchronize and publish inactivity demotions automatically
   useEffect(() => {
-    if (allResults.length === 0 || allUsersList.length === 0) return;
+    if (quizStarted || allResults.length === 0 || allUsersList.length === 0) return;
 
     const syncInactivityDemotions = async () => {
       // Vietnam timezone computation
@@ -1340,10 +1444,19 @@ export default function EmployeeDashboard({
     };
 
     syncInactivityDemotions();
-  }, [allResults, allUsersList, levelRules, allAnnouncements]);
+  }, [allResults, allUsersList, levelRules, allAnnouncements, quizStarted]);
 
-  // Filtered results to include unapproved, deleted (but allow admin and executive roles and ban tổng giám đốc department as they should be recorded and displayed) users for all public rankings and honor boards
+  const prevResultsForRankingsRef = useRef<QuizResult[]>([]);
+  const prevLeaderboardRef = useRef<any>(null);
+  const prevMonumentLegendsRef = useRef<any>([]);
+  const prevRecords3TRef = useRef<any>([]);
+
+  // Filtered results to include unapproved, deleted users for all public rankings and honor boards
   const resultsForRankings = useMemo(() => {
+    if (quizStarted && prevResultsForRankingsRef.current.length > 0) {
+      return prevResultsForRankingsRef.current;
+    }
+
     if (allResults.length === 0) return [];
     
     const lNormalizeName = (name: string | undefined | null): string => {
@@ -1351,66 +1464,57 @@ export default function EmployeeDashboard({
       return name.trim().normalize('NFC').toUpperCase().replace(/\s+/g, ' ');
     };
 
-    const filtered = allResults.filter(res => {
-      if (res.userId) {
-        const found = allUsersList.find(u => u.id === res.userId);
-        if (!found) return false;
-        
-        const fStatus = (found.status || '').toUpperCase();
-        if (fStatus !== 'APPROVED' && fStatus !== 'APPROVED_MEMBER') {
-          return false;
-        }
-        
-        return true;
-      }
-      
-      const normName = lNormalizeName(res.userName);
-      if (normName) {
-        const found = allUsersList.find(u => {
-          const uNorm = u.name ? u.name.trim().normalize('NFC').toUpperCase().replace(/\s+/g, ' ') : '';
-          return uNorm === normName;
-        });
-        if (!found) return false;
-        
-        const fStatus = (found.status || '').toUpperCase();
-        if (fStatus !== 'APPROVED' && fStatus !== 'APPROVED_MEMBER') {
-          return false;
-        }
-        
-        return true;
-      }
-      
-      return false;
-    });
+    // Pre-build O(1) User Lookups
+    const userByIdMap = new Map<string, User>();
+    const userByNameMap = new Map<string, User>();
+    if (Array.isArray(allUsersList)) {
+      allUsersList.forEach(u => {
+        if (u.id) userByIdMap.set(u.id, u);
+        if (u.name) userByNameMap.set(lNormalizeName(u.name), u);
+      });
+    }
 
-    // Override result name and department with the latest profile to ensure automatic propagation of edits
-    return filtered.map(res => {
-      let matchedUser = null;
+    const resList: QuizResult[] = [];
+
+    for (let i = 0; i < allResults.length; i++) {
+      const res = allResults[i];
+      let matchedUser: User | undefined;
+
       if (res.userId) {
-        matchedUser = allUsersList.find(u => u.id === res.userId);
+        matchedUser = userByIdMap.get(res.userId);
       } else {
         const normName = lNormalizeName(res.userName);
-        matchedUser = allUsersList.find(u => {
-          const uNorm = u.name ? u.name.trim().normalize('NFC').toUpperCase().replace(/\s+/g, ' ') : '';
-          return uNorm === normName;
-        });
+        if (normName) {
+          matchedUser = userByNameMap.get(normName);
+        }
       }
 
       if (matchedUser) {
-        return {
-          ...res,
-          userName: matchedUser.name || res.userName,
-          department: matchedUser.department || res.department,
-          branch: matchedUser.branch || res.branch,
-          company: matchedUser.company || res.company
-        };
+        const fStatus = (matchedUser.status || '').toUpperCase();
+        if (fStatus === 'APPROVED' || fStatus === 'APPROVED_MEMBER') {
+          resList.push({
+            ...res,
+            userName: matchedUser.name || res.userName,
+            department: matchedUser.department || res.department,
+            branch: matchedUser.branch || res.branch,
+            company: matchedUser.company || res.company
+          });
+        }
+      } else {
+        resList.push(res);
       }
-      return res;
-    });
-  }, [allResults, allUsersList]);
+    }
+
+    prevResultsForRankingsRef.current = resList;
+    return resList;
+  }, [allResults, allUsersList, quizStarted]);
 
   // Detailed dynamic Level calculation for all users to construct BẢNG VÀNG VINH DANH
   const leaderboardCandidates = useMemo(() => {
+    if (quizStarted && prevLeaderboardRef.current) {
+      return prevLeaderboardRef.current;
+    }
+
     if (resultsForRankings.length === 0) return { 
       day: [], 
       week: [], 
@@ -1450,6 +1554,7 @@ export default function EmployeeDashboard({
       lastAttempt: number;
       totalDuration: number;
       totalQuestions: number;
+      userResults: QuizResult[];
     }> = {};
 
     resultsForRankings.forEach(res => {
@@ -1471,7 +1576,8 @@ export default function EmployeeDashboard({
           totalScore: 0,
           lastAttempt: 0,
           totalDuration: 0,
-          totalQuestions: 0
+          totalQuestions: 0,
+          userResults: []
         };
       }
       
@@ -1480,6 +1586,7 @@ export default function EmployeeDashboard({
       p.totalScore += res.score;
       p.totalDuration += res.duration || 0;
       p.totalQuestions += res.totalQuestions || 3;
+      p.userResults.push(res);
       if (res.score > p.bestScore) {
         p.bestScore = res.score;
       }
@@ -1512,13 +1619,7 @@ export default function EmployeeDashboard({
     };
 
     const compiledParticipants = Object.entries(groupedUsers).map(([personKey, p]) => {
-      const userResults = resultsForRankings.filter(r => {
-        const rNormName = normalizeName(r.userName);
-        const rResolvedUserId = r.userId || nameToUserIdMap[rNormName] || '';
-        const rResolvedNormalizedName = rNormName || (r.userId ? userIdToNameMap[r.userId] : '') || '';
-        const rKey = rResolvedUserId || rResolvedNormalizedName;
-        return rKey && rKey === personKey;
-      });
+      const userResults = p.userResults;
       const chronologicalResults = [...userResults].sort((a, b) => a.timestamp - b.timestamp);
       
       let currentLevel = 1;
@@ -1684,7 +1785,7 @@ export default function EmployeeDashboard({
     const weekList = makeInterleavedList(weekQualified);
     const monthList = makeInterleavedList(monthQualified);
 
-    return {
+    const resObj = {
       day: dayList,
       week: weekList,
       month: monthList,
@@ -1695,7 +1796,9 @@ export default function EmployeeDashboard({
       isWeekFallback: false,
       isMonthFallback: false
     };
-  }, [resultsForRankings, levelRules]);
+    prevLeaderboardRef.current = resObj;
+    return resObj;
+  }, [resultsForRankings, levelRules, quizStarted]);
 
   // Helper for date formatting in dd/mm/yy
   const formatToDDMMYY = (timestamp: any): string => {
@@ -1710,6 +1813,9 @@ export default function EmployeeDashboard({
 
   // Monument Legends calculations for the mobile honor list
   const monumentLegends = useMemo(() => {
+    if (quizStarted && prevMonumentLegendsRef.current.length > 0) {
+      return prevMonumentLegendsRef.current;
+    }
     const lNormalizeName = (name: string | undefined | null): string => {
       if (!name) return '';
       return name.trim().normalize('NFC').toUpperCase().replace(/\s+/g, ' ');
@@ -2139,7 +2245,7 @@ export default function EmployeeDashboard({
 
     // Sort matching exactly how the Admin's list is sorted!
     // Sort by daysMaintaining descending, then promoTimestamp ascending
-    return legendsList.sort((a, b) => {
+    const sorted = legendsList.sort((a, b) => {
       const aDays = a.daysMaintaining || 0;
       const bDays = b.daysMaintaining || 0;
       if (bDays !== aDays) {
@@ -2152,10 +2258,15 @@ export default function EmployeeDashboard({
       }
       return a.totalAttempts - b.totalAttempts;
     });
-  }, [resultsForRankings, levelRules, inactivityTestMode, allUsersList]);
+    prevMonumentLegendsRef.current = sorted;
+    return sorted;
+  }, [resultsForRankings, levelRules, inactivityTestMode, allUsersList, quizStarted]);
 
   // Records 3T calculations based on actual results paired with historic high-standards
   const records3T = useMemo(() => {
+    if (quizStarted && prevRecords3TRef.current.length > 0) {
+      return prevRecords3TRef.current;
+    }
     const BASELINE_RECORDS = {
       quyettam: {
         name: 'TRAN PHUOC TRUNG',
@@ -2684,7 +2795,7 @@ export default function EmployeeDashboard({
       Object.assign(bestThanToc, newHolders[0], { holders: newHolders });
     }
 
-    return [
+    const recList = [
       { id: 'quyettam', title: 'Kỷ Lục Kiên Trì', emoji: '🔥', ...bestQuyetTam },
       { id: 'tritue', title: 'Kỷ Lục Trí Tuệ', emoji: '🧠', ...bestTriTue },
       { id: 'tocdo', title: 'Kỷ Lục Tốc Độ', emoji: '⚡', ...bestTocDo },
@@ -2692,7 +2803,9 @@ export default function EmployeeDashboard({
       { id: 'thantoc', title: 'Kỷ Lục Thần Tốc', emoji: '🚀', ...bestThanToc },
       { id: 'batbai', title: 'Kỷ Lục Bất Bại', emoji: '🛡️', ...bestBatBai }
     ];
-  }, [resultsForRankings, allUsersList, levelRules]);
+    prevRecords3TRef.current = recList;
+    return recList;
+  }, [resultsForRankings, allUsersList, levelRules, quizStarted]);
 
   // Top 5 patience calculation for Month (highest attempts inside last 30 days) with stats
   const topFivePatience = useMemo(() => {
@@ -5740,7 +5853,6 @@ export default function EmployeeDashboard({
   };
 
   // States of Active Quiz
-  const [quizStarted, setQuizStarted] = useState(false);
   const [currentQuizQuestions, setCurrentQuizQuestions] = useState<Question[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, number>>({});
@@ -6145,6 +6257,7 @@ export default function EmployeeDashboard({
         [questionId]: optionIndex
       };
     });
+    setQuizInfoMessage(null);
   }, []);
 
   const [errorState, setErrorState] = useState<string | null>(null);
@@ -8454,79 +8567,13 @@ export default function EmployeeDashboard({
 
                         {/* Question display */}
                         {currentQuizQuestions.length > 0 && (
-                          <div className="flex-1 flex flex-col justify-center space-y-3.5 text-left font-sans">
-                            <div className="flex justify-between items-center shrink-0">
-                              <div className="text-[10px] sm:text-xs font-extrabold text-gray-400 tracking-wider uppercase">
-                                <span translate="no" className="notranslate">CÂU HỎI {currentQuestionIndex + 1}</span>
-                              </div>
-                              <div className="flex items-center gap-1.5 text-xs">
-                                <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Thời gian:</span>
-                                <span 
-                                  translate="no" 
-                                  className={`notranslate font-mono font-black text-xs px-2 py-0.5 rounded-md ${
-                                    (questionTimes[currentQuestionIndex] || 0) <= 30
-                                      ? "text-emerald-600 bg-emerald-50 border border-emerald-200"
-                                      : (questionTimes[currentQuestionIndex] || 0) <= 50
-                                        ? "text-amber-600 bg-amber-50 border border-amber-200"
-                                        : "text-red-600 bg-red-50 border border-red-200 animate-pulse font-extrabold"
-                                  }`}
-                                >
-                                  {questionTimes[currentQuestionIndex] || 0} giây
-                                </span>
-                              </div>
-                            </div>
-                            <h3 className="text-sm sm:text-base font-sans font-extrabold text-gray-950 leading-snug shrink-0">
-                              <span translate="no" className="notranslate">{currentQuizQuestions[currentQuestionIndex].text}</span>
-                            </h3>
-
-                            {/* Image illustration if present */}
-                            {currentQuizQuestions[currentQuestionIndex].imageUrl && (
-                              <div className="rounded-xl overflow-hidden max-h-[160px] sm:max-h-[200px] border border-gray-150 flex justify-center bg-gray-50 my-1 shrink-0 shadow-3xs">
-                                <img 
-                                  src={currentQuizQuestions[currentQuestionIndex].imageUrl} 
-                                  alt="Sơ đồ câu hỏi" 
-                                  className="object-contain h-full"
-                                  referrerPolicy="no-referrer"
-                                />
-                              </div>
-                            )}
-
-                            {/* Options list styling matching Company visual system */}
-                            <div className="grid grid-cols-1 gap-2.5 sm:gap-3">
-                              {currentQuizQuestions[currentQuestionIndex].options.map((opt, oIdx) => {
-                                const qId = currentQuizQuestions[currentQuestionIndex].id;
-                                const isSelected = selectedAnswers[qId] === oIdx;
-                                
-                                return (
-                                  <button
-                                    key={oIdx}
-                                    type="button"
-                                    onClick={() => {
-                                      handleSelectOption(qId, oIdx);
-                                      // Clear temporary success messages when selecting
-                                      if (quizInfoMessage) setQuizInfoMessage(null);
-                                    }}
-                                    className={`w-full text-left p-3.5 sm:p-4 text-xs sm:text-sm rounded-xl border transition-all flex items-center gap-3 active:scale-[0.99] group shadow-2xs ${
-                                      isSelected 
-                                      ? 'bg-blue-50 border-[#1971C2] text-[#1971C2] font-bold ring-1 ring-[#1971C2]' 
-                                      : 'bg-white hover:bg-gray-50 border-gray-200 text-gray-700'
-                                    }`}
-                                  >
-                                    <div className={`h-5 w-5 rounded-full shrink-0 flex items-center justify-center border font-sans text-xs font-bold transition-all ${
-                                      isSelected 
-                                      ? 'bg-[#1971C2] text-white border-[#1971C2]' 
-                                      : 'border-gray-250 text-gray-450'
-                                    }`}>
-                                      {String.fromCharCode(65 + oIdx)}
-                                    </div>
-                                    <div className="flex-1 text-xs sm:text-sm font-semibold">
-                                      <span translate="no" className="notranslate">{cleanOptionText(opt)}</span>
-                                    </div>
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
+                          <QuizQuestionCard
+                            question={currentQuizQuestions[currentQuestionIndex]}
+                            questionIndex={currentQuestionIndex}
+                            questionTime={questionTimes[currentQuestionIndex] || 0}
+                            selectedOptionIndex={selectedAnswers[currentQuizQuestions[currentQuestionIndex]?.id]}
+                            onSelectOption={handleSelectOption}
+                          />
                         )}
 
                         {/* Slide/Submit buttons styled explicitly matching the custom design */}
