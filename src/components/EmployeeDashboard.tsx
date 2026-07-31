@@ -687,9 +687,34 @@ export default function EmployeeDashboard({
       setAdminMobileNotice({ type: 'error', msg: 'Lỗi khi cập nhật vai trò.' });
     }
   };
-  const [questions, setQuestions] = useState<Question[]>([]);
+  const [questions, setQuestions] = useState<Question[]>(() => {
+    try {
+      const cached = localStorage.getItem('cached_questions') || localStorage.getItem('3t_questions');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.warn("Lỗi đọc cache câu hỏi từ LocalStorage:", e);
+    }
+    return [];
+  });
   const [results, setResults] = useState<QuizResult[]>([]);
   const [allResults, setAllResults] = useState<QuizResult[]>([]);
+
+  // Đồng bộ lại các kết quả nộp bài offline (nếu có) khi vào Dashboard hoặc khi mạng ổn định
+  useEffect(() => {
+    databaseService.syncPendingQuizResults();
+    const handleOnline = () => {
+      databaseService.syncPendingQuizResults();
+    };
+    window.addEventListener('online', handleOnline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+    };
+  }, []);
 
   const computeLevelForList = (list: QuizResult[], pUserId?: string) => {
     const activeRules = levelRules || DEFAULT_LEVEL_RULES;
@@ -6032,44 +6057,49 @@ export default function EmployeeDashboard({
       return;
     }
 
-    if (isActionLoading) return;
-    setIsActionLoading(true);
-    setLoadingText("Đang tạo bài ôn...");
+    setErrorState(null);
+    setSelectedAnswers({});
+    setCurrentQuestionIndex(0);
+    setQuizTimer(0);
+    setQuestionTimer(getMaxQuestionTimer(difficulty));
+    setQuestionTimes({ 0: 0, 1: 0, 2: 0 });
+    setBackChanceUsed(false);
+    setBackClicksCount(0);
+    setQuizInfoMessage(null);
+    setShowResultsReview(false);
 
-    setTimeout(() => {
-      setErrorState(null);
-      setSelectedAnswers({});
-      setCurrentQuestionIndex(0);
-      setQuizTimer(0);
-      setQuestionTimer(getMaxQuestionTimer(difficulty));
-      setQuestionTimes({ 0: 0, 1: 0, 2: 0 });
-      setBackChanceUsed(false);
-      setBackClicksCount(0);
-      setQuizInfoMessage(null);
-      setShowResultsReview(false);
-
-      // Pick 3 questions for practice session
-      let selected: Question[] = [];
-      if (wrongQuestionsForPractice.length >= 3) {
-        const shuffled = [...wrongQuestionsForPractice].sort(() => 0.5 - Math.random());
-        selected = shuffled.slice(0, 3);
-      } else {
-        // If fewer than 3 wrong questions available, take all wrong questions
-        const shuffledWrong = [...wrongQuestionsForPractice].sort(() => 0.5 - Math.random());
-        selected = [...shuffledWrong];
-        
-        // Fill remaining slots up to 3 from the general question bank
-        const existingIds = new Set(selected.map(q => q.id));
-        const remainingQuestions = questions.filter(q => !existingIds.has(q.id));
-        const shuffledRemaining = [...remainingQuestions].sort(() => 0.5 - Math.random());
-        const needed = 3 - selected.length;
-        selected = [...selected, ...shuffledRemaining.slice(0, needed)];
+    // Pick 3 questions for practice session instantly with O(3) random picking
+    let selected: Question[] = [];
+    if (wrongQuestionsForPractice.length >= 3) {
+      const selectedIndices = new Set<number>();
+      while (selectedIndices.size < 3) {
+        const idx = Math.floor(Math.random() * wrongQuestionsForPractice.length);
+        if (!selectedIndices.has(idx)) {
+          selectedIndices.add(idx);
+          selected.push(wrongQuestionsForPractice[idx]);
+        }
       }
+    } else {
+      selected = [...wrongQuestionsForPractice];
+      const existingIds = new Set(selected.map(q => q.id));
+      const remainingQuestions = questions.filter(q => !existingIds.has(q.id));
+      const needed = 3 - selected.length;
+      if (remainingQuestions.length > 0) {
+        const selectedIndices = new Set<number>();
+        while (selectedIndices.size < Math.min(needed, remainingQuestions.length)) {
+          const idx = Math.floor(Math.random() * remainingQuestions.length);
+          if (!selectedIndices.has(idx)) {
+            selectedIndices.add(idx);
+            selected.push(remainingQuestions[idx]);
+          }
+        }
+      }
+    }
 
-      setCurrentQuizQuestions(selected);
-      setQuizStarted(true);
-      setIsActionLoading(false);
-    }, 200);
+    setCurrentQuizQuestions(selected);
+    setQuizStarted(true);
+    setIsActionLoading(false);
+    setLoadingText(null);
   };
 
   // Start the 3T Daily Mock Quiz (3 random questions)
@@ -6079,29 +6109,32 @@ export default function EmployeeDashboard({
       return;
     }
 
-    if (isActionLoading) return;
-    setIsActionLoading(true);
-    setLoadingText("Đang chuẩn bị đề...");
+    setErrorState(null);
+    setSelectedAnswers({});
+    setCurrentQuestionIndex(0);
+    setQuizTimer(0);
+    setQuestionTimer(getMaxQuestionTimer(difficulty));
+    setQuestionTimes({ 0: 0, 1: 0, 2: 0 });
+    setBackChanceUsed(false);
+    setBackClicksCount(0);
+    setQuizInfoMessage(null);
+    setShowResultsReview(false);
+    
+    // Choose 3 random questions ultra-fast O(3) instead of O(N log N) full array sort
+    const selectedIndices = new Set<number>();
+    const selected: Question[] = [];
+    while (selectedIndices.size < 3) {
+      const idx = Math.floor(Math.random() * questions.length);
+      if (!selectedIndices.has(idx)) {
+        selectedIndices.add(idx);
+        selected.push(questions[idx]);
+      }
+    }
 
-    setTimeout(() => {
-      setErrorState(null);
-      setSelectedAnswers({});
-      setCurrentQuestionIndex(0);
-      setQuizTimer(0);
-      setQuestionTimer(getMaxQuestionTimer(difficulty));
-      setQuestionTimes({ 0: 0, 1: 0, 2: 0 });
-      setBackChanceUsed(false);
-      setBackClicksCount(0);
-      setQuizInfoMessage(null);
-      setShowResultsReview(false);
-      
-      // Choose 3 random questions
-      const shuffled = [...questions].sort(() => 0.5 - Math.random());
-      const selected = shuffled.slice(0, 3);
-      setCurrentQuizQuestions(selected);
-      setQuizStarted(true);
-      setIsActionLoading(false);
-    }, 200);
+    setCurrentQuizQuestions(selected);
+    setQuizStarted(true);
+    setIsActionLoading(false);
+    setLoadingText(null);
   };
 
   const handleSelectOption = useCallback((questionId: string, optionIndex: number) => {

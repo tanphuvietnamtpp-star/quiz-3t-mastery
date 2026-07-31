@@ -13,7 +13,9 @@ import {
   where,
   getDocFromServer,
   onSnapshot,
-  arrayUnion
+  arrayUnion,
+  enableIndexedDbPersistence,
+  enableMultiTabIndexedDbPersistence
 } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { User, Question, QuizResult, BRANCHES, DEPARTMENTS, CompanyMapping, MotivationalSloganBand, LevelRulesConfig, LevelRuleItem, ChatTopic, ChatMessage } from './types';
@@ -468,6 +470,19 @@ export const initializeDatabase = async (): Promise<void> => {
           db = getFirestore(app);
         }
         console.log("[SUCCESS] ĐÃ KẾT NỐI ĐÚNG VÀO DỰ ÁN: quiz-3t-mastery");
+
+        // Kích hoạt tính năng Offline Persistence để Firestore tự động lưu dữ liệu xuống IndexedDB
+        if (db) {
+          try {
+            await enableMultiTabIndexedDbPersistence(db).catch(() => {
+              return enableIndexedDbPersistence(db);
+            });
+            console.log("[FIREBASE PERSISTENCE] Đã kích hoạt lưu đệm Offline IndexedDB thành công!");
+          } catch (persErr: any) {
+            console.warn("[FIREBASE PERSISTENCE] Không thể kích hoạt Offline Persistence (do mở nhiều tab hoặc trình duyệt giới hạn):", persErr?.message || persErr);
+          }
+        }
+
         await forceSeedSupremeAdmin();
         await forceSeedCompanyMappings();
         await forceSeedLevel5Announcement();
@@ -1110,6 +1125,7 @@ export const databaseService = {
           const localVersion = parseInt(localStorage.getItem('3t_local_question_version') || '0', 10);
           if (cloudVersion > localVersion) {
             console.log(`[VERSION OUTDATED] Phát hiện bộ câu hỏi mới (v${cloudVersion} > v${localVersion}). Tiến hành xóa cache và tải lại!`);
+            localStorage.removeItem('cached_questions');
             localStorage.removeItem('3t_questions');
             localStorage.setItem('3t_local_question_version', String(cloudVersion));
             isQuestionsFetchedThisSession = false; // reset the cache flag to force refetch
@@ -1125,7 +1141,8 @@ export const databaseService = {
     // Hard check: If already fetched in this session, grab from localStorage cache and block Firestore reads
     if (isQuestionsFetchedThisSession && !forceRefresh) {
       console.log("[CACHE SUCCESS] Đã lấy bộ câu hỏi từ LocalStorage! Tránh gọi lại Firebase thành công.");
-      return getLocalData<Question[]>('3t_questions', INITIAL_QUESTIONS);
+      const cached = getLocalData<Question[]>('cached_questions', getLocalData<Question[]>('3t_questions', INITIAL_QUESTIONS));
+      return cached;
     }
 
     if (isFirebaseConfigured && db) {
@@ -1137,6 +1154,7 @@ export const databaseService = {
           questions.push(doc.data() as Question);
         });
         if (questions.length > 0) {
+          setLocalData('cached_questions', questions);
           setLocalData('3t_questions', questions);
           isQuestionsFetchedThisSession = true;
           console.log("[FIREBASE SUCCESS] Đã nạp thành công bộ câu hỏi từ Firestore và lưu vào LocalStorage!");
@@ -1148,7 +1166,7 @@ export const databaseService = {
     }
 
     isQuestionsFetchedThisSession = true; // Block subsequent reads even on mock questions to protect quota
-    return getLocalData<Question[]>('3t_questions', INITIAL_QUESTIONS);
+    return getLocalData<Question[]>('cached_questions', getLocalData<Question[]>('3t_questions', INITIAL_QUESTIONS));
   },
 
   async saveQuestions(newQuestions: Question[]): Promise<void> {
@@ -1366,20 +1384,59 @@ export const databaseService = {
 
   async saveQuizResult(result: QuizResult): Promise<void> {
     await initializeDatabase();
+    let savedToCloud = false;
     if (isFirebaseConfigured && db) {
       try {
         await setDoc(doc(db, 'quiz_results', result.id), result);
         incrementQuota('writes', 1);
+        savedToCloud = true;
       } catch (err) {
-        handleFirestoreError(err, OperationType.WRITE, `quiz_results/${result.id}`);
+        console.warn("Lỗi lưu kết quả lên Cloud, chuyển vào mảng dự phòng pending_results:", err);
+      }
+    }
+
+    if (!savedToCloud) {
+      const pending = getLocalData<QuizResult[]>('pending_results', []);
+      if (!pending.some(p => p.id === result.id)) {
+        pending.push(result);
+        setLocalData('pending_results', pending);
       }
     }
 
     if (memoryQuizResults.length === 0) {
       memoryQuizResults = getLocalData<QuizResult[]>('3t_quiz_results', []);
     }
-    memoryQuizResults.push(result);
-    setLocalData('3t_quiz_results', memoryQuizResults);
+    if (!memoryQuizResults.some(r => r.id === result.id)) {
+      memoryQuizResults.push(result);
+      setLocalData('3t_quiz_results', memoryQuizResults);
+    }
+  },
+
+  async syncPendingQuizResults(): Promise<number> {
+    await initializeDatabase();
+    const pending = getLocalData<QuizResult[]>('pending_results', []);
+    if (pending.length === 0) return 0;
+    if (!isFirebaseConfigured || !db) return 0;
+
+    let syncedCount = 0;
+    const remainingPending: QuizResult[] = [];
+
+    for (const item of pending) {
+      try {
+        await setDoc(doc(db, 'quiz_results', item.id), item);
+        incrementQuota('writes', 1);
+        syncedCount++;
+      } catch (err) {
+        console.warn(`Đồng bộ lại kết quả ${item.id} thất bại (sẽ gửi lại sau):`, err);
+        remainingPending.push(item);
+      }
+    }
+
+    setLocalData('pending_results', remainingPending);
+    if (syncedCount > 0) {
+      console.log(`[SYNC SUCCESS] Đã gửi bù thành công ${syncedCount} kết quả bài thi từ mảng dự phòng offline!`);
+    }
+    return syncedCount;
   },
 
   async getSlogan(): Promise<string> {
